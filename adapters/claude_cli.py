@@ -7,8 +7,8 @@ import re
 from typing import Callable
 
 from agent_loader import AgentTemplate
-from adapters.base import (Availability, InvocationSpec, Outcome, Route,
-                           _clean, _dicts, _epoch, _parse_line, scrub)
+from adapters.base import (Availability, InvalidResumeSession, InvocationSpec, Outcome, Route,
+                           _clean, _dicts, _epoch, _parse_line, scrub, validate_session_id)
 from state_writer import atomic_write_text
 
 
@@ -80,7 +80,10 @@ class ClaudeAdapter:
         if route.max_budget_usd is not None:
             argv += ["--max-budget-usd", str(route.max_budget_usd)]
         if resume_session is not None:
-            argv += ["--resume", resume_session]
+            session = validate_session_id(resume_session)
+            if session is None:
+                raise InvalidResumeSession("invalid resume session identifier")
+            argv += ["--resume", session]
         return InvocationSpec(argv, worktree,
                               "Follow the system instructions. Work only inside the current directory.", {}, tools)
 
@@ -92,7 +95,8 @@ class ClaudeAdapter:
         nodes = list(_dicts(events))
         results = [event for event in events if event.get("type") == "result"]
         final = results[-1] if results else {}
-        session = next((node["session_id"] for node in reversed(nodes) if "session_id" in node), None)
+        session = next((value for node in reversed(nodes)
+                        if (value := validate_session_id(node.get("session_id"))) is not None), None)
         errors = {key: final[key] for key in ("error", "errors", "subtype", "error_type")
                   if final.get("is_error") is True and key in final}
         rate_events = [event for event in events if event.get("type") in {"rate_limit_event", "rate_limit"}]

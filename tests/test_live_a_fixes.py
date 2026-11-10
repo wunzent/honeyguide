@@ -10,12 +10,12 @@ import sys
 import psutil
 import pytest
 
-from adapters.base import Availability, Route, get_adapter, validate_session_id
+from adapters.base import Availability, InvalidResumeSession, Outcome, Route, get_adapter, validate_session_id
 from adapters.codex_cli import CodexAdapter
 from agent_loader import load_template
 from model_router import RouteError, resolve
 from policy import PolicyError
-from runner import Runner, _tool_violation
+from runner import Runner, _tool_violation, _tool_violations
 from test_bridge import call
 from test_engine_restart import engine_env, runtime, start, finished, drive, wait_until
 from test_path_policy import hub
@@ -24,6 +24,187 @@ from test_v1_isolation import target, routing
 
 ROOT = Path(__file__).resolve().parents[1]
 SESSION = "019c6e27-e55b-73d1-87d8-4e01f1f75043"
+
+
+@pytest.fixture
+def live_a_init():
+    """Trimmed LIVE-A 2.1.312 schema with synthetic values only."""
+    return json.loads('''{
+      "type": "system", "subtype": "init", "cwd": ".", "session_id": "fixture-session",
+      "tools": ["Read", "Glob", "Grep"], "mcp_servers": [], "model": "fixture",
+      "permissionMode": "default", "slash_commands": [], "terminal_slash_commands": [],
+      "apiKeySource": "none", "claude_code_version": "2.1.312", "output_style": "default",
+      "agents": ["fixture-agent"], "skills": [], "plugins": [], "capabilities": {}
+    }''')
+
+
+def test_trimmed_real_init_schema(live_a_init):
+    assert not _tool_violation([live_a_init], ["Read", "Glob", "Grep"])
+
+
+@pytest.fixture
+def unlocked_live_a_init(live_a_init):
+    # Preserve observed list sizes and entry shapes; omit all real names and paths.
+    live_a_init.update(
+        slash_commands=["fixture-command"] * 144, skills=["fixture-skill"] * 108,
+        agents=["fixture-agent"] * 19,
+        plugins=[{"name": "fixture-plugin", "path": "./fixture"}] * 10,
+        mcp_servers=[{"name": "fixture-server", "status": "connected", "source": "fixture"}] * 16)
+    return live_a_init
+
+
+def test_trimmed_unlocked_live_a_schema_rejected(unlocked_live_a_init):
+    assert _tool_violations([unlocked_live_a_init], ["Read", "Glob", "Grep"]) == {
+        "slash_commands": 144, "skills": 108, "plugins": 10, "mcp_servers": 16}
+
+
+@pytest.mark.parametrize("field", ["tools", "mcp_servers", "slash_commands", "terminal_slash_commands",
+                                   "skills", "plugins", "agents"])
+@pytest.mark.parametrize("malformed", ["missing", None, {}, "unexpected", 1])
+def test_init_missing_or_nonlist_fails_closed(live_a_init, field, malformed):
+    if malformed == "missing":
+        live_a_init.pop(field)
+    else:
+        live_a_init[field] = malformed
+    assert _tool_violation([live_a_init], ["Read", "Glob", "Grep"])
+
+
+@pytest.mark.parametrize("tool", ["Agent", "Task", "Bash", "PowerShell", "Edit", "Write", "NotebookEdit",
+                                  "WebFetch", "WebSearch", "mcp__fixture__read"])
+def test_forbidden_tools_rejected_even_if_allowlisted(live_a_init, tool):
+    live_a_init["tools"].append(tool)
+    assert _tool_violation([live_a_init], live_a_init["tools"])
+
+
+def test_every_init_is_checked(live_a_init):
+    unsafe = {**live_a_init, "skills": ["fixture"]}
+    assert _tool_violation([unsafe, live_a_init], ["Read", "Glob", "Grep"])
+
+
+@pytest.mark.parametrize("vendor", ["claude", "codex"])
+def test_trailing_null_session_survives_runner(runtime, monkeypatch, vendor):
+    runner, _ = runtime
+    monkeypatch.setenv("FAKE_SCENARIO", "trailing_null_session")
+    monkeypatch.setenv("FAKE_SESSION_ID", SESSION)
+    run_id = start(runtime, vendor)
+    assert finished(runner, run_id).session_id == SESSION
+    assert runner.store.read_state("project", "T-1")["runs"][run_id]["session_id"] == SESSION
+    assert sum(e.kind == "session.invalid" for e in runner.store.read_events("project", "T-1")) == 1
+
+
+@pytest.mark.parametrize("vendor", ["claude", "codex"])
+def test_runner_preserves_stored_session(runtime, monkeypatch, vendor):
+    runner, _ = runtime
+    run_id = start(runtime, vendor)
+    classify = runner.adapters[vendor].classify
+    monkeypatch.setattr(runner.adapters[vendor], "classify", lambda *args: replace(classify(*args), session_id=None))
+    with runner.store.transaction("project", "T-1") as txn:
+        txn.state["runs"][run_id]["session_id"] = SESSION
+        txn.emit("fixture", {"set": {"runs": txn.state["runs"]}})
+    assert finished(runner, run_id).session_id == SESSION
+    assert runner.store.read_state("project", "T-1")["runs"][run_id]["session_id"] == SESSION
+
+
+@pytest.mark.parametrize("source", ["run", "checkpoint"])
+def test_quota_preserves_stored_session(engine_env, source):
+    factory, store, now, *_ = engine_env
+    engine = factory()
+    state = store.read_state("project", "T-1")
+    run = {"idem_key": "fixture-key", "role": "coder", "route": {"vendor": "codex", "model": "gpt-6.1-sol", "effort": "medium"}}
+    if source == "run":
+        run["session_id"] = SESSION
+    else:
+        state["checkpoint"] = {"session_id": SESSION}
+    engine._quota("project", "T-1", state, "fixture-run", run,
+                  Outcome("quota_limited", None, None, None, "", {}))
+    assert store.read_state("project", "T-1")["checkpoint"]["session_id"] == SESSION
+
+
+@pytest.mark.parametrize("vendor", ["claude", "codex"])
+@pytest.mark.parametrize("invalid", ["", "bad id", 42])
+def test_invalid_resume_refuses_spawn_and_blocks(engine_env, monkeypatch, vendor, invalid):
+    factory, store, now, *_ = engine_env
+    from engine import _ResumeAdapter
+    engine = factory()
+    original = engine.runner.adapters[vendor]
+    engine.runner.adapters[vendor] = _ResumeAdapter(original, invalid)
+    worktree = engine.worktrees.create(engine.policy, "project", "T-1", Path(engine._project("project")["repo"]), "HEAD")
+    monkeypatch.setattr("runner.subprocess.Popen", lambda *args, **kwargs: pytest.fail("invalid resume spawned"))
+    with pytest.raises(InvalidResumeSession):
+        engine.runner.start("project", "T-1", "coder", Route(vendor, "sonnet", "low"),
+                            load_template(ROOT / "agents/coder.md"), worktree, "fixture-key",
+                            {"approved_plan": "Fixture", "repository_context": "Fixture"})
+    state = store.read_state("project", "T-1")
+    assert state["status"] == "needs-you" and not state.get("runs")
+    events = store.read_events("project", "T-1")
+    assert sum(e.kind == "session.resume_refused" for e in events) == 1
+    assert not any(e.kind.startswith("spawn.") for e in events)
+
+
+def test_route_rejections_deduplicated_across_ticks_and_restart(engine_env):
+    factory, store, now, *_ = engine_env
+    propose(store.root, "coder", "codex", "invalid-model")
+    engine = factory()
+    engine.availability_probe = lambda vendor: Availability(False, "fake", False, "offline")
+    for index in range(8):
+        engine._update("project", "T-1", "fixture.retry", {"status": "approved"})
+        engine.tick(now)
+        if index == 3:
+            engine.close()
+            engine = factory()
+            engine.availability_probe = lambda vendor: Availability(False, "fake", False, "offline")
+    assert sum(e.kind == "route.rejected" for e in store.read_events("project", "T-1")) == 1
+    propose(store.root, "coder", "codex", "another-invalid-model")
+    engine._update("project", "T-1", "fixture.retry", {"status": "approved"})
+    engine.tick(now)
+    assert sum(e.kind == "route.rejected" for e in store.read_events("project", "T-1")) == 2
+
+
+def test_route_rejections_changed_reason_emits_again(engine_env, monkeypatch):
+    factory, store, now, *_ = engine_env
+    propose(store.root, "coder", "codex", "invalid-model")
+    engine = factory()
+    state = store.read_state("project", "T-1")
+    for reason in ("first refusal", "first refusal", "different refusal"):
+        def reject(*args, **kwargs):
+            raise RouteError(reason)
+        monkeypatch.setattr("engine.resolve", reject)
+        with pytest.raises(RouteError):
+            engine._route("coder", state, set(), project="project", task="T-1")
+    assert sum(e.kind == "route.rejected" for e in store.read_events("project", "T-1")) == 2
+
+
+def test_route_rejection_key_uses_canonical_proposal_and_role(engine_env, monkeypatch):
+    factory, store, now, *_ = engine_env
+    propose(store.root, "coder", "codex", "invalid-model")
+    engine = factory()
+    state = store.read_state("project", "T-1")
+
+    def reject(*args, **kwargs):
+        raise RouteError("same refusal")
+
+    monkeypatch.setattr("engine.resolve", reject)
+    for changed in (False, False, True):
+        proposal = dict(reversed(list(state["route_proposals"]["coder"].items())))
+        if changed:
+            proposal["effort"] = "high"
+        state["route_proposals"]["coder"] = proposal
+        with pytest.raises(RouteError):
+            engine._route("coder", state, set(), project="project", task="T-1")
+    assert sum(e.kind == "route.rejected" for e in store.read_events("project", "T-1")) == 2
+    state["route_proposals"]["reviewer"] = dict(proposal)
+    with pytest.raises(RouteError):
+        engine._route("reviewer", state, set(), project="project", task="T-1")
+    assert sum(e.kind == "route.rejected" for e in store.read_events("project", "T-1")) == 3
+
+
+def test_init_agents_count_recorded_without_names(runtime):
+    runner, _ = runtime
+    run_id = start(runtime, "claude")
+    assert finished(runner, run_id).status == "ok"
+    directory = runner.store.task_dir("project", "T-1") / "runs" / run_id
+    meta = (directory / "meta.md").read_text()
+    assert '"agents_count": 1' in meta and "fixture-agent" not in meta
 
 
 def propose(root, role, vendor, model, effort="low", *extra):
@@ -157,6 +338,7 @@ def test_latest_proposal_on_quota_resume(engine_env, monkeypatch, tmp_path, vend
     assert ("--resume" in argv if vendor == "claude" else "resume" in argv) is (not change_model)
     run = store.read_state("project", "T-1")["runs"][store.read_state("project", "T-1")["active_run"]]
     assert run["route"]["model"] == model and run["route"]["effort"] == "high"
+    assert sum(e.kind == "session.resume_refused" for e in store.read_events("project", "T-1")) == int(change_model)
 
 
 @pytest.mark.parametrize("vendor", ["claude", "codex"])
@@ -192,7 +374,8 @@ def test_structured_usage_keeps_identifiers_and_scrubs_prose(runtime, monkeypatc
     assert outcome.usage == {"session_id": SESSION, "thread_id": SESSION, "text": "[REDACTED]"}
 
 
-@pytest.mark.parametrize("scenario", ["extra_tools", "extra_mcp", "missing_init"])
+@pytest.mark.parametrize("scenario", ["extra_tools", "extra_mcp", "missing_init", "extra_slash_commands",
+                                      "extra_terminal_slash_commands", "extra_skills", "extra_plugins", "missing_key"])
 @pytest.mark.parametrize("role", ["coder", "reviewer"])
 def test_tool_violation_fails_closed(engine_env, monkeypatch, scenario, role):
     factory, store, now, *_ = engine_env
@@ -215,6 +398,14 @@ def test_tool_violation_fails_closed(engine_env, monkeypatch, scenario, role):
     directory = store.task_dir("project", "T-1") / "runs" / run_id
     assert (directory / "result.md").read_text() == ""
     assert sum(e.kind == "security.tool_violation" for e in store.read_events("project", "T-1")) == 1
+    violation = next(e for e in store.read_events("project", "T-1") if e.kind == "security.tool_violation")
+    expected = {"extra_tools": {"tools": 6}, "extra_mcp": {"mcp_servers": 1}, "missing_init": {"init": 0},
+                "extra_slash_commands": {"slash_commands": 1},
+                "extra_terminal_slash_commands": {"terminal_slash_commands": 1},
+                "extra_skills": {"skills": 1}, "extra_plugins": {"plugins": 1}, "missing_key": {"skills": -1}}
+    assert violation.data["fields"] == expected[scenario]
+    assert "fixture-agent" not in json.dumps(violation.data)
+    assert "./fixture" not in json.dumps(violation.data)
 
 
 @pytest.mark.parametrize("tools,servers,violation", [
@@ -224,7 +415,9 @@ def test_tool_violation_fails_closed(engine_env, monkeypatch, scenario, role):
     (None, [], True), ([], None, True), ([{}], [], True),
 ])
 def test_init_validation(tools, servers, violation):
-    assert _tool_violation([{"type": "system", "subtype": "init", "tools": tools, "mcp_servers": servers}],
+    assert _tool_violation([{"type": "system", "subtype": "init", "tools": tools, "mcp_servers": servers,
+                            "slash_commands": [], "terminal_slash_commands": [], "skills": [],
+                            "plugins": [], "agents": []}],
                            ["Read", "Glob", "Grep"]) is violation
 
 

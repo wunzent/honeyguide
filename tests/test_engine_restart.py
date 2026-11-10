@@ -514,6 +514,32 @@ def test_resume_uses_vendor_session_and_attempt_key(engine_env, monkeypatch, tmp
     assert state['spawned_keys'] == {'T-1:coder:1': 1, 'T-1:coder:1:q1': 1}
 
 
+@pytest.mark.parametrize("vendor", ["claude", "codex"])
+@pytest.mark.parametrize("invalid", ["", "bad id"])
+def test_invalid_checkpoint_resume_never_starts_fresh(engine_env, monkeypatch, vendor, invalid):
+    factory, store, now, *_ = engine_env
+    engine = factory()
+    route = {"vendor": vendor, "model": "sonnet" if vendor == "claude" else "gpt-6.1-sol", "effort": "low"}
+    engine._update("project", "T-1", "fixture.resume", {
+        "status": "waiting-quota", "resume_ready": True,
+        "checkpoint": {"session_id": invalid, "role": "coder", "route": route,
+                       "resume_key": "T-1:coder:1:q1"}})
+    popen = subprocess.Popen
+
+    def refuse_worker(argv, *args, **kwargs):
+        if argv[0] == sys.executable:
+            pytest.fail("invalid checkpoint launched a worker")
+        return popen(argv, *args, **kwargs)
+
+    monkeypatch.setattr("runner.subprocess.Popen", refuse_worker)
+    engine.tick(now)
+    state = store.read_state("project", "T-1")
+    assert state["status"] == "needs-you" and not state.get("runs")
+    events = store.read_events("project", "T-1")
+    assert sum(e.kind == "session.resume_refused" for e in events) == 1
+    assert not any(e.kind.startswith("spawn.") for e in events)
+
+
 def test_question_draft_class_and_atomic_mirror(engine_env, monkeypatch):
     factory, store, now, _, _, notices = engine_env
     monkeypatch.setenv('FAKE_SCENARIO', 'ask')

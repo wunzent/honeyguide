@@ -48,6 +48,10 @@ class Availability:
     reason: str
 
 
+class InvalidResumeSession(ValueError):
+    """A requested resume cannot safely be passed to a worker CLI."""
+
+
 class Adapter(Protocol):
     vendor: str
 
@@ -78,13 +82,16 @@ def _clean(value: Any) -> Any:
         return scrub(value)
     if isinstance(value, dict):
         cleaned = {}
+        invalid_session = False
         for key, child in value.items():
             if key in {"session_id", "thread_id"}:
                 cleaned[key] = validate_session_id(child)
-                if child is not None and cleaned[key] is None:
-                    cleaned["session_invalid"] = True
+                if cleaned[key] is None:
+                    invalid_session = True
             else:
                 cleaned[scrub(str(key))] = _clean(child)
+        if invalid_session:
+            cleaned["session_invalid"] = True
         return cleaned
     if isinstance(value, list):
         return [_clean(child) for child in value]

@@ -50,6 +50,16 @@ Reviewer low issues (not fixed; need owner approval for a further round): L1 las
 a valid earlier one (fails safe, loses resume) · L2 `build()` does not re-validate `resume_session` · L3 `route.rejected`
 logged every tick · L4 init check ignores `slash_commands`/`skills`/`agents` fields.
 
+F1–F5 commit: `f610661df40dbea39baffc5a48d9b29f2de0e7ab` (726/726).
+**Fix round L1–L4 (owner-approved, 2026-11-10):** L1 session id never overwritten by empty/invalid · L2 resume id
+re-validated in `build()` (invalid → refused + needs-you) · L3 `route.rejected` deduplicated · L4 Claude init check
+covers `slash_commands`, `terminal_slash_commands`, `skills`, `plugins` (must be empty), `agents` (allowed only without
+Agent/Task), missing key = violation — based on the real Claude Code 2.1.312 init schema from LIVE-A. Full suite
+**852/852** (orchestrator); Claude review **PASS**; no real paths/ids in fixtures; v1 unchanged.
+Open notes (low, owner decision): N1 a resume whose route vendor/model changed starts fresh with `session.resume_refused`
+event (not needs-you); N2 benign `session_id: null` also emits `session.invalid` (noise only).
+Live confirmation of F3/L4/F4 → `docs/LIVE-A-RERUN-PROCEDURE.md` (needs separate approval).
+
 AC status after LIVE-A: AC-1 **PASS (live)**, AC-2 **PASS (live)**; AC-3/6/7/8 unchanged (pending LIVE-B/C/D/E). Security Gate NOT PASS.
 
 The sections below are the original Phase 1 record (signing era) and are kept as history.

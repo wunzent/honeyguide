@@ -45,6 +45,8 @@ def main() -> int:
             result = "RESULT: " + json.dumps({"question_request": question})
         print(json.dumps({"type": "item.completed", "item": {"type": "agent_message", "text": result}}))
         print(json.dumps({"type": "turn.completed", "usage": {"input_tokens": 12, "output_tokens": 8}}))
+    if scenario == "trailing_null_session":
+        print(json.dumps({"type": "thread.updated", "thread_id": None}))
     if "-o" in args:
         Path(args[args.index("-o") + 1]).write_text(result, encoding="utf-8")
     return 1 if failed else 0

@@ -9,8 +9,8 @@ import shutil
 from typing import Callable
 
 from agent_loader import AgentTemplate
-from adapters.base import (Availability, InvocationSpec, Outcome, Route,
-                           _clean, _dicts, _epoch, _parse_line, scrub)
+from adapters.base import (Availability, InvalidResumeSession, InvocationSpec, Outcome, Route,
+                           _clean, _dicts, _epoch, _parse_line, scrub, validate_session_id)
 from state_writer import read_text_retry
 
 
@@ -79,7 +79,10 @@ class CodexAdapter:
             raise ValueError("Route vendor mismatch")
         argv = self.executable + ["exec"]
         if resume_session is not None:
-            argv += ["resume", resume_session]
+            session = validate_session_id(resume_session)
+            if session is None:
+                raise InvalidResumeSession("invalid resume session identifier")
+            argv += ["resume", session]
         argv += ["--json", "-C", str(worktree), "-s",
                  "read-only" if template.writes == "none" else "workspace-write",
                  "-m", route.model, "-c", f"model_reasoning_effort={route.effort}",
@@ -92,8 +95,8 @@ class CodexAdapter:
     def classify(self, exit_code: int, events: list[dict], stderr_tail: str) -> Outcome:
         events = _clean(events)
         nodes = list(_dicts(events))
-        session = next((node[key] for node in reversed(nodes) for key in ("thread_id", "session_id")
-                        if key in node), None)
+        session = next((value for node in reversed(nodes) for key in ("thread_id", "session_id")
+                        if (value := validate_session_id(node.get(key))) is not None), None)
         # Item payloads contain arbitrary agent prose and command output.
         protocol = [event for event in events if event.get("type") not in
                     {"item.started", "item.updated", "item.completed", "agent_message", "command_execution"}]

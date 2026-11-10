@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import hashlib
 import json
 import os
 import re
@@ -22,6 +23,7 @@ from adapters.base import (
     Route,
     get_adapter,
     scrub,
+    validate_session_id,
 )
 from agent_loader import AgentTemplate, load_template
 from model_router import RouteError, load_catalog, resolve
@@ -592,7 +594,9 @@ class Engine:
     ) -> None:
         base_key = state.get("checkpoint", {}).get("base_key", run["idem_key"])
         checkpoint = {
-            "session_id": outcome.session_id,
+            "session_id": (validate_session_id(outcome.session_id)
+                           or validate_session_id(run.get("session_id"))
+                           or validate_session_id(state.get("checkpoint", {}).get("session_id"))),
             "run": run_id,
             "round": state.get("round", 1),
             "role": run["role"],
@@ -696,7 +700,17 @@ class Engine:
                                coder_vendor=state.get("coder_vendor"))
             except (RouteError, TypeError, AttributeError) as exc:
                 rejected_vendor = latest.get("vendor") if isinstance(latest, dict) else None
-                self._update(project, task, "route.rejected", {}, role=role, reason=scrub(str(exc)))
+                reason = scrub(str(exc))
+                canonical = json.dumps(latest, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+                rejection_key = json.dumps([role, digest, reason], separators=(",", ":"))
+                with self.store.transaction(project, task) as txn:
+                    keys = list(txn.state.get("route_rejected_keys", []))
+                    if rejection_key not in keys:
+                        keys.append(rejection_key)
+                        changes = {"route_rejected_keys": keys}
+                        txn.state.update(changes)
+                        txn.emit("route.rejected", {"role": role, "reason": reason, "set": changes})
                 proposal = None
         if proposal is None:
             configured = (
@@ -970,9 +984,11 @@ class Engine:
                     state.get("checkpoint", {}).get("session_id") if resume else None
                 )
                 if resume_route and any(resume_route.get(key) != getattr(route, key) for key in ("vendor", "model")):
+                    if session is not None:
+                        self._update(project, task, "session.resume_refused", {}, reason="resume route changed")
                     session = None
                 original = self.runner.adapters[route.vendor]
-                if session:
+                if session is not None:
                     self.runner.adapters[route.vendor] = _ResumeAdapter(
                         original, session
                     )

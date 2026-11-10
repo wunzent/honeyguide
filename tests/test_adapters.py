@@ -11,7 +11,7 @@ import sys
 import pytest
 
 from adapters import get_adapter
-from adapters.base import Availability, InvocationSpec, Outcome, Route, scrub
+from adapters.base import Availability, InvalidResumeSession, InvocationSpec, Outcome, Route, scrub
 from adapters.codex_cli import read_session_rate_limits
 from agent_loader import load_all, render_prompt
 import state_writer
@@ -33,6 +33,34 @@ def _build(tmp_path, vendor, role="coder", resume=None):
     run_dir.mkdir(exist_ok=True)
     return _adapter(vendor).build(template, Route(vendor, "test-model", "medium", 0.5),
                                   run_dir, tmp_path, prompt, resume)
+
+
+@pytest.mark.parametrize("vendor", ["claude", "codex"])
+@pytest.mark.parametrize("invalid", ["", "bad id", "short", "unsafe/id", "a" * 129, 42, False, []])
+def test_build_refuses_invalid_resume(tmp_path, vendor, invalid):
+    with pytest.raises(InvalidResumeSession, match="invalid resume session identifier"):
+        _build(tmp_path, vendor, resume=invalid)
+
+
+@pytest.mark.parametrize("vendor,field", [("claude", "session_id"), ("codex", "thread_id"),
+                                         ("codex", "session_id")])
+@pytest.mark.parametrize("invalid", [None, "", "bad id", 12, []])
+@pytest.mark.parametrize("has_valid", [False, True])
+def test_session_selection_keeps_last_valid(vendor, field, invalid, has_valid):
+    adapter = _adapter(vendor)
+    events = ([{field: "first-session"}, {field: "last-session"}] if has_valid else [])
+    events.append({"nested": [{field: invalid}]})
+    parsed = [adapter.parse_line(json.dumps(event)) for event in events]
+    outcome = adapter.classify(1, parsed, "")
+    assert outcome.session_id == ("last-session" if has_valid else None)
+    assert outcome.session_invalid
+
+
+@pytest.mark.parametrize("vendor,field", [("claude", "session_id"), ("codex", "thread_id")])
+def test_invalid_marker_cannot_be_overwritten(vendor, field):
+    adapter = _adapter(vendor)
+    parsed = adapter.parse_line(json.dumps({field: None, "session_invalid": False}))
+    assert adapter.classify(1, [parsed], "").session_invalid
 
 
 @pytest.mark.parametrize("vendor", ["claude", "codex"])

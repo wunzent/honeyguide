@@ -21,7 +21,7 @@ from typing import Callable, Iterator
 import psutil
 import yaml
 
-from adapters.base import Adapter, Outcome, Route, _clean, scrub, validate_session_id
+from adapters.base import Adapter, InvalidResumeSession, Outcome, Route, _clean, scrub, validate_session_id
 from agent_loader import AgentTemplate, render_prompt
 from policy import (
     PolicyError,
@@ -109,20 +109,40 @@ def _terminate_tree(pid: int, create_time: float, run_token: str, exe: str | Non
         raise PolicyError("could not stop owned process tree") from exc
 
 
-def _tool_violation(events: list[dict], allowed: list[str]) -> bool:
+def _tool_violations(events: list[dict], allowed: list[str]) -> dict[str, int]:
     inits = [event for event in events if event.get("type") == "system" and event.get("subtype") == "init"]
     if not inits:
-        return True
+        return {"init": 0}
+    violations = {}
+    forbidden = {"Agent", "Task", "Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch"}
     for event in inits:
+        for field in ("tools", "mcp_servers", "slash_commands", "terminal_slash_commands", "skills", "plugins", "agents"):
+            value = event.get(field)
+            if not isinstance(value, list):
+                violations[field] = -1  # Missing or unverifiable; never record values.
+            elif field in {"slash_commands", "terminal_slash_commands", "skills", "plugins"} and value:
+                violations[field] = len(value)
         tools, servers = event.get("tools"), event.get("mcp_servers")
-        if (not isinstance(tools, list) or any(not isinstance(tool, str) or tool not in allowed for tool in tools)
-                or not isinstance(servers, list)):
-            return True
-        if any(not isinstance(server, dict) or not isinstance(server.get("status"), str)
-               or server["status"] not in {"failed", "disabled"}
-               for server in servers):
-            return True
-    return False
+        if isinstance(tools, list) and any(
+            not isinstance(tool, str) or tool not in allowed or tool in forbidden or tool.startswith("mcp__")
+            for tool in tools
+        ):
+            violations["tools"] = len(tools)
+        if isinstance(servers, list) and any(
+            not isinstance(server, dict) or not isinstance(server.get("status"), str)
+            or server["status"] not in {"failed", "disabled"} for server in servers
+        ):
+            violations["mcp_servers"] = len(servers)
+        agents = event.get("agents")
+        if isinstance(agents, list) and agents and isinstance(tools, list) and any(
+            tool in ("Agent", "Task") for tool in tools
+        ):
+            violations["agents"] = len(agents)
+    return violations
+
+
+def _tool_violation(events: list[dict], allowed: list[str]) -> bool:
+    return bool(_tool_violations(events, allowed))
 
 
 class Runner:
@@ -190,12 +210,27 @@ class Runner:
     def _metadata(self, directory: Path, record: dict) -> None:
         fields = ("argv", "prompt_sha256", "template_role", "body_sha256", "route",
                   "executable_resolved_path", "launcher_note", "finished_at", "status",
-                  "reset_at", "reset_source", "session_id", "exit_code", "reason")
+                  "reset_at", "reset_source", "session_id", "exit_code", "reason", "agents_count")
         self._write(directory / "meta.md", "# Run metadata\n\n```json\n"
                     + json.dumps({key: record[key] for key in fields if key in record}, indent=2)
                     + "\n```\n")
 
     def start(
+        self, project: str, task: str, role: str, route: Route,
+        template: AgentTemplate, worktree: Path, idem_key: str,
+        prompt_context: dict[str, str], dynamic: bool = False,
+    ) -> str:
+        try:
+            return self._start(project, task, role, route, template, worktree,
+                               idem_key, prompt_context, dynamic)
+        except InvalidResumeSession:
+            with self.store.transaction(project, task) as txn:
+                changes = {"status": "needs-you", "needs_run": False}
+                txn.state.update(changes)
+                txn.emit("session.resume_refused", {"role": role, "set": changes})
+            raise
+
+    def _start(
         self,
         project: str,
         task: str,
@@ -457,17 +492,19 @@ class Runner:
             outcome,
             result_text=scrub(outcome.result_text),
             usage=_clean(outcome.usage),
-            session_id=validate_session_id(outcome.session_id),
+            session_id=validate_session_id(outcome.session_id) or validate_session_id(record.get("session_id")),
             session_invalid=outcome.session_invalid or (
                 outcome.session_id is not None and validate_session_id(outcome.session_id) is None),
         )
-        violation = record["route"]["vendor"] == "claude" and _tool_violation(events, record.get("allowed_tools", []))
-        if violation:
+        violations = (_tool_violations(events, record.get("allowed_tools", []))
+                      if record["route"]["vendor"] == "claude" else {})
+        if violations:
             outcome = replace(outcome, status="failed", result_text="", reason="tool_restriction_violated")
             if record["status"] == "running":
                 with self.store.transaction(project, task) as txn:
                     txn.state.update(status="needs-you", needs_run=False)
                     txn.emit("security.tool_violation", {"run": run_id, "reason": outcome.reason,
+                             "fields": violations,
                              "set": {"status": "needs-you", "needs_run": False}})
         if outcome.session_invalid and record["status"] == "running":
             self._event(project, task, "session.invalid", {"reason": "invalid session identifier"}, run_id, {})
@@ -481,6 +518,10 @@ class Runner:
             "exit_code": exit_code,
             "reason": outcome.reason,
         }
+        if record["route"]["vendor"] == "claude":
+            finished["agents_count"] = max((len(event["agents"]) for event in events
+                if event.get("type") == "system" and event.get("subtype") == "init"
+                and isinstance(event.get("agents"), list)), default=0)
         self._metadata(directory, {**record, **finished})
         if record["status"] == "running":
             self._event(project, task, "run.finished", finished, run_id, finished)

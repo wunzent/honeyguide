@@ -27,9 +27,18 @@ def main() -> int:
         tools += ["CronCreate", "SendMessage", "mcp__docs__create"]
     if scenario == "extra_mcp":
         servers = [{"name": "docs", "status": "connected"}]
+    init = {"type": "system", "subtype": "init", "cwd": ".", "session_id": session,
+            "tools": tools, "mcp_servers": servers, "model": "fake-model", "permissionMode": "default",
+            "slash_commands": [], "terminal_slash_commands": [], "apiKeySource": "none",
+            "claude_code_version": "2.1.312", "output_style": "default", "agents": ["fixture-agent"],
+            "skills": [], "plugins": [], "capabilities": {}}
+    for field in ("slash_commands", "terminal_slash_commands", "skills", "plugins"):
+        if scenario == "extra_" + field:
+            init[field] = [{"name": "fixture", "path": "./fixture"}] if field == "plugins" else ["fixture"]
+    if scenario == "missing_key":
+        del init["skills"]
     if scenario != "missing_init":
-        print(json.dumps({"type": "system", "subtype": "init", "session_id": session,
-                          "tools": tools, "mcp_servers": servers}))
+        print(json.dumps(init))
     failed = scenario in {"fail", "quota_reset", "quota_noreset", "auth"}
     result = {
         "fail": "Task failed", "quota_reset": "Usage limit reached",
@@ -50,6 +59,8 @@ def main() -> int:
     if scenario == "quota_reset":
         event["resetsAt"] = 1900000000
     print(json.dumps(event))
+    if scenario == "trailing_null_session":
+        print(json.dumps({"type": "system", "subtype": "status", "session_id": None}))
     return 1 if failed else 0
 
 
