@@ -64,11 +64,16 @@ class ClaudeAdapter:
         settings = run_dir / "claude-settings.json"
         atomic_write_text(settings, json.dumps({"permissions": {
             "deny": ["Edit", "Write", "Bash", "PowerShell"]}}), retries=10, backoff=0.01)
+        tools = tuple(tool for capability, names in (("read", ("Read",)), ("search", ("Glob", "Grep")))
+                      if capability in template.capabilities for tool in names)
+        if not tools:
+            raise ValueError("Claude worker requires read or search capabilities")
         argv = self.executable + [
             "-p", "--output-format", "stream-json", "--verbose",
             "--model", route.model, "--effort", route.effort,
             "--append-system-prompt-file", str(prompt_path),
-            "--allowedTools", "Read,Glob,Grep", "--disallowedTools",
+            "--tools", ",".join(tools), "--strict-mcp-config", "--disable-slash-commands",
+            "--allowedTools", ",".join(tools), "--disallowedTools",
             "Bash,PowerShell,Edit,Write,NotebookEdit,Agent,Task,WebFetch,WebSearch",
             "--permission-mode", "default", "--settings", str(settings),
         ]
@@ -77,7 +82,7 @@ class ClaudeAdapter:
         if resume_session is not None:
             argv += ["--resume", resume_session]
         return InvocationSpec(argv, worktree,
-                              "Follow the system instructions. Work only inside the current directory.", {})
+                              "Follow the system instructions. Work only inside the current directory.", {}, tools)
 
     def parse_line(self, line: str) -> dict | None:
         return _parse_line(line)
@@ -87,8 +92,7 @@ class ClaudeAdapter:
         nodes = list(_dicts(events))
         results = [event for event in events if event.get("type") == "result"]
         final = results[-1] if results else {}
-        session = next((node["session_id"] for node in reversed(nodes)
-                        if isinstance(node.get("session_id"), str)), None)
+        session = next((node["session_id"] for node in reversed(nodes) if "session_id" in node), None)
         errors = {key: final[key] for key in ("error", "errors", "subtype", "error_type")
                   if final.get("is_error") is True and key in final}
         rate_events = [event for event in events if event.get("type") in {"rate_limit_event", "rate_limit"}]
@@ -111,7 +115,8 @@ class ClaudeAdapter:
         usage = final.get("usage", {})
         return Outcome(status, session, reset, "claude-stream" if reset else None,
                        scrub(result) if isinstance(result, str) else "",
-                       usage if isinstance(usage, dict) else {})
+                       usage if isinstance(usage, dict) else {},
+                       session_invalid=any(node.get("session_invalid") is True for node in nodes))
 
     def availability(self, run: Callable[[list[str]], tuple[int, str]]) -> Availability:
         try:

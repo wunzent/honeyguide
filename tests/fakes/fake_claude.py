@@ -20,7 +20,16 @@ def main() -> int:
     scenario = os.environ.get("FAKE_SCENARIO", "ok")
     if scenario == "slow":
         time.sleep(float(os.environ.get("FAKE_SLEEP", "30")))
-    print(json.dumps({"type": "system", "subtype": "init", "session_id": "claude-session"}))
+    session = os.environ.get("FAKE_SESSION_ID", "claude-session")
+    tools = ["Read", "Glob", "Grep"]
+    servers = []
+    if scenario == "extra_tools":
+        tools += ["CronCreate", "SendMessage", "mcp__docs__create"]
+    if scenario == "extra_mcp":
+        servers = [{"name": "docs", "status": "connected"}]
+    if scenario != "missing_init":
+        print(json.dumps({"type": "system", "subtype": "init", "session_id": session,
+                          "tools": tools, "mcp_servers": servers}))
     failed = scenario in {"fail", "quota_reset", "quota_noreset", "auth"}
     result = {
         "fail": "Task failed", "quota_reset": "Usage limit reached",
@@ -37,7 +46,7 @@ def main() -> int:
         }
         result = "RESULT: " + json.dumps({"question_request": question})
     event = {"type": "result", "is_error": failed, "result": result,
-             "session_id": "claude-session", "usage": {"input_tokens": 12, "output_tokens": 8}}
+             "session_id": session, "usage": {"input_tokens": 12, "output_tokens": 8}}
     if scenario == "quota_reset":
         event["resetsAt"] = 1900000000
     print(json.dumps(event))

@@ -9,6 +9,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import time
@@ -20,7 +21,7 @@ from typing import Callable, Iterator
 import psutil
 import yaml
 
-from adapters.base import Adapter, Outcome, Route, scrub
+from adapters.base import Adapter, Outcome, Route, _clean, scrub, validate_session_id
 from agent_loader import AgentTemplate, render_prompt
 from policy import (
     PolicyError,
@@ -78,6 +79,50 @@ def is_same_process(pid: int, create_time: float) -> bool:
         )
     except (psutil.Error, OSError):
         return False
+
+
+def _terminate_tree(pid: int, create_time: float, run_token: str, exe: str | None = None) -> None:
+    try:
+        root = psutil.Process(pid)
+        if (not is_same_process(pid, create_time) or not run_token
+                or root.environ().get("HUB_RUN_TOKEN") != run_token
+                or exe is not None and os.path.normcase(root.exe()) != os.path.normcase(exe)):
+            raise PolicyError("refusing to signal a foreign or reused PID")
+        children = root.children(recursive=True)
+        # psutil Process objects retain creation times to guard against PID reuse.
+        processes = list(reversed(children)) + [root]
+        for process in processes:
+            try:
+                process.terminate()
+            except psutil.NoSuchProcess:
+                pass
+        _, alive = psutil.wait_procs(processes, timeout=3)
+        for process in alive:
+            try:
+                process.kill()
+            except psutil.NoSuchProcess:
+                pass
+        _, alive = psutil.wait_procs(alive, timeout=3)
+        if alive:
+            raise PolicyError("owned process tree did not stop")
+    except (psutil.Error, OSError) as exc:
+        raise PolicyError("could not stop owned process tree") from exc
+
+
+def _tool_violation(events: list[dict], allowed: list[str]) -> bool:
+    inits = [event for event in events if event.get("type") == "system" and event.get("subtype") == "init"]
+    if not inits:
+        return True
+    for event in inits:
+        tools, servers = event.get("tools"), event.get("mcp_servers")
+        if (not isinstance(tools, list) or any(not isinstance(tool, str) or tool not in allowed for tool in tools)
+                or not isinstance(servers, list)):
+            return True
+        if any(not isinstance(server, dict) or not isinstance(server.get("status"), str)
+               or server["status"] not in {"failed", "disabled"}
+               for server in servers):
+            return True
+    return False
 
 
 class Runner:
@@ -141,6 +186,14 @@ class Runner:
                 updates["team_active_seconds"] = txn.state.get("team_active_seconds", 0) + changes["duration"]
             txn.state.update(updates)
             txn.emit(kind, {"run": run_id, **data, "set": updates})
+
+    def _metadata(self, directory: Path, record: dict) -> None:
+        fields = ("argv", "prompt_sha256", "template_role", "body_sha256", "route",
+                  "executable_resolved_path", "launcher_note", "finished_at", "status",
+                  "reset_at", "reset_source", "session_id", "exit_code", "reason")
+        self._write(directory / "meta.md", "# Run metadata\n\n```json\n"
+                    + json.dumps({key: record[key] for key in fields if key in record}, indent=2)
+                    + "\n```\n")
 
     def start(
         self,
@@ -228,6 +281,13 @@ class Runner:
                 "worktree": str(expected_worktree),
                 "intent_at": self.clock().isoformat(),
                 "run_token": run_token,
+                "argv": [scrub(arg) for arg in invocation.argv],
+                "prompt_sha256": sha256_file(prompt),
+                "template_role": template.role,
+                "body_sha256": template.body_sha256,
+                "allowed_tools": list(invocation.allowed_tools or ()),
+                "executable_resolved_path": str(Path(shutil.which(invocation.argv[0]) or invocation.argv[0]).resolve()),
+                "launcher_note": invocation.launcher_note,
             }
             runs[run_id] = record
             keys = dict(txn.state.get("spawned_keys", {}))
@@ -242,6 +302,7 @@ class Runner:
             }
             txn.state.update(updates)
             txn.emit("spawn.intent", {"key": idem_key, **record, "set": updates})
+        self._metadata(directory, record)
         with (
             (directory / "output.jsonl").open("wb") as output,
             (directory / "stderr.txt").open("wb") as errors,
@@ -395,8 +456,21 @@ class Runner:
         outcome = replace(
             outcome,
             result_text=scrub(outcome.result_text),
-            usage=json.loads(scrub(json.dumps(outcome.usage))),
+            usage=_clean(outcome.usage),
+            session_id=validate_session_id(outcome.session_id),
+            session_invalid=outcome.session_invalid or (
+                outcome.session_id is not None and validate_session_id(outcome.session_id) is None),
         )
+        violation = record["route"]["vendor"] == "claude" and _tool_violation(events, record.get("allowed_tools", []))
+        if violation:
+            outcome = replace(outcome, status="failed", result_text="", reason="tool_restriction_violated")
+            if record["status"] == "running":
+                with self.store.transaction(project, task) as txn:
+                    txn.state.update(status="needs-you", needs_run=False)
+                    txn.emit("security.tool_violation", {"run": run_id, "reason": outcome.reason,
+                             "set": {"status": "needs-you", "needs_run": False}})
+        if outcome.session_invalid and record["status"] == "running":
+            self._event(project, task, "session.invalid", {"reason": "invalid session identifier"}, run_id, {})
         self._write(directory / "result.md", outcome.result_text)
         finished = {
             "finished_at": self.clock().isoformat(),
@@ -405,13 +479,9 @@ class Runner:
             "reset_source": outcome.reset_source,
             "session_id": outcome.session_id,
             "exit_code": exit_code,
+            "reason": outcome.reason,
         }
-        self._write(
-            directory / "meta.md",
-            "# Run metadata\n\n```json\n"
-            + scrub(json.dumps(finished, indent=2))
-            + "\n```\n",
-        )
+        self._metadata(directory, {**record, **finished})
         if record["status"] == "running":
             self._event(project, task, "run.finished", finished, run_id, finished)
         self._processes.pop((project, task, run_id), None)
@@ -439,24 +509,31 @@ class Runner:
         digest = plan_hash(self.store.read_spec(project, task))
         run_id, directory = self._new_run(project, task)
         start = time.monotonic()
+        test_token = secrets.token_hex(16)
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 test_command,
                 cwd=worktree,
-                capture_output=True,
-                timeout=timeout_s,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                env=_child_env(),
+                env=_child_env({"HUB_RUN_TOKEN": test_token}),
             )
-            code, output = completed.returncode, completed.stdout + completed.stderr
-        except subprocess.TimeoutExpired as exc:
-            code = -1
-            output = "Test command timed out\n" + (exc.stdout or b"").decode(
-                "utf-8", errors="replace"
-            )
-            output += (exc.stderr or b"").decode("utf-8", errors="replace")
+            try:
+                created = psutil.Process(process.pid).create_time()
+            except psutil.NoSuchProcess:
+                created = None
+            try:
+                stdout, stderr = process.communicate(timeout=timeout_s)
+                code, output = process.returncode, stdout + stderr
+            except subprocess.TimeoutExpired:
+                if created is None:
+                    raise PolicyError("cannot verify timed-out test process identity")
+                _terminate_tree(process.pid, created, test_token)
+                stdout, stderr = process.communicate(timeout=5)
+                code, output = -1, "Test command timed out\n" + stdout + stderr
         except OSError as exc:
             code, output = -1, str(exc)
         result = {
@@ -509,19 +586,12 @@ class Runner:
         ]
 
     def stop(self, pid: int, create_time: float) -> None:
-        owned = any(
+        owned = next((run for run in self.live_runs() if
             run.get("pid") == pid and run.get("create_time") == create_time
-            for run in self.live_runs()
-        )
+        ), None)
         if not owned or not is_same_process(pid, create_time):
             raise PolicyError("refusing to signal a foreign or reused PID")
-        try:
-            process = psutil.Process(pid)
-            if abs(process.create_time() - create_time) > 1:
-                raise PolicyError("PID identity changed")
-            process.terminate()
-        except (psutil.Error, OSError) as exc:
-            raise PolicyError("could not stop owned process") from exc
+        _terminate_tree(pid, create_time, owned.get("run_token", ""), owned.get("exe"))
 
     def _snapshot(self, worktree: Path, policy) -> dict[str, str]:
         files = {}

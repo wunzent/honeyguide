@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tomllib
+import math
 from dataclasses import replace
 from pathlib import Path
 
@@ -54,6 +55,11 @@ def resolve(
     if settings is None:
         raise RouteError(f"unknown role: {role}")
     allowed = settings["allowed_vendors"]
+    if proposal.max_budget_usd is not None and (
+        proposal.vendor != "claude" or type(proposal.max_budget_usd) not in (int, float)
+        or not math.isfinite(proposal.max_budget_usd) or proposal.max_budget_usd <= 0
+    ):
+        raise RouteError("budget must be a positive finite number for Claude only")
     entry = catalog.get(proposal.vendor, {})
     if (
         proposal.vendor not in allowed
@@ -89,7 +95,8 @@ def resolve(
                 raise RouteError(
                     f"needs owner: vendor change {proposal.vendor} -> {vendor}"
                 )
-            return replace(proposal, vendor=vendor, model=model, effort=efforts[-1])
+            return replace(proposal, vendor=vendor, model=model, effort=efforts[-1],
+                           max_budget_usd=proposal.max_budget_usd if vendor == "claude" else None)
         return None
 
     reasons: list[str] = []

@@ -14,6 +14,44 @@ AC-3 now reads: *agent output and worker contexts cannot record an approval; app
 plan + policy hash* — unit part PASS (`tests/test_approvals.py`, `tests/test_bridge.py`); **not an identity proof**;
 Security Gate **NOT PASS**. Owner key setup below is **no longer required** (superseded).
 
+Commit of the remove-signing change: `22d08c989fe790794f13a325df116a76e3f3443f` (663/663, reviewer PASS).
+
+## LIVE-A — 2026-11-10 14:26–14:28 (owner approval: "อนุมัติ LIVE-A")
+Throwaway target repo (session scratchpad, outside every repo), project `live-a`, task `T-1` ("create hello.txt").
+Routes set by a test harness (see F1): coder `codex/gpt-6.1-sol/low`, reviewer `claude/sonnet/low`, `--max-budget-usd 0.50`.
+
+| Expected | Result | Evidence |
+|---|---|---|
+| E1 one template set | prompt.md rendered from `agents/coder.md` / `agents/reviewer.md` for both vendors | runs `R-…c50a`, `R-…31b1` |
+| E2 Codex coder run | **PASS** — intent → started (pid, create_time, token) → finished ok, exit 0, ~32 s; `hello.txt` = `hello` only in worktree `…-v2-data\worktrees\live-a\T-1` | events 8–14 |
+| E3 Claude reviewer run | **PASS with finding F3** — ok, verdict PASS, 5 turns, **$0.085**; tool calls only Read/Glob/Grep; no Bash/Edit/Write available | events 19–24 |
+| E4 trusted test | **PASS** — Python ran pytest, exit 0, 1.1 s | `test-log.txt`, event 15 |
+| E5 scope | **PASS** — only `hello.txt` changed; no violation | event 26 |
+| E6 cleanup / isolation | **PASS** — 0 hub processes left; v1 `75f4561`/19 unchanged; v2 tracked files unchanged; target `main` unchanged; no remote | before/after check |
+| E7 real stream formats | **PASS** — both parsed as ok; no misclassification | outcomes |
+| Auto commit | **PASS** — `05edb11` on `hub/T-1` in the worktree, files `[hello.txt]`, message states verification status; no push/merge | event 26 |
+Codex usage: 59,599 input tokens (43,392 cached), 152 output. End-to-end ~70 s.
+
+### LIVE-A findings (need an approved fix round)
+| ID | Severity | Finding | Fix |
+|---|---|---|---|
+| F1 | medium | `bridge.py propose-route` is stored (`route_proposal`) but never read by the engine; routes come only from policy defaults, so the orchestrator cannot choose model/effort/budget | engine/model_router consume `route_proposal` per role (validated by router) |
+| F2 | medium | `session_id` is redacted by `scrub()` in state/events/meta (`[REDACTED]`), so resume after a quota limit or lost run cannot work in real use | exempt `session_id` fields from scrubbing (keep scrubbing free text) |
+| F3 | medium | Claude worker had extra tools available: Cron*, RemoteTrigger, SendMessage, Skill, EnterWorktree, PushNotification and **Claude Docs MCP create/update/delete** (external writes). `--allowedTools` pre-approves but does not restrict | add `--tools Read,Glob,Grep`, `--strict-mcp-config` (no MCP), `--disable-slash-commands`; assert in tests |
+| F4 | low | Codex launched through `codex.cmd` → recorded exe is `cmd.exe`; stopping the PID may leave the child `node codex.js` | launch `node …/codex.js` directly or stop the whole process tree (own tree only) |
+| F5 | low | `meta.md` lacks argv and prompt-body hash, so E1/E3 evidence must be read from other files | write argv (scrubbed) + prompt sha256 to meta.md |
+
+**Fix round F1–F5 (owner-approved, 2026-11-10):** all five implemented by Codex; focused 175/175, full suite **726/726**
+(orchestrator); Claude cross-vendor review **PASS** (static). Status: F1 fixed · F2 fixed · **F3 fixed in code, live
+behaviour PENDING VERIFICATION** (needs one real Claude run to confirm `--tools`/`--strict-mcp-config`/
+`--disable-slash-commands` actually restrict the init tool list; the run fails closed if not) · F4 fixed (fake process
+tree; real `codex.js` layout PENDING) · F5 fixed.
+Reviewer low issues (not fixed; need owner approval for a further round): L1 last `session_id` node may be null and drop
+a valid earlier one (fails safe, loses resume) · L2 `build()` does not re-validate `resume_session` · L3 `route.rejected`
+logged every tick · L4 init check ignores `slash_commands`/`skills`/`agents` fields.
+
+AC status after LIVE-A: AC-1 **PASS (live)**, AC-2 **PASS (live)**; AC-3/6/7/8 unchanged (pending LIVE-B/C/D/E). Security Gate NOT PASS.
+
 The sections below are the original Phase 1 record (signing era) and are kept as history.
 
 Date: 2026-11-10 · Plan: `docs/PHASE-1-PLAN.md` Rev 2 · Coder: Codex CLI 0.167.0 (`gpt-6.1-sol`, direct exec, workspace-write sandbox in v2)

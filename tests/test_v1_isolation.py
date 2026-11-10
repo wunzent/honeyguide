@@ -275,7 +275,7 @@ def test_fallback_owner_gate_and_effort_downgrade(routing):
     roles = {role: {**settings, "auto_fallback": True} for role, settings in policy.routing_roles.items()}
     routing["policy"] = replace(policy, routing_roles=roles)
     route, reasons = resolve(proposal, "coder", **routing)
-    assert route == Route("codex", "gpt-6.1-sol", "xhigh", 0.5)
+    assert route == Route("codex", "gpt-6.1-sol", "xhigh", None)
     assert reasons
     routing["quota_blocked"] = {"claude", "codex"}
     with pytest.raises(RouteError, match="no available"):

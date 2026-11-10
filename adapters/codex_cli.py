@@ -52,11 +52,23 @@ class CodexAdapter:
     vendor = "codex"
 
     def __init__(self, executable: list[str] | None = None) -> None:
+        self.launcher_note = None
         if executable is None:
             command = (shutil.which("codex.cmd") if os.name == "nt" else None) or shutil.which("codex")
             if command and Path(command).suffix.lower() == ".ps1":
                 command = None
             self.executable = [command or "codex"]
+            if command and Path(command).suffix.lower() == ".cmd":
+                script = Path(command).parent / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+                try:
+                    wrapper = read_text_retry(Path(command)).replace("\\", "/").lower()
+                    node = shutil.which("node")
+                    if "node_modules/@openai/codex/bin/codex.js" in wrapper and script.is_file() and node:
+                        self.executable = [str(Path(node).resolve()), str(script.resolve())]
+                    else:
+                        self.launcher_note = "codex.cmd fallback: Node or codex.js target unresolved"
+                except (OSError, UnicodeError):
+                    self.launcher_note = "codex.cmd fallback: launcher could not be read"
         else:
             self.executable = list(executable)
 
@@ -72,7 +84,7 @@ class CodexAdapter:
                  "read-only" if template.writes == "none" else "workspace-write",
                  "-m", route.model, "-c", f"model_reasoning_effort={route.effort}",
                  "-c", "features.multi_agent=false", "-o", str(run_dir / "last.md"), "-"]
-        return InvocationSpec(argv, worktree, read_text_retry(prompt_path), {})
+        return InvocationSpec(argv, worktree, read_text_retry(prompt_path), {}, launcher_note=self.launcher_note)
 
     def parse_line(self, line: str) -> dict | None:
         return _parse_line(line)
@@ -81,7 +93,7 @@ class CodexAdapter:
         events = _clean(events)
         nodes = list(_dicts(events))
         session = next((node[key] for node in reversed(nodes) for key in ("thread_id", "session_id")
-                        if isinstance(node.get(key), str)), None)
+                        if key in node), None)
         # Item payloads contain arbitrary agent prose and command output.
         protocol = [event for event in events if event.get("type") not in
                     {"item.started", "item.updated", "item.completed", "agent_message", "command_execution"}]
@@ -113,7 +125,8 @@ class CodexAdapter:
                     if node.get("type") == "agent_message" and isinstance(node.get("text"), str)]
         usage = next((node["usage"] for node in reversed(nodes) if isinstance(node.get("usage"), dict)), {})
         return Outcome(status, session, reset, "codex-stream" if reset else None,
-                       scrub("\n".join(messages)), usage)
+                       scrub("\n".join(messages)), usage,
+                       session_invalid=any(node.get("session_invalid") is True for node in nodes))
 
     def availability(self, run: Callable[[list[str]], tuple[int, str]]) -> Availability:
         try:

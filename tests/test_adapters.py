@@ -233,7 +233,7 @@ def test_classify_requires_completion_and_preserves_authority_boundary(vendor):
     assert adapter.classify(0, [{"type": "session_configured", "session_id": "resume-id"}], "").session_id == "resume-id"
 
 
-def test_registry_and_default_resolution(monkeypatch):
+def test_registry_and_default_resolution(monkeypatch, tmp_path):
     with pytest.raises(ValueError):
         get_adapter("unknown")
     with pytest.raises(ValueError):
@@ -243,13 +243,13 @@ def test_registry_and_default_resolution(monkeypatch):
 
     def which(name):
         calls.append(name)
-        return "C:/bin/codex.cmd" if name == "codex.cmd" else "C:/bin/codex"
+        return str(tmp_path / ("codex.cmd" if name == "codex.cmd" else "codex"))
 
     monkeypatch.setattr("adapters.codex_cli.shutil.which", which)
     adapter = get_adapter("codex")
-    assert adapter.executable == (["C:/bin/codex.cmd"] if os.name == "nt" else ["C:/bin/codex"])
+    assert adapter.executable == [str(tmp_path / ("codex.cmd" if os.name == "nt" else "codex"))]
     assert calls[0] == ("codex.cmd" if os.name == "nt" else "codex")
-    monkeypatch.setattr("adapters.codex_cli.shutil.which", lambda _: "C:/bin/codex.ps1")
+    monkeypatch.setattr("adapters.codex_cli.shutil.which", lambda _: str(tmp_path / "codex.ps1"))
     assert get_adapter("codex").executable == ["codex"]
 
 

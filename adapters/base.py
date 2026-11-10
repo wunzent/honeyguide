@@ -24,6 +24,8 @@ class InvocationSpec:
     cwd: Path
     stdin_text: str | None
     env: dict[str, str]
+    allowed_tools: tuple[str, ...] | None = None
+    launcher_note: str | None = None
 
 
 @dataclass
@@ -34,6 +36,8 @@ class Outcome:
     reset_source: str | None
     result_text: str
     usage: dict
+    reason: str | None = None
+    session_invalid: bool = False
 
 
 @dataclass
@@ -65,11 +69,23 @@ def scrub(text: str) -> str:
                   "[REDACTED]", text)
 
 
+def validate_session_id(value: object) -> str | None:
+    return value if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]{8,128}", value) else None
+
+
 def _clean(value: Any) -> Any:
     if isinstance(value, str):
         return scrub(value)
     if isinstance(value, dict):
-        return {scrub(str(key)): _clean(child) for key, child in value.items()}
+        cleaned = {}
+        for key, child in value.items():
+            if key in {"session_id", "thread_id"}:
+                cleaned[key] = validate_session_id(child)
+                if child is not None and cleaned[key] is None:
+                    cleaned["session_invalid"] = True
+            else:
+                cleaned[scrub(str(key))] = _clean(child)
+        return cleaned
     if isinstance(value, list):
         return [_clean(child) for child in value]
     return value

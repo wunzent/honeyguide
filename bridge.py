@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -62,6 +63,7 @@ def _parser() -> argparse.ArgumentParser:
             command.add_argument("--vendor", choices=["claude", "codex"], required=True)
             for field in ("model", "effort", "reason"):
                 command.add_argument("--" + field, required=True)
+            command.add_argument("--budget-usd", type=float)
         elif name == "ask":
             source = command.add_mutually_exclusive_group(required=True)
             source.add_argument("--file", type=Path)
@@ -304,7 +306,13 @@ def _execute(args, store: StateStore, policy, clock: Callable) -> dict:
                 key: _text(getattr(args, key), key)
                 for key in ("role", "vendor", "model", "effort", "reason")
             }
-            updates, kind = {"route_proposal": proposal}, "route.proposed"
+            if args.budget_usd is not None:
+                if args.vendor != "claude" or not math.isfinite(args.budget_usd) or args.budget_usd <= 0:
+                    raise ValueError("budget must be a positive finite number for Claude only")
+                proposal["max_budget_usd"] = args.budget_usd
+            proposals = dict(txn.state.get("route_proposals", {}))
+            proposals[args.role] = proposal
+            updates, kind = {"route_proposals": proposals}, "route.proposed"
             result["proposal"] = proposal
         elif command == "ask":
             raw = (

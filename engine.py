@@ -578,7 +578,7 @@ class Engine:
                 task,
                 "run.blocked",
                 {"status": "needs-you"},
-                reason=outcome.status,
+                reason=outcome.reason or outcome.status,
             )
 
     def _quota(
@@ -605,7 +605,7 @@ class Engine:
         try:
             blocked = set(state.get("quota_blocked", [])) | {run["route"]["vendor"]}
             route, reasons = self._route(
-                run["role"], state, blocked, Route(**run["route"])
+                run["role"], state, blocked, Route(**run["route"]), project=project, task=task
             )
         except RouteError:
             route = None
@@ -679,14 +679,33 @@ class Engine:
         self._update(project, task, "round.next", updates)
 
     def _route(
-        self, role: str, state: dict, blocked: set[str], proposal: Route | None = None
+        self, role: str, state: dict, blocked: set[str], proposal: Route | None = None,
+        *, project: str, task: str,
     ) -> tuple[Route, list[str]]:
+        availability = {vendor: self.availability_probe(vendor) for vendor in self.adapters}
+        latest = state.get("route_proposals", {}).get(role)
+        legacy = state.get("route_proposal", {})
+        if latest is None and legacy.get("role") == role:
+            latest = legacy
+        rejected_vendor = None
+        if latest is not None:
+            try:
+                proposed = Route(**{key: value for key, value in latest.items() if key not in {"role", "reason"}})
+                return resolve(proposed, role, policy=self.policy, catalog=self.catalog,
+                               availability=availability, quota_blocked=blocked,
+                               coder_vendor=state.get("coder_vendor"))
+            except (RouteError, TypeError, AttributeError) as exc:
+                rejected_vendor = latest.get("vendor") if isinstance(latest, dict) else None
+                self._update(project, task, "route.rejected", {}, role=role, reason=scrub(str(exc)))
+                proposal = None
         if proposal is None:
             configured = (
                 state.get("review_route")
                 if role == "reviewer"
                 else state.get("coder_route") or state.get("route")
             )
+            if latest is not None:
+                configured = None
             if configured:
                 proposal = Route(**configured)
             else:
@@ -707,18 +726,19 @@ class Engine:
                     )
                     if (
                         alternate
-                        and self.availability_probe(alternate.split(":", 1)[0]).ok
+                        and alternate.split(":", 1)[0] not in blocked
+                        and availability.get(alternate.split(":", 1)[0], Availability(False, None, None, "")).ok
                     ):
                         vendor, model = alternate.split(":", 1)
                 proposal = Route(vendor, model, "medium")
+        if rejected_vendor and proposal.vendor != rejected_vendor and not self.policy.routing_roles[role].get("auto_fallback", False):
+            raise RouteError(f"needs owner: vendor change {rejected_vendor} -> {proposal.vendor}")
         return resolve(
             proposal,
             role,
             policy=self.policy,
             catalog=self.catalog,
-            availability={
-                vendor: self.availability_probe(vendor) for vendor in self.adapters
-            },
+            availability=availability,
             quota_blocked=blocked,
             coder_vendor=state.get("coder_vendor"),
         )
@@ -927,6 +947,7 @@ class Engine:
                     state,
                     set() if resume else set(state.get("quota_blocked", [])),
                     proposal,
+                    project=project, task=task,
                 )
                 config = self._project(project)
                 worktree = self.worktrees.create(
@@ -948,6 +969,8 @@ class Engine:
                 session = (
                     state.get("checkpoint", {}).get("session_id") if resume else None
                 )
+                if resume_route and any(resume_route.get(key) != getattr(route, key) for key in ("vendor", "model")):
+                    session = None
                 original = self.runner.adapters[route.vendor]
                 if session:
                     self.runner.adapters[route.vendor] = _ResumeAdapter(

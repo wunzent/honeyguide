@@ -20,7 +20,7 @@ def main() -> int:
     scenario = os.environ.get("FAKE_SCENARIO", "ok")
     if scenario == "slow":
         time.sleep(float(os.environ.get("FAKE_SLEEP", "30")))
-    print(json.dumps({"type": "thread.started", "thread_id": "codex-thread"}))
+    print(json.dumps({"type": "thread.started", "thread_id": os.environ.get("FAKE_SESSION_ID", "codex-thread")}))
     failed = scenario in {"fail", "quota_reset", "quota_noreset", "auth"}
     if failed:
         message = {"fail": "Task failed", "auth": "Not logged in: login required"}.get(scenario, "Usage limit reached")
