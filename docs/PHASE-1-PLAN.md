@@ -1,5 +1,10 @@
 # Phase 1 Plan — Hub v2 core (engine, state, bridge, owner console, adapters)
 
+> **Superseded in part (2026-11-10):** the signing/owner-console parts of this plan (rows 9, 10, 27, R1, R6, AC-3
+> signature wording) are replaced by `docs/PLAN-REMOVE-SIGNING.md` Rev 2 — conversational approval via `bridge.py approve`,
+> no keys or passphrase. `signing.py`, `owner_console.py` and `tests/test_signing_approval.py` were removed; `approvals.py`,
+> `hashing.py`, `tests/test_approvals.py`, `tests/test_auto_commit.py` were added. Everything else in this plan still applies.
+
 Status: **REVISION 2 — awaiting owner Final Coding approval. No product code before approval.**
 Architecture: [ARCHITECTURE.md](ARCHITECTURE.md) Rev 2. Every acceptance item is **PENDING VERIFICATION** until its test
 has run and evidence is linked in `docs/VERIFICATION.md`. The Security Gate stays **NOT PASS** in Phase 1 (ARCH §6.6).

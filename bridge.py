@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,13 +12,15 @@ from uuid import uuid4
 
 import yaml
 
-from policy import ROLES, PolicyError, expand, is_inside, load_policy, question_class
-from signing import load_public_key
+from policy import ROLES, PolicyError, check_scope, expand, load_policy, question_class
+from approvals import approval_nonces, build_record, check_approval, ensure_not_worker
+from hashing import sha256_file
 from state_writer import (
     StateStore,
     _section_span,
     atomic_write_text,
     get_approval_block,
+    approved_scope,
     plan_hash,
     plan_section,
     read_text_retry,
@@ -45,7 +48,7 @@ def _parser() -> argparse.ArgumentParser:
         "request-approval",
         "propose-route",
         "ask",
-        "relay-answer",
+        "approve", "answer", "approve-scope", "pause", "resume", "cancel",
     ):
         command = commands.add_parser(name, add_help=False)
         command.add_argument("project")
@@ -64,10 +67,15 @@ def _parser() -> argparse.ArgumentParser:
             source.add_argument("--file", type=Path)
             source.add_argument("--json")
             command.add_argument("--id")
-        elif name == "relay-answer":
-            command.add_argument("qid")
+        elif name in {"approve", "answer", "approve-scope", "pause", "resume", "cancel"}:
             command.add_argument("--quote", required=True)
-            command.add_argument("--option", required=True)
+            command.add_argument("--desktop", choices=["claude", "codex"],
+                                 required=name != "answer", default="codex")
+            if name == "answer":
+                command.add_argument("qid")
+                command.add_argument("--option", default="")
+            if name == "approve-scope":
+                command.add_argument("--add", action="append", required=True)
     return parser
 
 
@@ -103,7 +111,7 @@ def pending_data(store: StateStore, policy) -> dict:
                 }
             )
         questions.extend(
-            {**q, "project": project, "task": task}
+            {**q, "class": question_class(policy, q["type"]), "project": project, "task": task}
             for q in state.get("questions", [])
             if q.get("status") in {"draft", "open"}
             and q.get("id") not in state.get("answers", {})
@@ -172,7 +180,36 @@ def _mirror(store: StateStore, project: str, task: str) -> None:
         )
 
 
+def _record(args, policy, spec: str, clock: Callable, kind: str, **extra) -> dict:
+    return build_record(kind, project=args.project, task=args.task,
+                        plan_hash=plan_hash(spec),
+                        policy_hash=sha256_file(policy.hub_root / "config" / "policy.toml"),
+                        quote=args.quote, desktop=args.desktop, now=clock(), **extra)
+
+
+def _stored_question(state: dict, qid: str) -> dict:
+    questions = state.get("questions", [])
+    if not isinstance(questions, list) or any(
+        not isinstance(q, dict) or not isinstance(q.get("id"), str) or not q["id"]
+        for q in questions
+    ):
+        raise ValueError("invalid stored questions")
+    if len({q["id"] for q in questions}) != len(questions):
+        raise ValueError("duplicate question IDs")
+    question = next((q for q in questions if q["id"] == qid), None)
+    if question is None:
+        raise ValueError("unknown question")
+    options = question.get("options")
+    if not isinstance(options, list) or any(
+        not isinstance(option, dict) or not isinstance(option.get("label"), str)
+        or not option["label"].strip() for option in options
+    ):
+        raise ValueError("invalid stored question options")
+    return question
+
+
 def _execute(args, store: StateStore, policy, clock: Callable) -> dict:
+    ensure_not_worker(os.environ, Path.cwd(), expand(policy.data_root))
     command = args.command
     if command == "status":
         if args.project:
@@ -237,14 +274,14 @@ def _execute(args, store: StateStore, policy, clock: Callable) -> dict:
                     "plan must stay inside Proposed Plan; use ### for subheadings"
                 )
             digest = plan_hash(new)
-            revised = bool(get_approval_block(old)) and digest != plan_hash(old)
+            revised = bool(txn.state.get("approval")) and digest != plan_hash(old)
             updates = {"plan_hash": digest}
-            if revised or not get_approval_block(old):
+            if revised or not txn.state.get("approval"):
                 updates["status"] = "awaiting-approval"
+            if revised and txn.state.get("status") in {"coding", "testing", "reviewing", "waiting-quota", "ready_to_commit"}:
+                updates["resume_stage"] = txn.state.get("resume_stage") or txn.state["status"]
             kind = "plan.revised" if revised else "plan.proposed"
-            atomic_write_text(
-                directory / "spec.md", new, store.replace_retries, store.replace_backoff
-            )
+            txn.write_spec(new)
             result["plan_hash"] = digest
         elif command == "request-approval":
             if txn.state.get("status") not in {
@@ -259,8 +296,8 @@ def _execute(args, store: StateStore, policy, clock: Callable) -> dict:
             updates, kind = {"status": "awaiting-approval"}, "approval.requested"
             result.update(
                 plan_hash=digest,
-                owner_command=f".venv\\Scripts\\python.exe owner_console.py approve {project} {task}",
-                message="run this in your own terminal",
+                plan_summary=plan_section(store.read_spec(project, task)),
+                message="ask the owner in this conversation, then run bridge.py approve with their exact words",
             )
         elif command == "propose-route":
             proposal = {
@@ -291,16 +328,16 @@ def _execute(args, store: StateStore, policy, clock: Callable) -> dict:
             question["id"] = args.id or "q-" + uuid4().hex
             if previous:
                 if (
-                    question_class(policy, previous["type"]) == "owner-signed"
-                    and question["class"] == "relay"
+                    question_class(policy, previous["type"]) == "owner-decision"
+                    and question["class"] == "clarify"
                 ):
-                    raise ValueError("cannot downgrade an owner-signed draft")
+                    raise ValueError("cannot downgrade an owner-decision draft")
                 question = {
                     **previous,
                     **question,
                     "draft": previous,
                     "type": previous["type"],
-                    "class": previous["class"],
+                    "class": question_class(policy, previous["type"]),
                 }
                 questions = [question if q["id"] == args.id else q for q in questions]
             else:
@@ -323,40 +360,86 @@ def _execute(args, store: StateStore, policy, clock: Callable) -> dict:
                     raise ValueError("blocking ask requires an idle, unfinished task")
                 updates["status"] = "needs-you"
             result["question"] = question
-        else:
-            question = next(
-                (q for q in txn.state.get("questions", []) if q["id"] == args.qid), None
-            )
-            if question is None:
-                raise ValueError("unknown question")
-            if (
-                question_class(policy, question["type"]) != "relay"
-                or question.get("class") != "relay"
+        elif command in {"approve", "approve-scope"}:
+            current = txn.state.get("status")
+            if command == "approve" and not (
+                current in {"awaiting-approval", "draft-with-plan"}
+                or current == "draft" and plan_section(store.read_spec(project, task))
+                or current == "needs-you" and txn.state.get("approval_reason") == "plan or policy changed"
             ):
-                raise ValueError(
-                    f"owner-signed question: use owner_console.py answer {project} {task} {args.qid} in your own terminal"
-                )
-            if question.get("status") != "open" or args.qid in txn.state.get(
-                "answers", {}
+                raise ValueError("approve requires a proposed plan awaiting approval or plan/policy changed")
+            if command == "approve-scope" and current in {"committed", "delivered", "cancelled"}:
+                raise ValueError("cannot widen a finished task")
+            spec = store.read_spec(project, task)
+            # Validate the quote before staging any scope change.
+            record = _record(args, policy, spec, clock, "approve-plan")
+            if command == "approve-scope":
+                paths = approved_scope(spec)
+                for path in args.add:
+                    _text(path, "scope glob")
+                    if check_scope([path], ["*"]) or ".git" in path.replace("\\", "/").lower().split("/"):
+                        raise ValueError("scope globs must be relative task paths")
+                    if path not in paths:
+                        paths.append(path)
+                section = plan_section(spec)
+                section = re.sub(r"^```hub-scope\r?\n.*?^```[ \t]*$", "", section, flags=re.M | re.S).rstrip()
+                section += "\n\n```hub-scope\n" + yaml.safe_dump(paths, sort_keys=False) + "```\n\n"
+                span = _section_span(spec, "Proposed Plan")
+                spec = spec[:span[1]] + "\n" + section + spec[span[2]:]
+                scope_record = _record(args, policy, spec, clock, "approve-scope", extra={"add": args.add})
+                record = _record(args, policy, spec, clock, "approve-plan")
+                txn.write_spec(spec)
+                txn.emit("scope.approved", {"record": scope_record})
+            stage = txn.state.get("resume_stage")
+            questions = [dict(q, status="answered") if q.get("type") == "plan-policy-changed"
+                         and q.get("asked_by") == "engine" else q
+                         for q in txn.state.get("questions", [])]
+            updates = {"approval": record,
+                       "approval_history": [*txn.state.get("approval_history", []), record],
+                       "plan_hash": record["plan_hash"]}
+            if command == "approve" or (
+                current == "needs-you"
+                and txn.state.get("approval_reason") == "plan or policy changed"
             ):
+                updates.update(questions=questions, status=stage or "approved",
+                               resume_stage=None, approval_reason=None, needs_run=True)
+            kind = "approval.recorded"
+            check_approval(record, project=project, task=task, plan_hash=record["plan_hash"],
+                           policy_hash=record["policy_hash"],
+                           used_nonces=approval_nonces({**txn.state, **updates}))
+            result["record"] = record
+        elif command in {"pause", "resume", "cancel"}:
+            current = txn.state.get("status")
+            if current in {"committed", "delivered", "cancelled"}:
+                raise ValueError("control requires an unfinished task")
+            record = _record(args, policy, store.read_spec(project, task), clock, command)
+            if command == "resume":
+                if current != "paused":
+                    raise ValueError("resume requires a paused task")
+                updates = {"status": txn.state.get("paused_stage") or "approved", "paused_stage": None}
+            elif command == "pause":
+                if current == "paused":
+                    raise ValueError("task already paused")
+                updates = {"status": "paused", "paused_stage": current}
+            else:
+                updates = {"status": "cancelled", "needs_run": False}
+            updates["control_history"] = [*txn.state.get("control_history", []), record]
+            kind = "control.recorded"
+            result["record"] = record
+        elif command == "answer":
+            question = _stored_question(txn.state, args.qid)
+            if question.get("status") not in {"open", "draft"} or args.qid in txn.state.get("answers", {}):
                 raise ValueError("question is not open or already answered")
-            if args.option not in [o["label"] for o in question["options"]]:
+            if args.option and args.option not in [o["label"] for o in question["options"]]:
                 raise ValueError("option must match a question option")
-            _text(args.quote, "quote")
-            answer = {
-                "relayed": True,
-                "quote": args.quote,
-                "option": args.option,
-                "at": clock().isoformat(),
-            }
-            updates, kind = (
-                {"answers": {**txn.state.get("answers", {}), args.qid: answer}},
-                "answer.relayed",
-            )
-            result["answer"] = answer
+            record = _record(args, policy, store.read_spec(project, task), clock, "answer",
+                             question_id=args.qid, answer=args.option or args.quote)
+            updates = {"answers": {**txn.state.get("answers", {}), args.qid: record}}
+            kind = "answer.recorded"
+            result["answer"] = record
         txn.state.update(updates)
-        txn.emit(kind, {"set": updates})
-    if command in {"ask", "relay-answer"}:
+        txn.emit(kind, {"set": updates, **({"record": record} if command in {"approve", "approve-scope", "answer", "pause", "resume", "cancel"} else {})})
+    if command in {"ask", "answer", "approve", "approve-scope"}:
         _mirror(store, project, task)
     return result
 
@@ -368,20 +451,15 @@ def main(
     clock: Callable = lambda: datetime.now(timezone.utc),
 ) -> int:
     try:
-        # HUB_WORKER/cwd checks are deterrence only under the same Windows user;
-        # only signature verification supplies approval authority.
-        if os.environ.get("HUB_WORKER") == "1":
-            raise ValueError("bridge refused in worker environment")
+        ensure_not_worker(os.environ, Path.cwd(), Path(hub_root or Path(__file__).resolve().parent) / "projects")
         args = _parser().parse_args(argv)
         root = Path(hub_root or Path(__file__).resolve().parent).resolve()
-        policy = load_policy(root, load_public_key(root / "config" / "owner.pub"))
-        if is_inside(Path.cwd(), expand(policy.data_root)):
-            raise ValueError("bridge refused from inside data root")
+        policy = load_policy(root)
+        ensure_not_worker(os.environ, Path.cwd(), expand(policy.data_root))
         result = _execute(args, StateStore(root), policy, clock)
         print(json.dumps({"ok": True, **result}))
         return 0
     except (OSError, ValueError, TypeError, KeyError, PolicyError, yaml.YAMLError):
-        # Validation messages contain no key material or console input.
         message = str(sys.exc_info()[1])
         print(json.dumps({"ok": False, "error": message}))
         return 2

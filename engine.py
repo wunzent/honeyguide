@@ -25,14 +25,15 @@ from adapters.base import (
 )
 from agent_loader import AgentTemplate, load_template
 from model_router import RouteError, load_catalog, resolve
-from policy import PolicyError, load_policy, may_spawn, question_class, team_active_seconds, verify_manifest
+from policy import PolicyError, load_policy, may_spawn, question_class, team_active_seconds
 from runner import Runner, is_same_process
 from scheduler import NeedsOwner, Scheduler
-from signing import VerificationError, load_public_key, verify_record
+from approvals import ApprovalError, check_record, check_approval, approval_nonces
 from state_writer import (
     StateStore,
     atomic_write_text,
     plan_hash,
+    approved_scope,
     plan_section,
     read_text_retry,
 )
@@ -82,7 +83,6 @@ class Engine:
         *,
         store: StateStore,
         policy_loader: Callable,
-        public_key_loader: Callable,
         adapters: dict[str, Adapter],
         runner: Runner,
         worktrees: WorktreeManager,
@@ -104,14 +104,12 @@ class Engine:
         self._lock = None
         self._acquire()
         try:
-            self.public_key = public_key_loader(self.root / "config" / "owner.pub")
-            verify_manifest(self.root, self.public_key)
-            self.policy = policy_loader(self.root, self.public_key)
-            if self.policy != load_policy(self.root, self.public_key):
-                raise PolicyError("loaded policy differs from signed policy")
+            self.policy = policy_loader(self.root)
+            if self.policy != load_policy(self.root):
+                raise PolicyError("loaded policy differs from current policy")
             self.catalog = load_catalog(self.root / "config" / "models.toml")
             self.scheduler = scheduler or Scheduler(store, self.policy, clock)
-            # The engine always uses the freshly verified execution policy.
+            # The engine always uses the freshly loaded execution policy.
             self.scheduler.policy = self.policy
             for project, task, _ in self._tasks():
                 store.recover(project, task)
@@ -120,7 +118,7 @@ class Engine:
         except Exception as exc:
             self.close()
             raise EngineStartupError(
-                f"engine refused startup (tamper-evident checks): {scrub(str(exc))}"
+                f"engine refused startup: {scrub(str(exc))}"
             ) from exc
 
     def _acquire(self) -> None:
@@ -268,38 +266,13 @@ class Engine:
                 valid = False
                 if q["id"] in state.get("answers", {}):
                     try:
-                        if classification == "owner-signed":
-                            if not isinstance(answer, dict) or answer.get("relayed"):
-                                raise VerificationError("owner signature required")
-                            verify_record(
-                                self.public_key,
-                                answer,
-                                {
-                                    "kind": "answer",
-                                    "project": project,
-                                    "task": task,
-                                    "question_id": q["id"],
-                                    "plan_hash": plan_hash(
-                                        self.store.read_spec(project, task)
-                                    ),
-                                    "policy_hash": self.policy.policy_hash,
-                                },
-                            )
-                            text = answer["answer"]
-                        else:
-                            if (
-                                not isinstance(answer, dict)
-                                or answer.get("relayed") is not True
-                                or not isinstance(answer.get("quote"), str)
-                                or not answer["quote"].strip()
-                                or answer.get("option")
-                                not in [o["label"] for o in q["options"]]
-                            ):
-                                raise VerificationError("invalid relay answer")
-                            text = {
-                                "quote": answer["quote"],
-                                "option": answer["option"],
-                            }
+                        check_record(answer, kind="answer", project=project, task=task,
+                                     question_id=q["id"],
+                                     plan_hash=plan_hash(self.store.read_spec(project, task)),
+                                     policy_hash=self.policy.policy_hash, used_nonces=[])
+                        if answer["answer"] not in [o["label"] for o in q["options"]] and answer["answer"] != answer["quote"]:
+                            raise ApprovalError("invalid answer option")
+                        text = {"quote": answer["quote"], "option": answer["answer"]}
                         context.append(
                             {
                                 "question_id": q["id"],
@@ -310,7 +283,7 @@ class Engine:
                             }
                         )
                         valid = True
-                    except (VerificationError, KeyError, TypeError):
+                    except (ApprovalError, KeyError, TypeError):
                         txn.emit(
                             "answer.rejected",
                             {
@@ -318,6 +291,9 @@ class Engine:
                                 "reason": "answer verification failed",
                             },
                         )
+                if (q.get("type") == "plan-policy-changed" and q.get("asked_by") == "engine"
+                        and state.get("approval_reason") is None):
+                    valid = True
                 if valid:
                     q["status"] = "answered"
                 elif q.get("status") == "answered":
@@ -403,6 +379,8 @@ class Engine:
     def reconcile(self) -> None:
         now = self.clock()
         for project, task, state in self._tasks():
+            if not self._check_task_approval(project, task, state) or state.get("status") in {"paused", "cancelled"}:
+                continue
             for run_id, run in state.get("runs", {}).items():
                 if run.get("status") not in {"intent", "running"}:
                     continue
@@ -547,10 +525,10 @@ class Engine:
                 )
                 if run["route"]["vendor"] == "claude" and patches:
                     self.worktrees.apply_patch(
-                        worktree, "\n".join(patches), config["allowed_paths"]
+                        worktree, "\n".join(patches), (config["allowed_paths"] + approved_scope(self.store.read_spec(project, task)))
                     )
                 if self.runner.scope_check(
-                    project, task, worktree, config["allowed_paths"]
+                    project, task, worktree, (config["allowed_paths"] + approved_scope(self.store.read_spec(project, task)))
                 ):
                     return
                 self._update(
@@ -584,6 +562,8 @@ class Engine:
                         "needs_run": False,
                         "quota": quota,
                         "quota_blocked": [],
+                        "review": {"verdict": "PASS", "round": state.get("round", 1),
+                                   "run": run_id, "test_run": state.get("last_test_run")},
                     },
                 )
             elif state.get("review_fix_cycles", 0) < min(
@@ -743,12 +723,54 @@ class Engine:
             coder_vendor=state.get("coder_vendor"),
         )
 
+    def _check_task_approval(self, project: str, task: str, state: dict) -> bool:
+        if state.get("status") in {"draft", "draft-with-plan", "awaiting-approval", "committed", "delivered", "cancelled", "paused"}:
+            return True
+        if not state.get("approval"):
+            return True  # The spawn gate reports missing approvals.
+        try:
+            check_approval(state["approval"], project=project, task=task,
+                           plan_hash=plan_hash(self.store.read_spec(project, task)),
+                           policy_hash=load_policy(self.root).policy_hash,
+                           used_nonces=approval_nonces(state))
+            return True
+        except (ApprovalError, PolicyError, ValueError, OSError, KeyError, TypeError):
+            if state.get("approval_reason") != "plan or policy changed":
+                questions = list(state.get("questions", []))
+                questions.append({"id": "q-plan-" + str(len(questions) + 1),
+                    "title": "Plan/policy changed — approve again?",
+                    "context": "The current plan or policy no longer matches the recorded owner approval.",
+                    "impact": "Task execution and local commit wait for renewed approval.",
+                    "options": [{"label": "approve", "consequence": "Approve the revised plan and policy"},
+                                {"label": "revise", "consequence": "Keep the task blocked while revising"}],
+                    "default": "none", "blocking": True, "type": "plan-policy-changed",
+                    "class": "owner-decision", "status": "open", "asked_by": "engine"})
+                self._update(project, task, "approval.invalidated", {
+                    "status": "needs-you", "needs_run": False,
+                    "resume_stage": state.get("resume_stage") or state["status"],
+                    "approval_reason": "plan or policy changed", "questions": questions})
+                self._mirror_questions(project, task)
+            return False
+
     def tick(self, now: datetime) -> None:
         if self._lock is None:
             raise RuntimeError("engine is closed")
+        try:
+            self.policy = load_policy(self.root)
+            self.scheduler.policy = self.policy
+        except PolicyError:
+            pass  # Each task's approval check records the policy problem below.
         self.scheduler.run_due(now)
+        ready = {(project, task) for project, task, state in self._tasks()
+                 if state.get("status") == "ready_to_commit"}
         self.reconcile()
         for project, task, state in self._tasks():
+            if not self._check_task_approval(project, task, state) or state.get("status") in {"paused", "cancelled"}:
+                if state.get("status") == "cancelled":
+                    for run in self.runner.live_runs():
+                        if (run["project"], run["task"]) == (project, task):
+                            self.runner.stop(run["pid"], run["create_time"])
+                continue
             for run_id, run in state.get("runs", {}).items():
                 if (
                     run.get("status") == "intent"
@@ -767,6 +789,16 @@ class Engine:
                     if outcome is not None:
                         self._handle(project, task, run_id, outcome)
         for project, task, state in self._tasks():
+            if not self._check_task_approval(project, task, state) or state.get("status") in {"paused", "cancelled"}:
+                continue
+            if state.get("status") == "ready_to_commit":
+                if (project, task) not in ready:
+                    continue
+                try:
+                    self.runner.commit_task(project, task)
+                except (OSError, ValueError, PolicyError) as exc:
+                    self._update(project, task, "commit.blocked", {"status": "needs-you"}, reason=scrub(str(exc)))
+                continue
             state = self._resume_questions(project, task, state)
             if team_active_seconds(state, now) >= self.policy.team_minutes * 60:
                 if state.get("status") in {
@@ -868,7 +900,6 @@ class Engine:
             candidate = {**state, "status": dispatch_status}
             decision = may_spawn(
                 policy=self.policy,
-                public_key=self.public_key,
                 spec_text=self.store.read_spec(project, task),
                 state=candidate,
                 live_runs=live,
@@ -998,7 +1029,6 @@ def main(argv: list[str] | None = None) -> int:
             root,
             store=store,
             policy_loader=load_policy,
-            public_key_loader=load_public_key,
             adapters=adapters,
             runner=Runner(store, adapters, worktrees, root, clock),
             worktrees=worktrees,

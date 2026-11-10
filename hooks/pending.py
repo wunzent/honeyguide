@@ -7,6 +7,7 @@ from typing import Callable
 
 
 def main(*, root: Path | None = None, runner: Callable = subprocess.run) -> int:
+    """Display the key-free bridge summary without blocking prompt submission."""
     root = root or Path(__file__).resolve().parents[1]
     try:
         result = runner([str(root / ".venv" / "Scripts" / "python.exe"), str(root / "bridge.py"),

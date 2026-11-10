@@ -24,3 +24,8 @@ worktrees/
 
 # Streamlit local config
 .streamlit/secrets.toml
+
+# Leftovers from the retired approval mechanism
+config/owner.pub*
+config/*.sig
+config/manifest.json

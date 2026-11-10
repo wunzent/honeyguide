@@ -5,10 +5,10 @@ from dataclasses import asdict
 from pathlib import Path
 
 from bridge import task_snapshots
-from policy import PolicyError, load_policy_unverified
+from policy import PolicyError, load_policy
 from state_writer import StateStore, read_text_retry
 
-BANNER = "Security Gate: NOT PASS — manual trusted approval mode"
+BANNER = "Approvals are conversational (workflow control, not identity proof) — Security Gate: NOT PASS"
 
 
 def status_rows(root: Path) -> list[dict]:
@@ -44,6 +44,11 @@ def timeline(root: Path) -> list[dict]:
         for s in task_snapshots(store)
         for event in store.read_events(s["project"], s["task"])
     ]
+    for event in events:
+        if event["kind"] in {"approval.recorded", "answer.recorded", "scope.approved"}:
+            record = event["data"].get("record", {})
+            event["quote"] = record.get("quote", "")
+            event["desktop"] = record.get("desktop", "")
     return sorted(events, key=lambda e: (e["ts"], e["seq"]), reverse=True)
 
 
@@ -71,8 +76,8 @@ def main(root: Path | None = None) -> None:
     st.set_page_config(page_title="Hub v2", layout="wide")
     st.warning(BANNER)
     try:
-        policy = load_policy_unverified(root)
-        st.caption(f"Policy display (unverified): {policy.mode}")
+        policy = load_policy(root)
+        st.caption(f"Policy hash: {policy.policy_hash}")
         rows = status_rows(root)
         project = st.selectbox(
             "Project filter", ["All", *sorted({r["project"] for r in rows})]

@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import fnmatch
-import hashlib
-import json
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
@@ -12,11 +10,10 @@ import subprocess
 import tomllib
 from typing import Callable, Iterable, Literal
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from approvals import check_approval, approval_nonces
+from hashing import sha256_file
+from state_writer import plan_hash, read_text_retry
 
-from owner_console import compute_manifest
-from signing import canonical, sha256_file, verify_record
-from state_writer import get_approval_block, plan_hash, read_text_retry
 
 
 class PolicyError(Exception):
@@ -76,7 +73,7 @@ def _parse_policy(root: Path, raw: dict, digest: str) -> Policy:
                     raise ValueError(f"invalid {name}")
         if hub["max_dynamic"] > hub["max_processes"]:
             raise ValueError("dynamic cap exceeds process cap")
-        if hub["mode"] != "manual-trusted-approval" or not isinstance(hub["security_gate"], str):
+        if hub["mode"] != "manual-trusted-approval" or hub["security_gate"] != "NOT PASS":
             raise ValueError("unsupported operating mode or security gate")
         for name in ("data_root", "owner_secret_dir"):
             if not isinstance(paths[name], str) or not paths[name].strip():
@@ -119,8 +116,7 @@ def _parse_policy(root: Path, raw: dict, digest: str) -> Policy:
         raise PolicyError(f"invalid policy: {exc}") from None
 
 
-def load_policy_unverified(hub_root: Path) -> Policy:
-    """Read-only display; execution must use load_policy with the owner key."""
+def load_policy(hub_root: Path) -> Policy:
     try:
         root = Path(hub_root).resolve()
         path = root / "config" / "policy.toml"
@@ -133,33 +129,7 @@ def load_policy_unverified(hub_root: Path) -> Policy:
         raise PolicyError(f"could not read policy: {exc}") from None
 
 
-def load_policy(hub_root: Path, public_key: Ed25519PublicKey) -> Policy:
-    policy = load_policy_unverified(hub_root)
-    try:
-        record = json.loads(read_text_retry(policy.hub_root / "config" / "policy.toml.sig"))
-        verify_record(public_key, record, {"kind": "sign-policy", "policy_hash": policy.policy_hash})
-    except Exception as exc:
-        raise PolicyError(f"policy signature invalid: {exc}") from None
-    return policy
-
-
-def verify_manifest(hub_root: Path, public_key: Ed25519PublicKey) -> None:
-    try:
-        config = Path(hub_root) / "config"
-        manifest = json.loads(read_text_retry(config / "manifest.json"))
-        record = json.loads(read_text_retry(config / "manifest.sig"))
-        digest = hashlib.sha256(canonical(manifest)).hexdigest()
-        verify_record(public_key, record, {"kind": "sign-manifest", "policy_hash": digest})
-        if not isinstance(manifest, dict) or any(not isinstance(v, str) for v in manifest.values()):
-            raise ValueError("invalid manifest")
-        current = compute_manifest(Path(hub_root))
-        changed = sorted(k for k in manifest.keys() & current.keys() if manifest[k] != current[k])
-        added = sorted(current.keys() - manifest.keys())
-        missing = sorted(manifest.keys() - current.keys())
-        if changed or added or missing:
-            raise ValueError(f"changed={changed}; added={added}; missing={missing}")
-    except Exception as exc:
-        raise PolicyError(f"manifest invalid: {exc}") from None
+load_policy_unverified = load_policy
 
 
 def _expanded_text(path_str: str) -> str:
@@ -266,8 +236,8 @@ def check_scope(changed_paths: list[str], allowed_globs: list[str]) -> list[str]
     return violations
 
 
-def question_class(policy: Policy, qtype: str) -> Literal["relay", "owner-signed"]:
-    return "relay" if qtype in RELAY_TYPES and qtype in policy.relay_types else "owner-signed"
+def question_class(policy: Policy, qtype: str) -> Literal["clarify", "owner-decision"]:
+    return "clarify" if qtype in RELAY_TYPES and qtype in policy.relay_types else "owner-decision"
 
 
 @dataclass(frozen=True)
@@ -293,25 +263,22 @@ def team_active_seconds(state: dict, now: datetime) -> float:
     return elapsed
 
 
-def may_spawn(*, policy: Policy, public_key: Ed25519PublicKey, spec_text: str, state: dict,
+def may_spawn(*, policy: Policy, spec_text: str, state: dict,
               live_runs: list[dict], role: str, idem_key: str, dynamic: bool = False,
               now: datetime | None = None) -> Decision:
     if role not in ROLE_STATUSES or state.get("status") not in ROLE_STATUSES[role]:
         return Decision(False, "status does not permit this role")
     try:
-        approval = get_approval_block(spec_text)
+        approval = state.get("approval")
         if approval is None:
             return Decision(False, "approval missing")
-        if not all(isinstance(state.get(name), str) and state[name] for name in ("project", "task")):
-            raise ValueError("missing task or project")
-        verify_record(public_key, approval, {"kind": "approve-plan", "plan_hash": plan_hash(spec_text),
-                      "policy_hash": policy.policy_hash, "task": state["task"], "project": state["project"]})
-        # A display snapshot or an in-memory edit cannot replace signed execution policy.
-        if load_policy(policy.hub_root, public_key) != policy:
+        check_approval(approval, project=state["project"], task=state["task"],
+                       plan_hash=plan_hash(spec_text), policy_hash=policy.policy_hash,
+                       used_nonces=approval_nonces(state))
+        if load_policy(policy.hub_root) != policy:
             raise PolicyError("policy changed since loading")
-        verify_manifest(policy.hub_root, public_key)
-    except Exception as exc:
-        return Decision(False, f"approval invalid: {exc}")
+    except Exception:
+        return Decision(False, "plan or policy changed: owner approval needed")
     try:
         if any(q.get("blocking") and q.get("status") != "answered" for q in state.get("questions", [])):
             return Decision(False, "blocking question unanswered")
@@ -334,4 +301,4 @@ def may_spawn(*, policy: Policy, public_key: Ed25519PublicKey, spec_text: str, s
             return Decision(False, "team time cap reached")
     except (AttributeError, KeyError, OverflowError, TypeError, ValueError) as exc:
         return Decision(False, f"invalid spawn state: {exc}")
-    return Decision(True, "signed approval and spawn checks passed")
+    return Decision(True, "approval and spawn checks passed")

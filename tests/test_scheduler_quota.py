@@ -131,12 +131,15 @@ def test_claude_five_quota_attempts_have_distinct_keys(engine_env, hub, monkeypa
     # Exercise the five backoffs independently of the separately tested team cap.
     path = hub.config / 'policy.toml'
     path.write_text(path.read_text().replace('team_minutes = 60', 'team_minutes = 600'), encoding='utf-8')
-    hub.sign_config()
-    hub.policy = load_policy(hub.root, hub.public)
+    hub.policy = load_policy(hub.root)
     spec = store.read_spec('project', 'T-1')
-    approval = hub.signed('approve-plan', project='project', task='T-1',
+    approval = hub.record('approve-plan', project='project', task='T-1',
                           plan_hash=plan_hash(spec), policy_hash=hub.policy.policy_hash)
     store.write_spec('project', 'T-1', set_approval_block(spec, approval))
+    with store.transaction('project', 'T-1') as txn:
+        updates = {'approval': approval, 'approval_history': [approval]}
+        txn.state.update(updates)
+        txn.emit('fixture.approval', {'set': updates})
     monkeypatch.setenv('FAKE_SCENARIO', 'quota_noreset')
     engine = factory()
     current = [now]

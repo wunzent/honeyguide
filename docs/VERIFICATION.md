@@ -1,5 +1,21 @@
 # Phase 1 Verification Log
 
+## Update 2026-11-10 — remove-signing (`docs/PLAN-REMOVE-SIGNING.md` Rev 2)
+| Check | Result |
+|---|---|
+| Slice A (signing/owner console removed, `approvals.py`, `hashing.py`, auto commit) | Codex 636/636 |
+| Slice B (settings, rules, requirements, `.gitignore`, app banner, tests) | orchestrator full suite **640/640** (811 s) |
+| Leftover references | no `signing`/`cryptography`/`verify_record`/`public_key`/`owner_console` in code; only 2 test lines asserting their absence; lock has no `cryptography`/`cffi`/`pycparser` |
+| Runs without keys | `bridge.py status` → `{"ok": true}`; key/signature files left on disk untouched and gitignored |
+| v1 | `75f4561`, 19 pending paths, unchanged |
+| Review | fresh Claude reviewer **PASS**; 1 medium (`approve-scope` reset task status) + 1 low test gap → fix round (see below); 1 low (this file stale) → fixed here |
+
+AC-3 now reads: *agent output and worker contexts cannot record an approval; approvals are conversational records bound to
+plan + policy hash* — unit part PASS (`tests/test_approvals.py`, `tests/test_bridge.py`); **not an identity proof**;
+Security Gate **NOT PASS**. Owner key setup below is **no longer required** (superseded).
+
+The sections below are the original Phase 1 record (signing era) and are kept as history.
+
 Date: 2026-11-10 · Plan: `docs/PHASE-1-PLAN.md` Rev 2 · Coder: Codex CLI 0.167.0 (`gpt-6.1-sol`, direct exec, workspace-write sandbox in v2)
 Reviewer: Claude `reviewer` (cross-vendor) · **Security Gate: NOT PASS** (same Windows user; ARCHITECTURE §6.3, §6.6)
 
@@ -36,7 +52,6 @@ signing_approval 87 · state_writer 53 · v1_isolation 62.
 - Python-run tests execute coder-authored code with the owner's Windows privileges (ARCH §6.4 T6).
 - `HUB_WORKER`/cwd guard in `bridge.py` is deterrence only.
 
-## Before first real use (owner actions, not done)
-1. `owner_console.py init` in your own terminal (creates `%USERPROFILE%\.mah-v2-owner\owner.key.enc` + `config/owner.pub`).
-2. `owner_console.py sign-policy` and `sign-manifest` — until then `bridge.py` and `engine.py` refuse to run ("could not load owner public key"), by design.
-3. Create the data root `ALI\multi-agent-hub-v2-data` (path policy re-checks it).
+## Before first real use
+1. ~~Owner key setup (init / sign-policy / sign-manifest)~~ — **superseded 2026-11-10**: signing removed; no key setup needed.
+2. Data root `ALI\multi-agent-hub-v2-data` — created by the owner 2026-11-10.

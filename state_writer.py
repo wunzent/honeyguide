@@ -65,12 +65,24 @@ def plan_section(spec_text: str) -> str:
 
 
 def plan_hash(spec_text: str) -> str:
-    from signing import sha256_text
+    from hashing import sha256_text
 
     section = plan_section(spec_text)
     if not section:
         raise ValueError("Proposed Plan section is missing or empty")
     return sha256_text(section)
+
+
+def approved_scope(spec_text: str) -> list[str]:
+    blocks = re.findall(r"^```hub-scope\r?\n(.*?)^```[ \t]*$", plan_section(spec_text), re.M | re.S)
+    if not blocks:
+        return []
+    if len(blocks) != 1:
+        raise ValueError("plan requires at most one hub-scope block")
+    paths = yaml.safe_load(blocks[0])
+    if not isinstance(paths, list) or any(not isinstance(p, str) or not p.strip() for p in paths):
+        raise ValueError("hub-scope must be a YAML list of globs")
+    return paths
 
 
 def set_approval_block(spec_text: str, record: dict) -> str:
@@ -190,6 +202,10 @@ class Txn:
         )
         self.state["last_event_seq"] = self._seq
         return self._seq
+
+    def write_spec(self, text: str) -> None:
+        """Journal the spec with its approval so recovery completes both writes."""
+        self.emit("spec.updated", {"spec_text": text})
 
 
 class StateStore:
@@ -321,6 +337,9 @@ class StateStore:
             raise StateWriteError("state is ahead of the event journal")
         pending = events[state["last_event_seq"] :]
         for event in pending:
+            if event.kind == "spec.updated":
+                atomic_write_text(directory / "spec.md", event.data["spec_text"],
+                                  self.replace_retries, self.replace_backoff)
             state = apply_event(state, event)
         if pending and save:
             self._save_state(directory, state)
@@ -355,6 +374,10 @@ class StateStore:
                     os.fsync(stream.fileno())
                 if self._fault_hook is not None:
                     self._fault_hook("after_event_append")
+            for event in txn._events:
+                if event.kind == "spec.updated":
+                    atomic_write_text(directory / "spec.md", event.data["spec_text"],
+                                      self.replace_retries, self.replace_backoff)
             self._save_state(directory, txn.state)
 
     def _runtime_path(self, name: str) -> Path:

@@ -1,6 +1,6 @@
 # Multi-Agent Hub v2 — Architecture
 
-Status: **REVISION 2 — awaiting owner Final Coding approval** (planning only, no runtime code exists yet)
+Status: **REVISION 3 — conversational owner approval (signing removed, 2026-11-10).** Phase 1 PENDING LIVE VERIFICATION; Security Gate NOT PASS.
 Date: 2026-11-09 · Author: Claude Code (orchestrator, planning) · Sibling of v1 `../multi-agent-hub` (v1 untouched)
 Revision 2 applies the owner decision "CONDITIONAL APPROVAL — REVISE PLAN BEFORE CODING" (2026-11-09). Change log: §15.
 
@@ -39,7 +39,7 @@ Non-goals (v2)
 | Python | `python` on PATH = Microsoft Store stub; real **3.11.3** via `py -3.11`; project `.venv` created | VERIFIED |
 | Dependencies (in `.venv` only) | streamlit 1.67.0, PyYAML 6.0.3, psutil 7.2.2, pytest 9.2.0; `pip check` clean; 41 pinned packages in `requirements.lock` | VERIFIED |
 | `hashlib.scrypt` | available in stdlib | VERIFIED |
-| `cryptography` (Ed25519) | **not installed, not approved** | Decision R1 |
+| `cryptography` | installed under R1 (2026-11-09), **no longer used** after Rev 3; removed from requirements, left in `.venv` | — |
 | Codex quota data | `~/.codex/sessions/**/*.jsonl` contain `rate_limits.primary/secondary.{used_percent, window_minutes, resets_at(epoch)}` and `rate_limit_reached_type` | VERIFIED (field exists; behaviour at limit PENDING) |
 | Claude quota data | no reset-time field found in local session logs | Claude uses bounded backoff unless a stream field is proven |
 
@@ -53,17 +53,17 @@ CLI flags found in `--help` (behaviour PENDING VERIFICATION): Claude `-p`, `--ou
 
 | # | Decision | Reason |
 |---|---|---|
-| AD-01 | Python 3.11 stdlib-first; deps `streamlit`, `PyYAML`, `psutil`, `pytest` (approved) + `cryptography` (**pending R1**) | Small, auditable; Ed25519 is the only sound way to verify approvals without a secret on disk |
+| AD-01 | Python 3.11 stdlib-first; deps `streamlit`, `PyYAML`, `psutil`, `pytest` | Small, auditable |
 | AD-02 | Markdown is the source of truth; each file has a fenced machine block + human prose | Owner-readable, strict parsing |
 | AD-03 | One writer module + one writer lock; transaction = append event → atomic state replace | Concurrency safety, crash recovery |
-| AD-04 | Roles never pin vendor/model/effort; orchestrator proposes, Python decides under signed policy | Directive |
+| AD-04 | Roles never pin vendor/model/effort; orchestrator proposes, Python decides under `policy.toml` | Directive |
 | AD-05 | Python adapters per CLI with one interface | Cross-vendor spawn from one template |
 | AD-06 | Desktop Hub Bridge = `bridge.py` JSON CLI, **no authority commands** | Orchestrator and agents can read/propose, never approve |
-| AD-07 | **Trusted Approval Channel = `owner_console.py`**, run by the owner in their own terminal, passphrase-gated asymmetric signature | Agent text, agent commands and Desktop dialogs cannot produce an approval |
+| AD-07 | **Conversational owner approval** recorded by the orchestrator via `bridge.py approve` with the owner's exact words (Rev 3) | Usability first; workflow control, not identity proof (§6) |
 | AD-08 | One git worktree per task, under an **external data root outside every git repo** | Separates runtime data from source; agents' write root never contains hub code |
 | AD-09 | Tests are run by Python, not reported by an agent | Trusted test results |
 | AD-10 | Scheduler is pure Python; quota wake-ups need no AI session | No idle AI cost |
-| AD-11 | Policy (`config/policy.toml`) is valid only with an owner signature | Agents cannot change policy silently |
+| AD-11 | Approvals are bound to `sha256(config/policy.toml)`; a policy edit invalidates them | Policy changes always come back to the owner |
 
 ## 4. Project structure and path policy
 
@@ -71,31 +71,28 @@ CLI flags found in `--help` (behaviour PENDING VERIFICATION): Claude `-p`, `--ou
 multi-agent-hub-v2/                 # git repo (local only) = SOURCE
 ├── agents/                         # role templates (*.md, YAML frontmatter, vendor-neutral)
 ├── config/
-│   ├── policy.toml                 # concurrency, routing, fallback, retry/backoff caps
-│   ├── policy.toml.sig             # owner Ed25519 signature over policy.toml
-│   ├── models.toml                 # model catalog + effort compatibility
-│   └── owner.pub                   # owner public key (trust anchor; fingerprint also kept by owner offline)
+│   ├── policy.toml                 # concurrency, routing, fallback, retry/backoff caps, scope artifacts
+│   └── models.toml                 # model catalog + effort compatibility
 ├── docs/                           # ARCHITECTURE.md, PHASE-1-PLAN.md, WORKLOG.md, VERIFICATION.md
 ├── adapters/                       # base.py, claude_cli.py, codex_cli.py
 ├── tests/
-├── app.py  bridge.py  owner_console.py  policy.py  engine.py  runner.py  scheduler.py
-├── agent_loader.py  model_router.py  state_writer.py  worktree_manager.py
+├── app.py  bridge.py  approvals.py  hashing.py  policy.py  engine.py  runner.py  scheduler.py
+├── agent_loader.py  model_router.py  state_writer.py  worktree_manager.py  notify.py
 ├── requirements.txt  requirements.lock  .gitignore
 ├── projects/  -> gitignored (task Markdown state, see below)
 └── runtime/   -> gitignored (locks, engine heartbeat, schedule)
 
-C:\Users\Natthawut.j\Desktop\ALI\multi-agent-hub-v2-data\    # DATA ROOT (proposed, not created yet)
+C:\Users\Natthawut.j\Desktop\ALI\multi-agent-hub-v2-data\    # DATA ROOT (created by owner 2026-11-10)
 └── worktrees\<project>\<task>\     # one git worktree per task (branch hub/<task>)
-
-%USERPROFILE%\.mah-v2-owner\        # OWNER SECRET (proposed, created by owner_console init)
-└── owner.key.enc                   # Ed25519 private key encrypted with the owner passphrase (scrypt)
 ```
+Leftovers from the removed signing design (`%USERPROFILE%\.mah-v2-owner\`, `config/owner.pub*`, `config/policy.toml.sig`)
+are ignored by the code, gitignored, and not deleted automatically.
 
 Task state per task (gitignored, inside v2): `projects/<project>/tasks/<task>/{spec.md, state.md, events.md, questions.md, runs/<run-id>/}`.
 Global: `runtime/schedule.md`, `runtime/engine.md`, `runtime/locks/`.
 
 Approved structure changes (owner decision Q5): `adapters/`, `bridge.py`, `policy.py`, `questions.md`, TOML config.
-New in revision 2 (needs approval): `owner_console.py`, `config/owner.pub`, `config/policy.toml.sig`, external data root.
+Rev 2 added an external data root (kept). Rev 3 removed the owner console and key/signature files and added `approvals.py`, `hashing.py`.
 
 ### 4.1 Path policy (enforced by `policy.py`, tested in Phase 1)
 | Rule | Check |
@@ -105,7 +102,7 @@ New in revision 2 (needs approval): `owner_console.py`, `config/owner.pub`, `con
 | P3 Worktree path = `<data_root>\worktrees\<project>\<task>` only | regex on IDs `[A-Za-z0-9-]{1,32}`; no `..`, no junctions/symlinks (`os.path.realpath` equals the joined path) |
 | P4 Target repo must be registered in `projects/<p>/project.md` and must not be v1 or v2 | deny-list `..\multi-agent-hub`, v2 root |
 | P5 Path length | full worktree path ≤ 200 chars (Windows MAX_PATH margin); refuse otherwise |
-| P6 Worker write roots | the task worktree and its run folder in the data root only; never v2 source, `config/`, `projects/`, `runtime/`, owner secret dir |
+| P6 Worker write roots | the task worktree and its run folder in the data root only; never v2 source, `config/`, `projects/`, `runtime/` |
 | P7 Avoid `ALI\worktrees` | existing folder of unknown owner; never used |
 | P8 Hub never deletes a worktree | owner-only cleanup |
 
@@ -114,15 +111,12 @@ New in revision 2 (needs approval): `owner_console.py`, `config/owner.pub`, `con
 ```mermaid
 flowchart LR
   O[Owner]
-  subgraph TrustedOwner["Trusted Approval Channel (owner's own terminal)"]
-    OC[owner_console.py<br/>passphrase + Ed25519 sign]
-  end
   subgraph Desktop["Claude Desktop / Codex Desktop"]
     ORC[AI Orchestrator session]
   end
   subgraph Hub["multi-agent-hub-v2 (Python)"]
-    BR[bridge.py<br/>read / propose / relay]
-    POL[policy.py<br/>verify sig, scope, paths]
+    BR[bridge.py<br/>read / propose / record owner approval]
+    POL[policy.py<br/>approval hash, scope, paths]
     ENG[engine.py]
     SCH[scheduler.py]
     RUN[runner.py]
@@ -141,8 +135,7 @@ flowchart LR
     C1[claude -p]
     X1[codex exec]
   end
-  O <--> ORC
-  O --> OC --> SW
+  O <-- "chat: plan, approve, answers" --> ORC
   ORC -- shell --> BR --> SW
   ENG --> POL
   ENG --> SCH
@@ -154,86 +147,47 @@ flowchart LR
   C1 & X1 -. write only .-> WTR
 ```
 
-## 6. Threat model and approval trust boundary (Q1/Q2, detailed)
+## 6. Approval model and threat model (Rev 3 — conversational approval)
 
-### 6.1 Assets
-A1 approval records (plan approval, revision approval, authority answers, commit permission) · A2 `config/policy.toml` ·
-A3 owner private key + passphrase · A4 hub source code and `config/owner.pub` · A5 task scope (approved plan, allowed paths) ·
-A6 vendor credentials (`~/.claude`, `~/.codex`) · A7 v1 repo and processes.
+Rev 3 applies the owner decisions "Simplify — remove cryptographic owner signing" and "USABILITY FIRST" (2026-11-10)
+and `docs/PLAN-REMOVE-SIGNING.md` Rev 2. Passphrase, keys, Ed25519 signatures, signed policy/manifest and the separate
+owner console are **removed**. Leftover key/signature files on disk are ignored by the code and not deleted.
 
-### 6.2 Actors
+> **Conversational approval is a workflow control, not proof of owner identity and not an isolated security boundary.**
+> It records the owner's words from the Desktop conversation. The Desktop orchestrator could record an approval the
+> owner never gave; this is visible in the audit trail but not technically prevented. **Security Gate: NOT PASS.**
+
+### 6.1 Actors
 | Actor | Trust | Can do |
 |---|---|---|
-| Owner | trusted | types the passphrase only into `owner_console.py` in a terminal the owner opened |
-| Orchestrator (Desktop AI) | semi-trusted (can be prompt-injected) | runs `bridge.py`; reads state; proposes plans/routes; relays owner words for `relay` questions |
-| Worker agent (CLI spawned by hub) | **untrusted** | runs inside its worktree with restricted tools; its output is data |
-| Other local software, same user | out of scope except where noted | — |
+| Owner | trusted | gives instructions and approvals in Claude/Codex Desktop |
+| Orchestrator (Desktop AI) | trusted to relay faithfully (workflow), can be wrong or prompt-injected | plans, asks, runs `bridge.py`, records the owner's exact words |
+| Worker agent (CLI spawned by hub) | **untrusted** | works inside its worktree; output is data |
 
-### 6.3 Key fact: same Windows user
-Workers, the orchestrator, the engine and the owner all run as `Natthawut.j`. Windows gives every process of the same user
-the same file access (incl. DPAPI CurrentUser), and same-user processes can read each other's memory. Therefore:
-- **Cryptography can stop forgery of approvals** (the passphrase never touches disk or any agent channel).
-- **Cryptography cannot stop tampering with the verifier** (an agent that can write hub source, `owner.pub` or
-  `policy.toml` can change what "valid" means). Only OS-level separation or a proven sandbox stops that.
+### 6.2 Approval records
+`bridge.py approve | answer | approve-scope | pause | resume | cancel` write plain records
+`{kind, project, task, plan_hash, policy_hash, quote, desktop, recorded_by: "orchestrator", at, nonce}` into task state
+and `events.md`. One `approve-plan` covers every spawn, test/fix round, review, quota retry, resume and the scoped local
+commit **for that plan hash**. The owner is asked again only when the plan or policy changes, scope must widen, a limit
+is exceeded, a failure is unresolved, or an owner-decision question arises.
 
-### 6.4 Threats and controls
-| ID | Threat | Control | Result under same user |
+### 6.3 Threats and controls
+| ID | Threat | Control | Result |
 |---|---|---|---|
-| T1 | Agent writes "APPROVED"/answer text in output, `result.md`, `spec.md` or `questions.md` | Engine only accepts Ed25519-signed records; text is never parsed for authority | **Blocked** (unit-testable) |
-| T2 | Agent (or orchestrator) calls an approve/answer command | `bridge.py` has **no** approve/authority-answer commands; `owner_console.py` refuses without a real console (`CONIN$`, not piped stdin) and requires the passphrase | **Blocked** without passphrase |
-| T3 | Agent reads key material from disk | Private key stored only encrypted (scrypt n=2^17, r=8, p=1 + AES/ChaCha via `cryptography`); passphrase ≥ 16 chars enforced at init; `owner.pub` is public by design | **Blocked** for offline brute force with a strong passphrase |
-| T4 | Agent replays an old approval | Signature covers `task, kind, plan_hash, policy_hash, question_id, nonce, issued_at`; nonces recorded in events; approval bound to plan hash | **Blocked** |
-| T5 | Orchestrator is prompt-injected and tells owner to approve something else | `owner_console.py` shows the plan hash, plan summary and diff stat **read from disk**, not from chat; owner signs what the console shows | **Mitigated** (owner must read the console) |
-| T6 | Agent edits `policy.toml`, `owner.pub`, hub `.py` files, or `projects/` state to weaken checks | (a) worker write root = data-root worktree only (P6); (b) Claude workers run without shell tools (§7.2); (c) Codex `workspace-write` sandbox; (d) engine start + `owner_console` verify a signed **source manifest** (sha256 of every tracked file, `owner.pub` fingerprint, policy hash) and refuse on mismatch; (e) `git status` of v2 must be clean at engine start | **NOT PASS (by design)** until the sandbox-escape test (LIVE-B) proves (a)–(c), because (d)/(e) run code the agent could also edit |
-| T7 | Agent reads owner passphrase from console memory | Out of reach only with a separate Windows user | **NOT PASS (by design)** — residual risk |
-| T8 | Agent spawns hidden sub-agents or extra processes | Claude `--disallowedTools Agent`; Codex multi-agent off (key PENDING); engine counts process tree via psutil and kills **only its own** children over the cap | Mitigated, PENDING VERIFICATION |
-| T9 | Agent leaves scope (files outside the plan) | Python diff check after each run vs. allowed paths; breach → `needs-you`, run result discarded | **Blocked** for committed output (unit-testable) |
-| T10 | Agent reads vendor credentials (A6) | Not preventable under same user; credentials are already readable by the CLIs themselves | Residual risk, documented |
+| T1 | Worker output / `result.md` / questions contain "APPROVED" | engine never parses agent text for approval; only bridge records count | **blocked** |
+| T2 | Worker records an approval via `bridge.py` | bridge refuses with `HUB_WORKER`/`HUB_RUN_TOKEN` set or cwd in data root (deterrence); Claude workers have no shell (R3); Codex sandbox cannot write `projects/` | **blocked in practice**; Codex part PENDING LIVE-B |
+| T4 | Stale approval reused after plan/policy change, or copied to another task | approval bound to plan hash + `sha256(policy.toml)` + project/task; nonce reuse rejected | **blocked** |
+| T9 | Worker leaves scope | Python diff check after every run (explicit ignored-artifact allowlist only); breach → needs-you | **blocked** for committed output |
+| T11 | Orchestrator records an approval the owner did not give | orchestrator rules (AGENTS.md/CLAUDE.md); exact quote + desktop in audit trail; Streamlit timeline | **not prevented** (accepted) |
+| T6 | Tampering with hub code or policy | policy edits invalidate approvals; hub code integrity = git history only | **not enforced at runtime** |
+| T7/T10 | Same-user access to memory/credentials | none (same Windows user) | residual risk |
 
-### 6.5 Approval classes
-| Class | Examples | Accepted from |
-|---|---|---|
-| `owner-signed` | plan approval, every plan revision, scope expansion, policy change, commit permission, resume after invalidation, any security question | **only** `owner_console.py` (Ed25519 signature) |
-| `relay` | choose among options that stay inside the approved plan and scope (naming, which of two listed approaches) | orchestrator via `bridge.py relay-answer`, with the owner's words quoted; unsigned; recorded as `relayed` |
+### 6.4 Question classes
+`owner-decision` (never auto-answered; blocking until the owner answers through the orchestrator) and `clarify`
+(non-blocking ones may use their default). The class comes from `policy.question_class(type)`, never from the caller.
 
-A `relay` answer can never change plan hash, scope, policy or approvals; the engine rejects a relay answer for any
-question whose class is `owner-signed`, and the class is fixed by `policy.py` rules (question type), not by the asker.
-Consequence: even if an agent forged a relay answer, it gains nothing beyond what the approved plan already allows.
-
-### 6.6 Operating modes
-| Mode | When | Security Gate status |
-|---|---|---|
-| **Manual Trusted Approval (Phase 1 default)** | Until LIVE-B proves worker isolation | Approvals are signed in `owner_console.py`; T1–T5, T9 controlled; **Security Gate reported as NOT PASS** because T6/T7 are open |
-| Isolated Workers (future) | Workers run as a separate low-privilege Windows user with NTFS ACLs (deny write to v2 + `config`, deny read of owner secret dir) | Security Gate may be reported PASS only after LIVE-B passes in this mode |
-
-Creating a Windows user and changing ACLs is a system/security change: **the owner performs it**, the hub only documents it (Decision R2).
-
-### 6.7 Trust boundary diagram
-
-```mermaid
-flowchart TB
-  subgraph Z1["Zone 1 — Owner (trusted)"]
-    O[Owner] --> OC[owner_console.py<br/>CONIN$ + passphrase]
-    KEY[(owner.key.enc<br/>%USERPROFILE%\.mah-v2-owner)]
-    OC --- KEY
-  end
-  subgraph Z2["Zone 2 — Orchestrator (semi-trusted)"]
-    ORC[Desktop AI] --> BR[bridge.py<br/>read · propose · ask · relay-answer]
-  end
-  subgraph Z3["Zone 3 — Hub (enforcer)"]
-    POL[policy.py<br/>verify Ed25519 with owner.pub]
-    ENG[engine.py]
-  end
-  subgraph Z4["Zone 4 — Workers (untrusted)"]
-    W[claude -p / codex exec<br/>cwd = data-root worktree]
-  end
-  OC -- signed record --> POL
-  BR -- unsigned proposals / relay --> POL
-  W -- result.md, question_request --> ENG
-  ENG --> POL
-  W -. "blocked: no approve command,<br/>no key, no passphrase" .-x OC
-  W -. "T6: write to hub/config<br/>must be blocked by sandbox (LIVE-B)" .-x POL
-```
+### 6.5 Future isolation (R2, later phase)
+Real prevention of T2/T6/T11 needs workers under a separate low-privilege Windows user with NTFS ACLs. Not in Phase 1.
 
 ## 7. Agent templates and routing
 
@@ -270,10 +224,10 @@ Templates are read by the hub and passed to the CLIs; neither CLI needs to disco
 
 ### 7.3 Routing (proposal → decision)
 1. Orchestrator: `bridge.py propose-route T-n --role coder --vendor codex --model M --effort medium --reason "..."`.
-2. `model_router.py` validates against `config/models.toml` and the **signed** `policy.toml` (role allowed on vendor, budget).
+2. `model_router.py` validates against `config/models.toml` and `policy.toml` (role allowed on vendor, budget).
    Reviewer must differ from coder vendor when both are available; otherwise event `review.same_vendor`.
 3. Availability: CLI found, `--version`, `auth status`/`login status`, vendor not in `waiting-quota`.
-4. Failure → first allowed fallback in the role's chain; vendor change only if the signed policy allows it.
+4. Failure → first allowed fallback in the role's chain; vendor change only if the policy allows it.
 
 ```mermaid
 sequenceDiagram
@@ -288,7 +242,7 @@ sequenceDiagram
   ORC->>BR: propose-route T-7 coder codex/M/medium
   BR->>SW: event route.proposed
   ENG->>POL: may_spawn(T-7, coder)?
-  POL->>POL: policy sig + manifest + approval sig + plan hash + paths + slot + not duplicate
+  POL->>POL: approval vs plan hash + policy hash + paths + slot + caps + not duplicate
   POL-->>ENG: ok / reason
   ENG->>RT: resolve(proposal)
   RT-->>ENG: codex/M/medium (or fallback + reason)
@@ -307,26 +261,20 @@ sequenceDiagram
 
 ## 8. CLI / Desktop Bridge
 
-`bridge.py` prints one JSON object per call. It has **no approve and no authority-answer command**.
+`bridge.py` is the orchestrator's entry point; one JSON object per call; refuses in a worker context.
 
-| Command | Caller | Effect |
+| Command | When | Effect |
 |---|---|---|
-| `status [T-n]`, `pending [--brief]`, `show T-n` | orchestrator | read only |
-| `new-task`, `set-plan T-n --file`, `propose-route`, `ask T-n` | orchestrator | writes proposals, questions, events |
-| `relay-answer T-n q3 --quote "owner's words"` | orchestrator | only for `relay` questions |
-| `request-approval T-n` | orchestrator | marks `awaiting-approval`, prints the exact `owner_console.py` command for the owner |
+| `status`, `pending [--brief]`, `show` | any time (auto-allowed in Claude Desktop) | read only |
+| `new-task`, `set-plan`, `request-approval`, `propose-route`, `ask` | planning | proposals, questions, events |
+| `approve P T --quote "…" --desktop claude\|codex` | right after the owner's explicit approval in chat | records `approve-plan` for the current plan + policy hash |
+| `answer P T QID --quote "…" [--option L]` | after the owner answers in chat | records the answer; engine resumes |
+| `approve-scope P T --add GLOB --quote "…"` | owner agrees to widen scope | updates plan scope + records approval for the new hash |
+| `pause / resume / cancel P T --quote "…"` | owner control | engine obeys |
 
-`owner_console.py` (owner only, own terminal): `init` (create key, ≥16-char passphrase), `approve T-n`, `answer T-n q3`,
-`sign-policy`, `sign-manifest`, `commit T-n`, `resume T-n`, `verify`. Each shows what will be signed, read from disk,
-and asks for the passphrase via the console.
-
-Questions reach the owner through the orchestrator (owner decision Q3):
-- **Claude Desktop:** v2 ships a project hook (`UserPromptSubmit`/`SessionStart`) running `bridge.py pending --brief`
-  so open questions appear in the orchestrator's context each turn — approved in principle, PENDING VERIFICATION.
-- **Codex Desktop:** v2 `AGENTS.md` tells the orchestrator to run `bridge.py pending --brief` at the start of each turn.
-- **Windows notification:** toast via PowerShell `Windows.UI.Notifications` (no module) when a question opens — approved in principle.
-- `codex queue`: **not used** until a separate measured test is approved (owner decision Q3).
-- No owner inbox in Streamlit. If no Desktop session is open, questions wait in `questions.md`.
+Questions reach the owner through the orchestrator: Claude Desktop hook (`UserPromptSubmit` → `hooks/pending.py`),
+Codex Desktop rule to run `bridge.py pending --brief` each turn, and Windows toast. `codex queue` is not used.
+No owner inbox in Streamlit.
 
 ## 9. Owner approval flow
 
@@ -335,20 +283,17 @@ sequenceDiagram
   participant O as Owner
   participant ORC as Orchestrator (Desktop)
   participant BR as bridge.py
-  participant OC as owner_console.py (owner terminal)
   participant SW as state_writer
   participant ENG as engine
   ORC->>BR: set-plan T-7 --file PLAN.md
   BR->>SW: spec.md ## Proposed Plan (hash H1), state=awaiting-approval
-  ORC->>BR: request-approval T-7
-  BR-->>ORC: "run: owner_console.py approve T-7"
-  ORC->>O: plan summary + H1 + command to run
-  O->>OC: approve T-7 (own terminal)
-  OC->>OC: verify manifest + policy sig; show plan from disk + H1
-  O->>OC: passphrase (CONIN$)
-  OC->>SW: spec.md ## Approval {H1, policy hash, nonce, sig}
-  ENG->>ENG: verify sig with owner.pub before every spawn/resume
-  Note over ENG: Plan edited → hash ≠ H1 → awaiting-approval (revision needs a new signature)
+  ORC->>O: plan summary + H1 — "approve?"
+  O->>ORC: "approve"
+  ORC->>BR: approve T-7 --quote "approve" --desktop claude
+  BR->>SW: approval {H1, policy hash, quote, nonce}, event approval.recorded
+  ENG->>ENG: may_spawn checks approval vs current plan/policy hash on every spawn/resume
+  ENG->>ENG: code → python tests → review → fix rounds → scoped local commit (no re-approval)
+  Note over ENG: Plan or policy edited → hash ≠ H1 → needs-you "approve again?"
 ```
 
 ## 10. Markdown state machine
@@ -357,26 +302,26 @@ sequenceDiagram
 stateDiagram-v2
   [*] --> draft
   draft --> awaiting_approval: set-plan / request-approval
-  awaiting_approval --> approved: owner-signed approve(hash)
+  awaiting_approval --> approved: owner approves in chat (bridge approve, hash)
   approved --> coding: spawn coder
   coding --> testing: coder result ok
   testing --> coding: python tests fail (round < 3)
   testing --> reviewing: python tests pass
   reviewing --> coding: review issues (once)
   reviewing --> ready_to_commit: review pass
-  ready_to_commit --> committed: owner-signed commit (local)
+  ready_to_commit --> committed: auto local commit (tests + review PASS + scope clean, task files only)
   committed --> delivered: owner merges/pushes outside hub
   coding --> needs_you: scope breach / question / caps
   testing --> needs_you
   reviewing --> needs_you: second review fail
   needs_you --> approved: answer accepted + approval still valid
-  needs_you --> awaiting_approval: answer requires plan revision
+  needs_you --> awaiting_approval: answer requires plan revision / plan or policy changed
   coding --> waiting_quota: provider limit
   reviewing --> waiting_quota
   waiting_quota --> approved: scheduled retry + checks pass
   waiting_quota --> needs_you: backoff exhausted
   approved --> paused
-  paused --> approved: owner-signed resume
+  paused --> approved: owner resume (bridge resume --quote)
   delivered --> [*]
 ```
 
@@ -409,7 +354,7 @@ Reset time sources, in order — **never guessed**:
 1. **Codex:** `rate_limits.primary|secondary.resets_at` (epoch) from the run's `--json` stream or the latest
    `~/.codex/sessions/**/*.jsonl` (field VERIFIED to exist; read without any AI call).
 2. **Claude:** a reset field in the `stream-json` error/rate-limit event — PENDING VERIFICATION; none found in local logs.
-3. **No verifiable time → bounded backoff** from the signed policy (proposed defaults, owner to confirm):
+3. **No verifiable time → bounded backoff** from `policy.toml` (owner-approved R7):
 
 ```toml
 [quota]
@@ -419,7 +364,7 @@ max_episodes_per_task_per_day = 3          # then needs-you
 verified_reset_grace_minutes = 2           # wake at resets_at + 2 min
 ```
 
-Each wake: policy check (approval, plan hash, scope, policy sig) → resume from checkpoint under the same idempotency key.
+Each wake: policy check (approval, plan hash, policy hash, scope) → resume (no new owner approval needed) from checkpoint under the same idempotency key.
 `scheduler.py` runs inside the engine loop (30 s tick) or standalone `scheduler.py --once`; a Windows Scheduled Task for
 `--once` is persistent system config and is created by the owner only if wanted (Decision R4).
 
@@ -428,7 +373,7 @@ flowchart TD
   A[run ends] --> B{quota_limited?}
   B -- no --> Z[normal flow]
   B -- yes --> C[checkpoint: session id, run id, round, diff hash]
-  C --> D{fallback vendor allowed by signed policy<br/>and available?}
+  C --> D{fallback vendor allowed by policy<br/>and available?}
   D -- yes --> E[route.fallback, same round]
   E --> F[policy check]
   F -- ok --> G[spawn same key + .fb]
@@ -446,7 +391,7 @@ flowchart TD
 ## 13. Needs-You protocol
 
 A question must have `title`, `context` (what happened + evidence links), `impact` (what is blocked, cost of each option),
-`options` (2–4 with consequences), `default` (or `none`), `blocking`, `class` (`owner-signed` | `relay`, set by `policy.py`
+`options` (2–4 with consequences), `default` (or `none`), `blocking`, `class` (`owner-decision` | `clarify`, set by `policy.py`
 from the question type), `asked_by`. `bridge.py ask` rejects incomplete questions. Agent-raised questions are drafts; the
 orchestrator rewrites them in owner language; both versions are kept.
 
@@ -459,7 +404,6 @@ sequenceDiagram
   participant ORC as Orchestrator (Desktop)
   participant O as Owner
   participant BR as bridge.py
-  participant OC as owner_console.py
   AG-->>ENG: result.md question_request
   ENG->>SW: questions.md q3 draft, class by policy, state=needs-you
   ENG->>N: "T-7 needs you"
@@ -467,14 +411,8 @@ sequenceDiagram
   ORC->>BR: ask T-7 q3 (context, impact, options)
   ORC->>O: question in Desktop chat
   O->>ORC: "option B"
-  alt class = relay
-    ORC->>BR: relay-answer T-7 q3 --quote "option B"
-  else class = owner-signed
-    ORC->>O: "please run owner_console.py answer T-7 q3"
-    O->>OC: answer + passphrase
-  end
-  BR->>SW: answer recorded
-  OC->>SW: signed answer recorded
+  ORC->>BR: answer T-7 q3 --quote "option B" --option B
+  BR->>SW: answer recorded (quote, desktop), event answer.recorded
   ENG->>ENG: all blocking answered + approval valid → resume
 ```
 
@@ -482,18 +420,10 @@ sequenceDiagram
 
 Owner decisions applied (2026-11-09): Q3 hook + toast yes, `codex queue` no · Q4 verified reset else bounded backoff ·
 Q5 structure approved, worktrees outside v2 repo · Q6 local git, no remote (done) · Q7 `.venv` + 4 deps (done, versions §2) ·
-Q8 `docs/WORKLOG.md` · Q1/Q2 Desktop dialog rejected as identity proof → §6.
-
-Open for owner decision:
-| ID | Question | Options | Recommendation |
-|---|---|---|---|
-| R1 | Add `cryptography` (Ed25519 + key encryption) to `.venv` | A) approve; B) HMAC with secret on disk (forgeable by any same-user agent → rejected); C) pure-Python Ed25519 (unaudited) | **A** — without it, T1–T4 cannot be blocked |
-| R2 | Separate low-privilege Windows user for workers (needed for Security Gate PASS) | A) later phase, owner sets up user + ACLs; B) never (gate stays NOT PASS) | **A**, after Phase 1 |
-| R3 | Claude workers without shell tools | A) yes (tests run by Python); B) allow Bash (cannot be path-restricted on Windows → T6 wider) | **A** |
-| R4 | Standalone scheduler via Windows Scheduled Task | A) engine loop only in Phase 1; B) owner creates the task | **A** |
-| R5 | Data root path | `C:\Users\Natthawut.j\Desktop\ALI\multi-agent-hub-v2-data` | approve or give another path |
-| R6 | Owner secret path | `%USERPROFILE%\.mah-v2-owner\` | approve or give another path |
-| R7 | Bounded backoff numbers (§12) | accept defaults or edit | accept |
+Q8 `docs/WORKLOG.md`.
+Decided 2026-11-09/10: R1 `cryptography` (later superseded by Rev 3), R2 separate worker user = later phase (design only),
+R3 Claude workers read-only, R4 no Scheduled Task in Phase 1, R5 data root approved, R6 superseded by Rev 3,
+R7 backoff 15/30/60/120/240. Rev 3: conversational approval replaces signing (owner, 2026-11-10).
 
 ## 15. Change log
 - Rev 1 (2026-11-09): initial draft.
@@ -501,3 +431,7 @@ Open for owner decision:
   with Ed25519; detailed threat model (§6); approval classes `owner-signed`/`relay`; signed policy + source manifest;
   worktrees moved to external data root + path policy (§4.1); Claude workers shell-free; Codex reset field verified;
   bounded backoff; `codex queue` dropped; git init + `.venv` done.
+- Rev 3 (2026-11-10): owner "USABILITY FIRST": passphrase, keys, Ed25519 signatures, signed policy/manifest and the owner
+  console removed; conversational approval via `bridge.py approve --quote` (workflow control, not identity proof);
+  one approval covers the whole plan incl. fix rounds, quota retries and scoped auto local commit; question classes
+  `owner-decision`/`clarify`; threat T11 accepted and documented (§6). Plan: `docs/PLAN-REMOVE-SIGNING.md` Rev 2.

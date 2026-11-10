@@ -193,13 +193,8 @@ def test_commit_requires_record_and_never_pushes(target, hub, monkeypatch):
     with pytest.raises(PolicyError):
         manager.commit(target, "no authority", {})
     assert not calls
-    # WorktreeManager's caller-verification contract is exercised by Runner.commit tests.
-    (target / "hello.txt").write_text("changed\n", encoding="utf-8")
-    record = hub.signed("commit", project="project", task="T-1", plan_hash=plan_hash(hub.spec),
-                        policy_hash=hub.policy.policy_hash)
-    manager.commit(target, "local change", record)
-    assert calls == ["add", "commit"]
-    assert run_git(["log", "-1", "--format=%s"], target)[1].strip() == "local change"
+    # Legacy manager helper is unused; Runner.commit_task exercises scoped commits.
+    assert calls == []
 
 
 def test_multiple_plain_diff_sections_checked_before_apply(target):

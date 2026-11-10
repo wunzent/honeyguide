@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 import psutil
+import yaml
 
 from adapters.base import Adapter, Outcome, Route, scrub
 from agent_loader import AgentTemplate, render_prompt
@@ -27,11 +28,11 @@ from policy import (
     load_policy,
     may_spawn,
     team_active_seconds,
-    verify_manifest,
     worktree_path,
 )
-from signing import load_public_key, verify_record
-from state_writer import StateStore, atomic_write_text, plan_hash, read_text_retry
+from approvals import check_approval, approval_nonces
+from hashing import sha256_file
+from state_writer import StateStore, atomic_write_text, plan_hash, approved_scope, read_text_retry
 from worktree_manager import WorktreeManager
 
 _ENV_KEYS = frozenset(
@@ -155,8 +156,7 @@ class Runner:
     ) -> str:
         if template.role != role:
             raise ValueError("template role mismatch")
-        public_key = load_public_key(self.hub_root / "config" / "owner.pub")
-        policy = load_policy(self.hub_root, public_key)
+        policy = load_policy(self.hub_root)
         expected_worktree = worktree_path(policy, project, task)
         if (
             Path(worktree).absolute() != expected_worktree
@@ -169,7 +169,6 @@ class Runner:
             if prior.get("idem_key") == idem_key and prior.get("status") == "abandoned":
                 decision = may_spawn(
                     policy=policy,
-                    public_key=public_key,
                     spec_text=self.store.read_spec(project, task),
                     state=snapshot,
                     live_runs=self.live_runs(),
@@ -201,7 +200,6 @@ class Runner:
             ]
             decision = may_spawn(
                 policy=policy,
-                public_key=public_key,
                 spec_text=self.store.read_spec(project, task),
                 state=txn.state,
                 live_runs=live,
@@ -435,6 +433,10 @@ class Runner:
             raise ValueError(
                 "tests require the trusted Python executable and a positive timeout"
             )
+        policy = load_policy(self.hub_root)
+        before = self._snapshot(worktree, policy)
+        state = self.store.read_state(project, task)
+        digest = plan_hash(self.store.read_spec(project, task))
         run_id, directory = self._new_run(project, task)
         start = time.monotonic()
         try:
@@ -461,7 +463,11 @@ class Runner:
             "exit_code": code,
             "passed": code == 0,
             "duration": time.monotonic() - start,
+            "round": state.get("round", 1), "plan_hash": digest,
+            "policy_hash": policy.policy_hash, "files": before,
         }
+        if before != self._snapshot(worktree, policy):
+            result["passed"] = False
         self._write(directory / "test-log.txt", scrub(output))
         self._event(
             project,
@@ -471,13 +477,15 @@ class Runner:
             run_id,
             {"kind": "tests", "status": "finished", **result},
         )
+        with self.store.transaction(project, task) as txn:
+            txn.state["last_test_run"] = run_id
+            txn.emit("tests.recorded", {"set": {"last_test_run": run_id}})
         return result
 
     def scope_check(
         self, project: str, task: str, worktree: Path, allowed_globs: list[str]
     ) -> list[str]:
-        public = load_public_key(self.hub_root / "config" / "owner.pub")
-        policy = load_policy(self.hub_root, public)
+        policy = load_policy(self.hub_root)
         violations = check_scope(self.worktrees.changed_files(worktree, policy.ignored_artifact_globs), allowed_globs)
         if violations:
             with self.store.transaction(project, task) as txn:
@@ -515,41 +523,67 @@ class Runner:
         except (psutil.Error, OSError) as exc:
             raise PolicyError("could not stop owned process") from exc
 
-    def commit(
-        self,
-        project: str,
-        task: str,
-        worktree: Path,
-        message: str,
-        signed_commit_record: dict,
-    ) -> None:
-        public = load_public_key(self.hub_root / "config" / "owner.pub")
-        policy = load_policy(self.hub_root, public)
-        verify_manifest(self.hub_root, public)
-        if Path(worktree).absolute() != worktree_path(policy, project, task):
-            raise PolicyError("commit worktree does not match task")
+    def _snapshot(self, worktree: Path, policy) -> dict[str, str]:
+        files = {}
+        for name in self.worktrees.changed_files(worktree, policy.ignored_artifact_globs):
+            path = worktree / name
+            if check_scope([name], ["*"]) or not path.resolve().is_relative_to(worktree.resolve()):
+                raise PolicyError("changed path escapes task worktree")
+            if path.is_dir():
+                raise PolicyError("changed directory cannot be committed as a file")
+            files[name] = sha256_file(path) if path.exists() else "deleted"
+        return files
+
+    def commit_task(self, project: str, task: str) -> str:
+        policy = load_policy(self.hub_root)
+        worktree = worktree_path(policy, project, task)
+        if not (worktree / ".git").is_file():
+            raise PolicyError("commit requires the task worktree")
         with self.store.transaction(project, task) as txn:
-            verify_record(
-                public,
-                signed_commit_record,
-                {
-                    "kind": "commit",
-                    "project": project,
-                    "task": task,
-                    "plan_hash": plan_hash(self.store.read_spec(project, task)),
-                    "policy_hash": policy.policy_hash,
-                },
-            )
-            used = txn.state.get("committed_nonces", [])
-            if (
-                signed_commit_record["nonce"] in used
-                or txn.state.get("status") != "ready_to_commit"
-            ):
-                raise PolicyError("commit permission already used or task not ready")
-            self.worktrees.commit(worktree, message, signed_commit_record)
-            updates = {
-                "committed_nonces": [*used, signed_commit_record["nonce"]],
-                "status": "committed",
-            }
-            txn.state.update(updates)
-            txn.emit("commit.finished", {"set": updates})
+            state = txn.state
+            if load_policy(self.hub_root) != policy:
+                raise PolicyError("policy changed while waiting to commit")
+            if state.get("status") != "ready_to_commit":
+                raise PolicyError("task not ready to commit")
+            if any(r.get("status") in {"running", "intent"} for r in state.get("runs", {}).values()):
+                raise PolicyError("task still has active runs")
+            spec = self.store.read_spec(project, task)
+            digest = plan_hash(spec)
+            check_approval(state.get("approval"), project=project, task=task,
+                           plan_hash=digest, policy_hash=policy.policy_hash,
+                           used_nonces=approval_nonces(state))
+            tests = state.get("runs", {}).get(state.get("last_test_run"), {})
+            round_no = state.get("round", 1)
+            if (tests.get("kind") != "tests" or tests.get("passed") is not True
+                    or tests.get("exit_code") != 0 or tests.get("round") != round_no):
+                raise PolicyError("last trusted tests must pass for the current round")
+            review = state.get("review", {})
+            review_run = state.get("runs", {}).get(review.get("run"), {})
+            if (review.get("verdict") != "PASS" or review.get("round") != round_no
+                    or review.get("test_run") != state.get("last_test_run")
+                    or review_run.get("role") != "reviewer" or review_run.get("status") != "ok"):
+                raise PolicyError("review PASS required for the current round and tests")
+            files = self._snapshot(worktree, policy)
+            if files != tests.get("files"):
+                raise PolicyError("task files changed since trusted tests")
+            project_text = read_text_retry(self.hub_root / "projects" / project / "project.md")
+            blocks = re.findall(r"^```hub-project\s*\n(.*?)^```[ \t]*$", project_text, re.M | re.S)
+            if len(blocks) != 1:
+                raise PolicyError("project configuration missing")
+            config = yaml.safe_load(blocks[0])
+            violations = check_scope(list(files), config["allowed_paths"] + approved_scope(spec))
+            if violations:
+                raise PolicyError(f"scope check failed: {violations}")
+            if self.worktrees._git(["rev-parse", "--abbrev-ref", "HEAD"], worktree).strip() != f"hub/{task}":
+                raise PolicyError("commit branch must match the task")
+            if not files:
+                raise PolicyError("task has no changed files to commit")
+            title = state.get("title") or next((line[2:].strip() for line in spec.splitlines() if line.startswith("# ")), task)
+            message = f"{task}: {title} (tests PASS, review PASS, Security Gate NOT PASS)"
+            self.worktrees._git(["add", "--", *files], worktree)
+            self.worktrees._git(["commit", "--no-gpg-sign", "-m", message], worktree)
+            sha = self.worktrees._git(["rev-parse", "HEAD"], worktree).strip()
+            updates = {"status": "committed", "commit_sha": sha}
+            state.update(updates)
+            txn.emit("commit.created", {"sha": sha, "files": list(files), "set": updates})
+        return sha

@@ -9,11 +9,12 @@
       "PowerShell(.venv\\Scripts\\python.exe bridge.py show*)"
     ],
     "deny": [
-      "Bash(*owner_console*)",
-      "PowerShell(*owner_console*)",
-      "Edit(config/**)", "Write(config/**)",
-      "Edit(projects/**)", "Write(projects/**)",
-      "Edit(runtime/**)", "Write(runtime/**)"
+      "Edit(config/**)",
+      "Write(config/**)",
+      "Edit(projects/**)",
+      "Write(projects/**)",
+      "Edit(runtime/**)",
+      "Write(runtime/**)"
     ]
   },
   "hooks": {

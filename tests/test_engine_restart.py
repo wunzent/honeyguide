@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from datetime import datetime, timezone
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import time
 from typing import Any, Callable
@@ -15,7 +17,6 @@ from adapters.base import Route, get_adapter
 from agent_loader import load_template
 from policy import PolicyError
 from runner import Runner, is_same_process
-from signing import VerificationError
 from state_writer import StateStore
 from worktree_manager import WorktreeManager
 from test_path_policy import hub
@@ -204,7 +205,8 @@ def test_scrub_result_and_no_agent_approval(runtime, monkeypatch):
     run_id = start(runtime)
     assert "throwaway" not in finished(runner, run_id).result_text
     state = runner.store.read_state("project", "T-1")
-    assert state["status"] == "approved" and "approval" not in state
+    assert state["status"] == "approved" and len(state["approval_history"]) == 1
+    assert state["approval"]["quote"] == "Approved in this conversation"
 
 
 def test_alive_duplicate_restart_and_owned_stop(runtime, monkeypatch):
@@ -240,7 +242,7 @@ def test_python_tests_record_real_exit(runtime, code):
     result = runner.run_tests("project", "T-1", worktree,
                               [sys.executable, "-c", f"print('sk-throwaway-secret'); raise SystemExit({code})"], 5)
     assert result["passed"] is (code == 0) and result["exit_code"] == code and result["duration"] >= 0
-    event = runner.store.read_events("project", "T-1")[-1]
+    event = next(e for e in reversed(runner.store.read_events("project", "T-1")) if e.kind == "tests.finished")
     assert event.kind == "tests.finished" and event.data["passed"] == (code == 0)
     log = runner.store.task_dir("project", "T-1") / "runs" / event.data["run"] / "test-log.txt"
     assert "throwaway" not in log.read_text()
@@ -265,26 +267,13 @@ def test_scope_violation(runtime):
         runner.worktrees.apply_patch(worktree, "diff --git a/outside.txt b/outside.txt\n--- /dev/null\n+++ b/outside.txt\n@@ -0,0 +1 @@\n+x\n", ["hello.txt"])
 
 
-def test_runner_commit_signature_binding_and_replay(runtime, hub, monkeypatch):
-    runner, worktree = runtime
-    for field, value in {"GIT_AUTHOR_NAME": "Fixture", "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
-                         "GIT_COMMITTER_NAME": "Fixture", "GIT_COMMITTER_EMAIL": "fixture@example.invalid"}.items():
-        monkeypatch.setenv(field, value)
-    with runner.store.transaction("project", "T-1") as txn:
-        txn.state["status"] = "ready_to_commit"
-        txn.emit("ready", {"set": {"status": "ready_to_commit"}})
-    (worktree / "hello.txt").write_text("changed\n", encoding="utf-8")
-    from state_writer import plan_hash
-    record = hub.signed("commit", project="project", task="T-1", plan_hash=plan_hash(hub.spec), policy_hash=hub.policy.policy_hash)
-    with pytest.raises(VerificationError):
-        runner.commit("project", "T-1", worktree, "forged", {**record, "answer": "tampered"})
-    runner.commit("project", "T-1", worktree, "approved local commit", record)
-    assert runner.store.read_state("project", "T-1")["status"] == "committed"
-    with pytest.raises(PolicyError, match="already used"):
-        runner.commit("project", "T-1", worktree, "duplicate", record)
+def test_runner_commit_requires_ready_state(runtime):
+    runner, _ = runtime
+    with pytest.raises(PolicyError, match="not ready"):
+        runner.commit_task("project", "T-1")
 
 
-# Engine integration uses signed throwaway hubs and the existing offline CLIs.
+# Engine integration uses approved throwaway hubs and the existing offline CLIs.
 from datetime import timedelta
 import json
 import shutil
@@ -296,7 +285,6 @@ from adapters.base import Availability
 from engine import Engine, EngineAlreadyRunning, EngineStartupError, main as engine_main
 from policy import load_policy
 from scheduler import Scheduler
-from signing import load_public_key
 from state_writer import plan_hash, set_approval_block
 
 
@@ -309,7 +297,6 @@ def engine_env(runtime, hub, target):
               "test_command": [sys.executable, "-c", "print('trusted tests pass')"], "test_timeout_s": 5}
     project_path = hub.root / "projects" / "project" / "project.md"
     project_path.write_text("# Project\n\n```hub-project\n" + yaml.safe_dump(config) + "```\n", encoding="utf-8")
-    hub.sign_config()
     engines, runners = [], [initial]
     now = initial.clock()
     notices = []
@@ -318,7 +305,7 @@ def engine_env(runtime, hub, target):
         runner = Runner(initial.store, dict(initial.adapters), initial.worktrees, hub.root, lambda: now)
         runners.append(runner)
         scheduler = Scheduler(initial.store, hub.policy, lambda: now, rng=lambda a, b: 0)
-        engine = Engine(hub.root, store=initial.store, policy_loader=load_policy, public_key_loader=load_public_key,
+        engine = Engine(hub.root, store=initial.store, policy_loader=load_policy,
                         adapters=runner.adapters, runner=runner, worktrees=initial.worktrees, scheduler=scheduler,
                         clock=lambda: now, availability_probe=lambda vendor: Availability(True, "fake", True, ""),
                         notifier=lambda *args: notices.append(args))
@@ -336,15 +323,17 @@ def engine_env(runtime, hub, target):
             process.wait(timeout=10)
 
 
-def drive(engine, store, now, task="T-1", wanted="ready_to_commit"):
-    deadline = time.monotonic() + 15
+def drive(engine, store, now, task="T-1", wanted="ready_to_commit", *,
+          condition: Callable[[dict], bool] | None = None, timeout_s: float = 15):
+    deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         engine.tick(now)
         state = store.read_state("project", task)
-        if state["status"] == wanted:
+        if condition(state) if condition is not None else state["status"] == wanted:
             return state
         time.sleep(0.02)
-    pytest.fail(f"engine did not reach {wanted}; state={state}")
+    events = [(event.seq, event.kind) for event in store.read_events("project", task)[-12:]]
+    pytest.fail(f"engine did not reach {wanted} within {timeout_s}s; state={state}; last events={events}")
 
 
 def test_engine_restart_twice_reattaches_one_spawn(engine_env, held_fakes):
@@ -369,18 +358,17 @@ def test_engine_restart_twice_reattaches_one_spawn(engine_env, held_fakes):
     assert len(coder_runs) == 1 and coder_runs[0]["status"] == "ok"
 
 
-def test_singleton_and_tamper_refusal(engine_env, hub):
+def test_singleton_and_plain_policy_startup(engine_env, hub):
     factory, store, now, *_ = engine_env
     engine = factory()
     with pytest.raises(EngineAlreadyRunning):
         factory()
     engine.close()
-    (hub.root / "worker.py").write_text("tampered", encoding="utf-8")
-    with pytest.raises(EngineStartupError, match="manifest"):
-        factory()
-    hub.sign_config()
-    (hub.config / "policy.toml.sig").unlink()
-    with pytest.raises(EngineStartupError, match="policy signature"):
+    (hub.root / "worker.py").write_text("edited", encoding="utf-8")
+    engine = factory()
+    engine.close()
+    (hub.config / "policy.toml").write_text("[invalid", encoding="utf-8")
+    with pytest.raises(EngineStartupError, match="policy"):
         factory()
 
 
@@ -430,7 +418,8 @@ def test_full_happy_path_and_agent_approval_has_no_authority(engine_env, monkeyp
     monkeypatch.setattr(claude, "classify", review)
     state = drive(engine, store, now)
     assert state['status'] == "ready_to_commit"
-    assert "approval" not in state and "committed_nonces" not in state
+    assert state["approval"]["quote"] == "Approved in this conversation"
+    assert len(state["approval_history"]) == 1
     runs = list(state['runs'].values())
     assert [(r['role'], r['route']['vendor']) for r in runs if r.get('role')] == [('coder', 'codex'), ('reviewer', 'claude')]
     assert any(r.get('kind') == 'tests' and r['passed'] for r in runs)
@@ -451,10 +440,10 @@ def test_concurrency_four_tasks_two_dynamic(engine_env, hub, monkeypatch, held_f
     factory, store, now, *_ = engine_env
     for number in range(1, 7):
         task = f"T-{number}"
-        record = hub.signed("approve-plan", project="project", task=task,
+        record = hub.record("approve-plan", project="project", task=task,
                             plan_hash=plan_hash(hub.spec), policy_hash=hub.policy.policy_hash)
         store.write_spec("project", task, set_approval_block(hub.spec, record))
-        state = {**hub.state, "task": task, "dynamic": number > 4}
+        state = {**hub.state, "task": task, "dynamic": number > 4, "approval": record, "approval_history": [record]}
         with store.transaction("project", task) as txn:
             txn.state.update(state)
             txn.emit("fixture", {"set": state})
@@ -531,7 +520,7 @@ def test_question_draft_class_and_atomic_mirror(engine_env, monkeypatch):
     engine = factory()
     state = drive(engine, store, now, wanted='needs-you')
     q = state['questions'][0]
-    assert q['status'] == 'draft' and q['class'] == 'owner-signed'
+    assert q['status'] == 'draft' and q['class'] == 'owner-decision'
     assert q['draft_text'] and notices
     text = (store.task_dir('project', 'T-1') / 'questions.md').read_text(encoding='utf-8')
     block = re.search(r'```hub-questions\n(.*?)```', text, re.S)[1]
@@ -633,6 +622,8 @@ def test_scope_breach_blocks_tests(engine_env, runtime):
 
 def test_review_has_only_one_fix_cycle(engine_env, monkeypatch):
     factory, store, now, *_ = engine_env
+    monkeypatch.setenv('FAKE_SCENARIO', 'ok')
+    monkeypatch.delenv('FAKE_SLEEP', raising=False)
     engine = factory()
     adapter = engine.adapters['claude']
     classify = adapter.classify
@@ -641,21 +632,68 @@ def test_review_has_only_one_fix_cycle(engine_env, monkeypatch):
         result.result_text = 'RESULT: {"verdict": "FAIL", "issues": ["Missing behavior"]}'
         return result
     monkeypatch.setattr(adapter, 'classify', fail_review)
-    state = drive(engine, store, now, wanted='needs-you')
-    assert state['review_fix_cycles'] == 1
-    assert [r['route']['vendor'] for r in state['runs'].values() if r.get('role') == 'reviewer'] == ['claude', 'claude']
-    assert [r['route']['vendor'] for r in state['runs'].values() if r.get('role') == 'coder'] == ['codex', 'codex']
+
+    def stop_fake(process: subprocess.Popen) -> None:
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=10)
+
+    with ExitStack() as cleanup:
+        cleanup.callback(engine.close)
+        processes: dict[str, subprocess.Popen] = {}
+        original_start = engine.runner.start
+
+        def track_start(*args, **kwargs):
+            try:
+                return original_start(*args, **kwargs)
+            finally:
+                for (_, _, run_id), process in engine.runner._processes.items():
+                    if run_id not in processes:
+                        processes[run_id] = process
+                        cleanup.callback(stop_fake, process)
+
+        monkeypatch.setattr(engine.runner, 'start', track_start)
+        # Four dispatches plus durable writes can exceed one 15s Windows budget.
+        # Wait for each handled result, with its own deadline and event diagnostics.
+        for round_no in (1, 2):
+            for role in ('coder', 'reviewer'):
+                key = f'T-1:{role}:{round_no}'
+                state = drive(
+                    engine, store, now, wanted=f'{key} handled', timeout_s=60,
+                    condition=lambda state: any(
+                        run.get('idem_key') == key and run.get('handled')
+                        for run in state.get('runs', {}).values()))
+                run = next(run for run in state['runs'].values() if run.get('idem_key') == key)
+                assert run['status'] == 'ok'
+                assert processes[run['run']].wait(timeout=10) == 0
+
+        assert state['status'] == 'needs-you'
+        assert state['review_fix_cycles'] == 1
+        assert [r['route']['vendor'] for r in state['runs'].values() if r.get('role') == 'reviewer'] == ['claude', 'claude']
+        assert [r['route']['vendor'] for r in state['runs'].values() if r.get('role') == 'coder'] == ['codex', 'codex']
+        events = store.read_events('project', 'T-1')
+        assert sum(event.kind == 'round.next' for event in events) == 1
+        assert sum(event.kind == 'review.exhausted' for event in events) == 1
+        assert sum(event.kind == 'run.finished' for event in events) == 4
+        assert not engine.runner.live_runs()
 
 
 def test_quota_fallback_is_signed_and_bounded(engine_env, hub, monkeypatch):
     factory, store, now, *_ = engine_env
     path = hub.config / 'policy.toml'
     path.write_text(path.read_text().replace('auto_fallback = false', 'auto_fallback = true'), encoding='utf-8')
-    hub.sign_config()
-    hub.policy = load_policy(hub.root, hub.public)
-    approval = hub.signed('approve-plan', project='project', task='T-1',
+    hub.policy = load_policy(hub.root)
+    approval = hub.record('approve-plan', project='project', task='T-1',
                           plan_hash=plan_hash(hub.spec), policy_hash=hub.policy.policy_hash)
     store.write_spec('project', 'T-1', set_approval_block(hub.spec, approval))
+    with store.transaction('project', 'T-1') as txn:
+        updates = {'approval': approval, 'approval_history': [approval]}
+        txn.state.update(updates)
+        txn.emit('fixture.approval', {'set': updates})
     monkeypatch.setenv('FAKE_SCENARIO', 'quota_noreset')
     engine = factory()
     state = drive(engine, store, now, wanted='waiting-quota')

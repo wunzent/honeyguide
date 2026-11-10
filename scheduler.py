@@ -11,7 +11,6 @@ from uuid import uuid4
 
 from adapters.base import Outcome, _dicts, _epoch
 from policy import Policy, load_policy
-from signing import load_public_key
 from state_writer import StateStore, atomic_write_text
 
 
@@ -275,8 +274,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--hub-root", type=Path, default=Path("."))
     parser.add_argument("--once", action="store_true", required=True)
     args = parser.parse_args(argv)
-    public = load_public_key(args.hub_root / "config" / "owner.pub")
-    policy = load_policy(args.hub_root, public)
+    policy = load_policy(args.hub_root)
     scheduler = Scheduler(
         StateStore(args.hub_root), policy, lambda: datetime.now(timezone.utc)
     )

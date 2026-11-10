@@ -69,8 +69,8 @@ def test_commands_are_json(hub, task, tmp_path):
     first = call(hub.root, 'set-plan', 'project', 'T-2', '--file', str(plan))
     approval = call(hub.root, 'request-approval', 'project', 'T-2')
     assert approval['plan_hash'] == first['plan_hash']
-    assert approval['owner_command'] == '.venv\\Scripts\\python.exe owner_console.py approve project T-2'
-    assert approval['message'] == 'run this in your own terminal'
+    assert approval['plan_summary'] == 'Implement hello.txt only.'
+    assert approval['message'] == 'ask the owner in this conversation, then run bridge.py approve with their exact words'
     old_route = task.read_state('project', 'T-1').get('route')
     data = call(hub.root, 'propose-route', 'project', 'T-1', '--role', 'coder', '--vendor', 'codex',
                 '--model', 'gpt-6.1-sol', '--effort', 'high', '--reason', 'Approved budget')
@@ -85,7 +85,7 @@ def test_commands_are_json(hub, task, tmp_path):
 def test_no_authority_commands_and_invalid_json(hub, args):
     call(hub.root, *args, expected=2)
     assert set(bridge._parser()._subparsers._group_actions[0].choices) == {
-        'status', 'pending', 'show', 'new-task', 'set-plan', 'request-approval', 'propose-route', 'ask', 'relay-answer'}
+        'status', 'pending', 'show', 'new-task', 'set-plan', 'request-approval', 'propose-route', 'ask', 'answer', 'approve', 'approve-scope', 'pause', 'resume', 'cancel'}
     source = (ROOT / 'bridge.py').read_text(encoding='utf-8')
     assert 'load_private_key' not in source and 'sign_record' not in source
 
@@ -98,34 +98,29 @@ def test_ask_rejects_missing(hub, task, field):
     assert not task.read_state('project', 'T-1')['questions']
 
 
-@pytest.mark.parametrize('change', [{'title': ' '}, {'class': 'relay'}, {'blocking': 'true'},
+@pytest.mark.parametrize('change', [{'title': ' '}, {'class': 'clarify'}, {'blocking': 'true'},
                                   {'options': []}, {'options': ['A', 'B']}, {'default': 'C'},
                                   {'options': [{'label': 'A'}, {'label': 'B', 'consequence': ''}]}])
 def test_ask_rejects_bad_values(hub, task, change):
     call(hub.root, 'ask', 'project', 'T-1', '--json', json.dumps(question() | change), expected=2)
 
 
-@pytest.mark.parametrize('qtype,classification', [('naming', 'relay'), ('security', 'owner-signed'), ('plan', 'owner-signed')])
+@pytest.mark.parametrize('qtype,classification', [('naming', 'clarify'), ('security', 'owner-decision'), ('plan', 'owner-decision')])
 def test_class_computed_and_relay_boundary(hub, task, qtype, classification):
     q = ask(hub, question(qtype))
     assert q['class'] == classification
     assert call(hub.root, 'pending')['questions'][0]['id'] == q['id']
-    if classification == 'relay':
-        before = task.read_spec('project', 'T-1')
-        call(hub.root, 'relay-answer', 'project', 'T-1', q['id'], '--quote', 'Choose A', '--option', 'C', expected=2)
-        answer = call(hub.root, 'relay-answer', 'project', 'T-1', q['id'], '--quote', 'Choose A', '--option', 'A')['answer']
-        assert answer == {'relayed': True, 'quote': 'Choose A', 'option': 'A', 'at': NOW.isoformat()}
-        assert task.read_spec('project', 'T-1') == before
-        assert call(hub.root, 'pending')['questions'] == []
-        call(hub.root, 'relay-answer', 'project', 'T-1', q['id'], '--quote', 'Again', '--option', 'A', expected=2)
-    else:
-        data = call(hub.root, 'relay-answer', 'project', 'T-1', q['id'], '--quote', 'Choose A', '--option', 'A', expected=2)
-        assert 'owner_console' in data['error']
-        assert not task.read_state('project', 'T-1').get('answers')
+    before = task.read_spec('project', 'T-1')
+    call(hub.root, 'answer', 'project', 'T-1', q['id'], '--quote', 'Choose A', '--option', 'C', expected=2)
+    answer = call(hub.root, 'answer', 'project', 'T-1', q['id'], '--quote', 'Choose A', '--option', 'A')['answer']
+    assert answer['recorded_by'] == 'orchestrator' and answer['quote'] == 'Choose A' and answer['answer'] == 'A'
+    assert task.read_spec('project', 'T-1') == before
+    assert call(hub.root, 'pending')['questions'] == []
+    call(hub.root, 'answer', 'project', 'T-1', q['id'], '--quote', 'Again', '--option', 'A', expected=2)
 
 
 def test_draft_replaced_and_kept(hub, task, tmp_path):
-    draft = question() | {'id': 'q1', 'status': 'draft', 'class': 'relay', 'draft_text': 'original engine input'}
+    draft = question() | {'id': 'q1', 'status': 'draft', 'class': 'clarify', 'draft_text': 'original engine input'}
     with task.transaction('project', 'T-1') as txn:
         txn.state['questions'] = [draft]
         txn.emit('draft', {'set': {'questions': [draft]}})
@@ -168,12 +163,7 @@ def test_answer_resumes_coding_through_policy(engine_env, hub, monkeypatch, qtyp
     engine.tick(now)
     assert len(store.read_state('project', 'T-1')['runs']) == 1
     before = store.read_spec('project', 'T-1')
-    if qtype == 'naming':
-        call(hub.root, 'relay-answer', 'project', 'T-1', qid, '--quote', 'Choose A', '--option', 'A')
-    else:
-        record = hub.signed('answer', project='project', task='T-1', question_id=qid,
-                            plan_hash=plan_hash(before), policy_hash=hub.policy.policy_hash, answer='Choose A')
-        record_owner_answer(store, qid, record)
+    call(hub.root, 'answer', 'project', 'T-1', qid, '--quote', 'Choose A', '--option', 'A')
     # Answers and the interrupted stage must survive an engine restart.
     engine.close()
     engine = factory()
@@ -209,13 +199,13 @@ def test_bridge_questions_wait_for_all_blockers_then_resume_review(engine_env, h
     engine = factory()
     drive(engine, store, now, wanted='reviewing')
     first, second = ask(hub), ask(hub)
-    call(hub.root, 'relay-answer', 'project', 'T-1', first['id'], '--quote', 'Choose A', '--option', 'A')
+    call(hub.root, 'answer', 'project', 'T-1', first['id'], '--quote', 'Choose A', '--option', 'A')
     engine.tick(now)
     state = store.read_state('project', 'T-1')
     assert state['status'] == 'needs-you' and state['resume_stage'] == 'reviewing'
     assert [q['status'] for q in state['questions']] == ['answered', 'open']
     assert len([r for r in state['runs'].values() if r.get('role')]) == 1
-    call(hub.root, 'relay-answer', 'project', 'T-1', second['id'], '--quote', 'Choose B', '--option', 'B')
+    call(hub.root, 'answer', 'project', 'T-1', second['id'], '--quote', 'Choose B', '--option', 'B')
     classify = engine.adapters['claude'].classify
 
     def review(*args):
@@ -231,8 +221,8 @@ def test_bridge_questions_wait_for_all_blockers_then_resume_review(engine_env, h
     assert all(q['status'] == 'answered' for q in state['questions'])
 
 
-@pytest.mark.parametrize('forgery', ['unsigned', 'tampered', 'kind', 'project', 'task', 'question_id',
-                                   'plan_hash', 'policy_hash', 'relay', 'null'])
+@pytest.mark.parametrize('forgery', ['missing-origin', 'blank-quote', 'kind', 'project', 'task', 'question_id',
+                                   'plan_hash', 'policy_hash', 'clarify', 'null'])
 def test_forged_owner_answer_is_rejected(engine_env, hub, monkeypatch, forgery):
     factory, store, now, *_ = engine_env
     monkeypatch.setenv('FAKE_SCENARIO', 'ask')
@@ -243,16 +233,16 @@ def test_forged_owner_answer_is_rejected(engine_env, hub, monkeypatch, forgery):
     bindings = dict(project='project', task='T-1', question_id=qid, plan_hash=plan_hash(hub.spec),
                     policy_hash=hub.policy.policy_hash, answer='Choose A')
     if forgery == 'kind':
-        record = hub.signed('resume', **(bindings | {'answer': '', 'question_id': ''}))
+        record = hub.record('resume', **(bindings | {'answer': '', 'question_id': ''}))
     elif forgery in {'project', 'task', 'question_id', 'plan_hash', 'policy_hash'}:
-        record = hub.signed('answer', **(bindings | {forgery: '0' * 64 if forgery.endswith('hash') else 'other'}))
+        record = hub.record('answer', **(bindings | {forgery: '0' * 64 if forgery.endswith('hash') else 'other'}))
     else:
-        record = hub.signed('answer', **bindings)
-        if forgery == 'unsigned':
-            del record['signature']
-        elif forgery == 'tampered':
-            record['answer'] = 'Modified after signing'
-        elif forgery == 'relay':
+        record = hub.record('answer', **bindings)
+        if forgery == 'missing-origin':
+            del record['recorded_by']
+        elif forgery == 'blank-quote':
+            record['quote'] = ' '
+        elif forgery == 'clarify':
             record = {'relayed': True, 'quote': 'Choose A', 'option': 'A'}
         elif forgery == 'null':
             record = None
@@ -276,12 +266,12 @@ def test_relay_resume_cannot_bypass_revised_plan_approval(engine_env, hub):
     engine = factory()
     drive(engine, store, now, wanted='reviewing')
     q = ask(hub)
-    call(hub.root, 'relay-answer', 'project', 'T-1', q['id'], '--quote', 'Choose A', '--option', 'A')
+    call(hub.root, 'answer', 'project', 'T-1', q['id'], '--quote', 'Choose A', '--option', 'A')
     store.write_spec('project', 'T-1', '## Proposed Plan\nUnsigned changed plan\n')
     engine.tick(now)
     assert store.read_state('project', 'T-1')['status'] == 'needs-you'
     events = store.read_events('project', 'T-1')
-    assert events[-1].kind == 'spawn.denied'
+    assert any(e.kind == 'approval.invalidated' for e in events)
     assert sum(e.kind == 'spawn.started' for e in events) == 1
 
 
@@ -308,7 +298,8 @@ def test_deterrence_and_signed_policy(hub, monkeypatch):
     monkeypatch.chdir(data)
     assert 'data root' in call(hub.root, 'status', expected=2)['error']
     monkeypatch.chdir(hub.root)
-    (hub.config / 'policy.toml.sig').unlink()
+    call(hub.root, 'status')
+    monkeypatch.setenv('HUB_RUN_TOKEN', '')
     call(hub.root, 'status', expected=2)
 
 
@@ -334,7 +325,7 @@ def test_pending_due_and_display_helpers(hub, task):
     assert set(app.run_logs(hub.root, 'project', 'T-1', 'R-20261109123456-aaaa').values()) == {''}
     with pytest.raises(ValueError):
         app.run_logs(hub.root, 'project', 'T-1', '../secret')
-    assert app.BANNER == 'Security Gate: NOT PASS — manual trusted approval mode'
+    assert app.BANNER == 'Approvals are conversational (workflow control, not identity proof) — Security Gate: NOT PASS'
 
 
 def test_notify_environment_and_failure(hub, task):
@@ -392,7 +383,7 @@ def test_settings_and_orchestrator_rules():
     settings = json.loads((ROOT / '.claude' / 'settings.json').read_text(encoding='utf-8'))
     assert set(settings) == {'permissions', 'hooks'}
     assert settings['hooks']['UserPromptSubmit'][0]['hooks'][0]['timeout'] == 10
-    assert 'Bash(*owner_console*)' in settings['permissions']['deny']
+    assert any('config/' in item for item in settings['permissions']['deny'])
     for name in ('AGENTS.md', 'CLAUDE.md'):
         text = (ROOT / name).read_text(encoding='utf-8')
         assert 'pending --brief' in text and 'NOT PASS' in text and '../multi-agent-hub' in text
@@ -433,15 +424,15 @@ def test_worker_invocation_marker(runtime, monkeypatch):
 
 
 def test_draft_cannot_be_downgraded(hub, task):
-    draft = question('security') | {'id': 'q1', 'status': 'draft', 'class': 'owner-signed'}
+    draft = question('security') | {'id': 'q1', 'status': 'draft', 'class': 'owner-decision'}
     with task.transaction('project', 'T-1') as txn:
         txn.state['questions'] = [draft]
         txn.emit('draft', {'set': {'questions': [draft]}})
     call(hub.root, 'ask', 'project', 'T-1', '--id', 'q1', '--json', json.dumps(question()), expected=2)
     assert task.read_state('project', 'T-1')['questions'] == [draft]
     q = ask(hub, question('plan'), '--id', 'q1')
-    assert q['type'] == 'security' and q['class'] == 'owner-signed'
-    call(hub.root, 'relay-answer', 'project', 'T-1', 'q1', '--quote', 'A', '--option', 'A', expected=2)
+    assert q['type'] == 'security' and q['class'] == 'owner-decision'
+    call(hub.root, 'answer', 'project', 'T-1', 'q1', '--quote', 'A', '--option', 'A')
 
 
 @pytest.mark.parametrize('status', ['approved', 'coding', 'testing', 'reviewing', 'waiting-quota',
@@ -470,15 +461,288 @@ def test_blocking_ask_cannot_interrupt_live_or_finished_task(hub, task, status):
 def test_engine_rejects_relay_on_mislabelled_security_question(engine_env):
     factory, store, now, *_ = engine_env
     engine = factory()
-    q = question('security') | {'id': 'q1', 'status': 'answered', 'class': 'relay'}
+    q = question('security') | {'id': 'q1', 'status': 'answered', 'class': 'clarify'}
     engine._update('project', 'T-1', 'fixture', {'status': 'needs-you', 'resume_stage': 'coding',
         'questions': [q], 'answers': {'q1': {'relayed': True, 'quote': 'A', 'option': 'A'}}})
     engine.tick(now)
     state = store.read_state('project', 'T-1')
     assert state['status'] == 'needs-you' and not state.get('runs')
-    assert state['questions'][0]['class'] == 'owner-signed'
+    assert state['questions'][0]['class'] == 'owner-decision'
 
 
 # Reuse only the existing fake-process fixtures, never production CLI adapters.
 from test_engine_restart import drive, engine_env, runtime
 from test_v1_isolation import target
+
+
+def approve(hub, quote='Approve this plan'):
+    return call(hub.root, 'approve', 'project', 'T-1', '--quote', quote, '--desktop', 'codex')
+
+
+@pytest.mark.parametrize('status', ['awaiting-approval', 'draft-with-plan', 'draft'])
+def test_conversation_approval_records_quote_and_history(hub, task, status):
+    with task.transaction('project', 'T-1') as txn:
+        updates = {'status': status, 'approval': None, 'approval_history': []}
+        txn.state.update(updates)
+        txn.emit('fixture', {'set': updates})
+    quote = '  Owner says: approve\nexactly this  '
+    value = approve(hub, quote)['record']
+    state = task.read_state('project', 'T-1')
+    assert state['status'] == 'approved' and state['approval'] == value
+    assert state['approval_history'] == [value] and value['quote'] == quote
+    event = task.read_events('project', 'T-1')[-1]
+    assert event.kind == 'approval.recorded' and event.data['record'] == value
+    assert app.timeline(hub.root)[0]['data']['record']['quote'] == quote
+
+
+@pytest.mark.parametrize('status', ['approved', 'coding', 'testing', 'reviewing', 'needs-you', 'paused', 'committed', 'running', 'done'])
+def test_approval_requires_eligible_status(hub, task, status):
+    with task.transaction('project', 'T-1') as txn:
+        txn.state['status'] = status
+        txn.emit('fixture', {'set': {'status': status}})
+    call(hub.root, 'approve', 'project', 'T-1', '--quote', 'approve', '--desktop', 'codex', expected=2)
+
+
+@pytest.mark.parametrize('drift', ['plan', 'policy'])
+def test_drift_question_and_reapproval_resume_stage(engine_env, hub, drift):
+    factory, store, now, *_ = engine_env
+    engine = factory()
+    engine._update('project', 'T-1', 'fixture', {'status': 'reviewing', 'needs_run': False})
+    if drift == 'plan':
+        store.write_spec('project', 'T-1', store.read_spec('project', 'T-1').replace('approved files', 'revised files'))
+    else:
+        path = hub.config / 'policy.toml'
+        path.write_text(path.read_text(encoding='utf-8') + '\n# policy revision\n', encoding='utf-8')
+    engine.tick(now)
+    state = store.read_state('project', 'T-1')
+    assert state['status'] == 'needs-you' and state['resume_stage'] == 'reviewing'
+    q = state['questions'][-1]
+    assert q['title'] == 'Plan/policy changed — approve again?' and q['class'] == 'owner-decision'
+    assert q['blocking'] and len(q['options']) == 2 and q['default'] == 'none'
+    approve(hub)
+    assert store.read_state('project', 'T-1')['status'] == 'reviewing'
+    assert len(store.read_state('project', 'T-1')['approval_history']) == 2
+
+
+def test_scope_widening_changes_hash_and_approves_atomically(hub, task):
+    before = plan_hash(task.read_spec('project', 'T-1'))
+    data = call(hub.root, 'approve-scope', 'project', 'T-1', '--add', 'src/*', '--add', 'tests/*',
+                '--quote', 'Include source and tests', '--desktop', 'claude')
+    from state_writer import approved_scope
+    spec = task.read_spec('project', 'T-1')
+    assert approved_scope(spec) == ['src/*', 'tests/*']
+    assert plan_hash(spec) != before and data['record']['plan_hash'] == plan_hash(spec)
+    events = task.read_events('project', 'T-1')
+    assert [e.kind for e in events[-3:]] == ['spec.updated', 'scope.approved', 'approval.recorded']
+    assert all(e.data['record']['quote'] == 'Include source and tests' for e in events[-2:])
+
+
+@pytest.mark.parametrize('status', ['coding', 'running', 'testing', 'reviewing', 'ready_to_commit', 'needs-you'])
+@pytest.mark.parametrize('needs_run', [None, False, True])
+def test_scope_widening_preserves_current_progress(hub, task, status, needs_run):
+    with task.transaction('project', 'T-1') as txn:
+        updates = {'status': status, 'resume_stage': 'reviewing',
+                   'approval_reason': 'review failed', 'questions': [
+                       question('security') | {'id': 'blocked', 'status': 'open'}]}
+        if needs_run is not None:
+            updates['needs_run'] = needs_run
+        txn.state.update(updates)
+        txn.emit('fixture', {'set': updates})
+    before = task.read_state('project', 'T-1')
+    data = call(hub.root, 'approve-scope', 'project', 'T-1', '--add', 'extra.txt',
+                '--quote', 'Include extra.txt', '--desktop', 'codex')
+    state = task.read_state('project', 'T-1')
+    for field in ('status', 'resume_stage', 'approval_reason', 'questions'):
+        assert state[field] == before[field]
+    assert ('needs_run' in state) == ('needs_run' in before)
+    assert state.get('needs_run') == before.get('needs_run')
+    assert state['approval'] == data['record']
+    assert state['approval']['plan_hash'] == plan_hash(task.read_spec('project', 'T-1'))
+    assert state['approval']['plan_hash'] != before['approval']['plan_hash']
+    assert state['approval_history'] == [*before['approval_history'], data['record']]
+
+
+@pytest.mark.parametrize('stage', ['coding', 'reviewing', 'ready_to_commit'])
+def test_scope_widening_resumes_only_plan_policy_change(engine_env, hub, stage):
+    factory, store, now, *_ = engine_env
+    engine = factory()
+    with store.transaction('project', 'T-1') as txn:
+        updates = {'status': stage, 'needs_run': False}
+        txn.state.update(updates)
+        txn.emit('fixture', {'set': updates})
+    store.write_spec('project', 'T-1', store.read_spec('project', 'T-1').replace(
+        'approved files', 'revised files'))
+    engine.tick(now)
+    before = store.read_state('project', 'T-1')
+    assert before['status'] == 'needs-you'
+    assert before['approval_reason'] == 'plan or policy changed'
+    assert before['resume_stage'] == stage
+    call(hub.root, 'approve-scope', 'project', 'T-1', '--add', 'extra.txt',
+         '--quote', 'Include extra.txt', '--desktop', 'codex')
+    state = store.read_state('project', 'T-1')
+    assert state['status'] == stage and state['needs_run'] is True
+    assert state['resume_stage'] is None and state['approval_reason'] is None
+    assert state['questions'][-1]['status'] == 'answered'
+    assert state['approval']['plan_hash'] == plan_hash(store.read_spec('project', 'T-1'))
+
+
+@pytest.mark.parametrize('args', [[], ['--quote', ''], ['--quote', ' '], ['--quote', 'x' * 2001]])
+def test_scope_widening_requires_owner_words(hub, task, args):
+    before = task.read_spec('project', 'T-1')
+    call(hub.root, 'approve-scope', 'project', 'T-1', '--add', 'src/*', '--desktop', 'codex', *args, expected=2)
+    assert task.read_spec('project', 'T-1') == before
+
+
+@pytest.mark.parametrize('glob', ['../outside', 'C:/outside', '.git/config'])
+def test_scope_widening_stays_relative(hub, task, glob):
+    call(hub.root, 'approve-scope', 'project', 'T-1', '--add', glob, '--quote', 'include', '--desktop', 'codex', expected=2)
+
+
+def test_pause_resume_cancel_are_audited_and_obeyed(engine_env, hub):
+    factory, store, now, *_ = engine_env
+    engine = factory()
+    for command, status in [('pause', 'paused'), ('resume', 'approved'), ('cancel', 'cancelled')]:
+        call(hub.root, command, 'project', 'T-1', '--quote', command, '--desktop', 'codex')
+        state = store.read_state('project', 'T-1')
+        assert state['status'] == status
+        event = store.read_events('project', 'T-1')[-1]
+        assert event.kind == 'control.recorded' and event.data['record']['quote'] == command
+        if command != 'resume':
+            engine.tick(now)
+            assert not store.read_state('project', 'T-1').get('runs')
+
+
+@pytest.mark.parametrize('command', ['approve', 'answer', 'approve-scope', 'pause', 'resume', 'cancel'])
+@pytest.mark.parametrize('marker', ['HUB_WORKER', 'HUB_RUN_TOKEN', 'cwd'])
+def test_workers_cannot_use_authority_commands(hub, task, monkeypatch, command, marker):
+    before = task.read_state('project', 'T-1')
+    args = [command, 'project', 'T-1', '--quote', 'worker text', '--desktop', 'codex']
+    if command == 'answer':
+        args += ['q']
+    if command == 'approve-scope':
+        args += ['--add', 'src/*']
+    if marker == 'cwd':
+        directory = Path(hub.policy.data_root) / 'task'
+        directory.mkdir(parents=True)
+        monkeypatch.chdir(directory)
+    else:
+        monkeypatch.setenv(marker, '1')
+    call(hub.root, *args, expected=2)
+    assert task.read_state('project', 'T-1') == before
+
+
+@pytest.mark.parametrize('old_class,qtype,expected', [('relay', 'naming', 'clarify'),
+                                                   ('owner-signed', 'security', 'owner-decision')])
+def test_stored_question_classes_are_mapped(hub, task, old_class, qtype, expected):
+    q = question(qtype) | {'id': 'legacy', 'class': old_class, 'status': 'open'}
+    with task.transaction('project', 'T-1') as txn:
+        txn.state['questions'] = [q]
+        txn.emit('fixture', {'set': {'questions': [q]}})
+    assert call(hub.root, 'pending')['questions'][0]['class'] == expected
+
+
+def test_owner_decision_is_never_default_answered(engine_env, hub):
+    factory, store, now, *_ = engine_env
+    engine = factory()
+    ask(hub, question('security') | {'default': 'A'})
+    engine.tick(now)
+    state = store.read_state('project', 'T-1')
+    assert state['status'] == 'needs-you' and not state.get('answers')
+    assert state['questions'][0]['status'] == 'open'
+
+
+def test_answer_without_option_records_owner_free_text(hub, task):
+    q = ask(hub, question('security'))
+    value = call(hub.root, 'answer', 'project', 'T-1', q['id'], '--quote', 'Use the existing plan')['answer']
+    assert value['quote'] == value['answer'] == 'Use the existing plan'
+    assert task.read_events('project', 'T-1')[-1].data['record'] == value
+
+
+@pytest.mark.parametrize('questions', [{}, [{'id': 'q'}], [['bad']], None,
+    [{'id': 'q', 'options': []}, {'id': 'q', 'options': []}]])
+def test_answer_rejects_malformed_stored_questions(hub, task, questions):
+    with task.transaction('project', 'T-1') as txn:
+        txn.state['questions'] = questions
+        txn.emit('fixture', {'set': {'questions': questions}})
+    call(hub.root, 'answer', 'project', 'T-1', 'q', '--quote', 'Choose A', expected=2)
+    assert not task.read_state('project', 'T-1').get('answers')
+
+
+def test_nonce_collision_cannot_replace_current_approval(hub, task, monkeypatch):
+    nonce = task.read_state('project', 'T-1')['approval']['nonce']
+    monkeypatch.setattr('approvals.secrets.token_hex', lambda _: nonce)
+    with task.transaction('project', 'T-1') as txn:
+        txn.state['status'] = 'awaiting-approval'
+        txn.emit('fixture', {'set': {'status': 'awaiting-approval'}})
+    before = task.read_state('project', 'T-1')
+    call(hub.root, 'approve', 'project', 'T-1', '--quote', 'approve', '--desktop', 'codex', expected=2)
+    assert task.read_state('project', 'T-1') == before
+
+
+def test_agent_cannot_impersonate_internal_plan_question(engine_env, hub):
+    factory, store, now, *_ = engine_env
+    engine = factory()
+    engine._question('project', 'T-1', question('plan-policy-changed'), {'run': 'fake', 'role': 'coder'})
+    engine.tick(now)
+    state = store.read_state('project', 'T-1')
+    assert state['status'] == 'needs-you' and state['questions'][0]['status'] == 'draft'
+    call(hub.root, 'approve-scope', 'project', 'T-1', '--add', 'extra.txt',
+         '--quote', 'Include extra.txt', '--desktop', 'codex')
+    engine.tick(now)
+    state = store.read_state('project', 'T-1')
+    assert state['questions'][0]['status'] == 'draft' and not state.get('runs')
+
+
+@pytest.mark.parametrize('desktop', ['claude', 'codex'])
+def test_timeline_displays_owner_quotes(hub, task, desktop):
+    with task.transaction('project', 'T-1') as txn:
+        txn.state['status'] = 'awaiting-approval'
+        txn.emit('fixture', {'set': {'status': 'awaiting-approval'}})
+    quote = '  Approve exactly this plan\nwith this scope  '
+    call(hub.root, 'approve', 'project', 'T-1', '--quote', quote, '--desktop', desktop)
+    q = ask(hub)
+    answer_quote = '  Choose B exactly  '
+    call(hub.root, 'answer', 'project', 'T-1', q['id'], '--quote', answer_quote,
+         '--option', 'B', '--desktop', desktop)
+    events = {e['kind']: e for e in app.timeline(hub.root)}
+    for kind, expected in [('approval.recorded', quote), ('answer.recorded', answer_quote)]:
+        assert events[kind]['quote'] == expected
+        assert events[kind]['desktop'] == desktop
+
+
+def test_hook_reads_pending_without_keys(hub, task, capsys):
+    assert not list(hub.root.rglob('owner.pub*'))
+    assert not list(hub.root.rglob('*.sig'))
+    with task.transaction('project', 'T-1') as txn:
+        txn.state['status'] = 'draft'
+        txn.emit('fixture', {'set': {'status': 'draft'}})
+    call(hub.root, 'request-approval', 'project', 'T-1')
+    q = ask(hub)
+    def runner(argv, **kwargs):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = bridge.main(argv[-2:], hub_root=hub.root, clock=lambda: NOW)
+        return SimpleNamespace(returncode=code, stdout=output.getvalue())
+    before = {p.relative_to(hub.root): p.read_bytes() for p in hub.root.rglob('*') if p.is_file()}
+    assert hook.main(root=hub.root, runner=runner) == 0
+    output = capsys.readouterr().out
+    assert 'T-1' in output and q['id'] in output
+    after = {p.relative_to(hub.root): p.read_bytes() for p in hub.root.rglob('*') if p.is_file()}
+    assert before == after
+
+
+def test_desktop_permissions_preserve_prompt_boundary():
+    settings = json.loads((ROOT / '.claude/settings.json').read_text(encoding='utf-8'))
+    assert set(settings['permissions']['allow']) == {
+        f'{shell}({python} bridge.py {command}*)'
+        for shell, python in [('Bash', '.venv/Scripts/python.exe'),
+                              ('PowerShell', '.venv\\Scripts\\python.exe')]
+        for command in ('status', 'pending', 'show')
+    }
+    assert set(settings['permissions']['deny']) == {
+        f'{tool}({directory}/**)' for tool in ('Edit', 'Write')
+        for directory in ('config', 'projects', 'runtime')
+    }
+    assert 'owner_console' not in json.dumps(settings)
+    hook_config = settings['hooks']['UserPromptSubmit'][0]['hooks'][0]
+    assert hook_config == {'type': 'command', 'command': '.venv\\Scripts\\python.exe hooks\\pending.py', 'timeout': 10}
