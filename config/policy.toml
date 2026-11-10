@@ -1,0 +1,55 @@
+[hub]
+max_processes = 2
+max_dynamic = 1
+security_gate = "NOT PASS" # Informational; never grants permission.
+mode = "manual-trusted-approval"
+
+[paths]
+data_root = 'C:\Users\Natthawut.j\Desktop\ALI\multi-agent-hub-v2-data'
+owner_secret_dir = '%USERPROFILE%\.mah-v2-owner'
+deny = ['C:\Users\Natthawut.j\Desktop\ALI\multi-agent-hub', 'C:\Users\Natthawut.j\Desktop\ALI\worktrees']
+max_path_len = 200
+
+[scope]
+ignored_artifact_globs = ["**/__pycache__/**", "**/*.pyc", ".pytest_cache/**", "**/.pytest_cache/**"]
+
+[caps]
+coder_tester_rounds = 3
+review_fix_cycles = 1
+respawn_per_key = 1
+team_minutes = 60
+
+[quota]
+backoff_minutes = [15, 30, 60, 120, 240]
+max_attempts_per_episode = 5
+max_episodes_per_task_per_day = 3
+verified_reset_grace_minutes = 2
+
+[questions]
+relay_types = ["clarify", "naming", "choose-approach"]
+
+[routing.roles.planner]
+allowed_vendors = ["claude", "codex"]
+fallback = ["codex:gpt-6.1-sol", "claude:sonnet"]
+auto_fallback = false
+
+[routing.roles.coder]
+allowed_vendors = ["claude", "codex"]
+fallback = ["codex:gpt-6.1-sol", "claude:sonnet"]
+auto_fallback = false
+
+[routing.roles.tester]
+allowed_vendors = ["claude", "codex"]
+fallback = ["codex:gpt-6.1-sol", "claude:sonnet"]
+auto_fallback = false
+
+[routing.roles.reviewer]
+allowed_vendors = ["claude", "codex"]
+fallback = ["codex:gpt-6.1-sol", "claude:sonnet"]
+auto_fallback = false
+reviewer_must_differ = true
+
+[routing.roles.doc-keeper]
+allowed_vendors = ["claude", "codex"]
+fallback = ["codex:gpt-6.1-sol", "claude:sonnet"]
+auto_fallback = false

@@ -1,0 +1,26 @@
+# Python environment
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secrets (never commit)
+.env
+.env.*
+*.key
+*.pem
+secrets/
+owner-keys/
+
+# Runtime state, evidence and logs (Markdown state lives outside source control)
+runtime/
+projects/*/
+!projects/README.md
+*.log
+logs/
+
+# Worktrees belong in the external data root; ignore defensively if one lands here
+worktrees/
+
+# Streamlit local config
+.streamlit/secrets.toml
