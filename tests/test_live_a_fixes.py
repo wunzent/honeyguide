@@ -81,6 +81,61 @@ def test_every_init_is_checked(live_a_init):
     assert _tool_violation([unsafe, live_a_init], ["Read", "Glob", "Grep"])
 
 
+@pytest.mark.parametrize("argv", [[], ["--disable-slash-commands"]])
+@pytest.mark.parametrize("field,value", [(None, None), ("slash_commands", ["fixture"]),
+    ("skills", ["fixture"]), ("slash_commands", None), ("skills", None),
+    ("slash_commands", "missing"), ("skills", "missing")])
+def test_missing_terminal_requires_flag_and_empty_lists(live_a_init, argv, field, value):
+    del live_a_init["terminal_slash_commands"]
+    if value == "missing":
+        del live_a_init[field]
+    elif field:
+        live_a_init[field] = value
+    violations = _tool_violations([live_a_init], ["Read", "Glob", "Grep"], argv)
+    assert ("terminal_slash_commands" in violations) is (not argv or field is not None)
+
+
+def test_hooks_without_init_and_multiple_hooks(live_a_init):
+    hooks = [{"type": "system", "subtype": name} for name in ("hook_started", "hook_response", "hook_started")]
+    assert _tool_violations(hooks, []) == {"hooks_ran": 3, "init": 0}
+    assert _tool_violations([live_a_init, *hooks], ["Read", "Glob", "Grep"]) == {"hooks_ran": 3}
+
+
+@pytest.mark.parametrize("disabled", [True, False])
+def test_missing_terminal_uses_worker_argv(runtime, monkeypatch, disabled):
+    monkeypatch.setenv("FAKE_SCENARIO", "missing_terminal")
+    runner, _ = runtime
+    if not disabled:
+        adapter = runner.adapters["claude"]
+        build = adapter.build
+        def without_disable(*args, **kwargs):
+            spec = build(*args, **kwargs)
+            return replace(spec, argv=[arg for arg in spec.argv if arg != "--disable-slash-commands"])
+        monkeypatch.setattr(adapter, "build", without_disable)
+    run_id = start(runtime, "claude")
+    assert finished(runner, run_id).status == ("ok" if disabled else "failed")
+    assert any(e.kind == "security.tool_violation" for e in runner.store.read_events("project", "T-1")) is (not disabled)
+
+
+@pytest.mark.parametrize("scenario", ["unknown_option", "invalid_value", "invalid_argument"])
+def test_isolation_unsupported_blocks_without_retry(engine_env, monkeypatch, scenario):
+    factory, store, now, *_ = engine_env
+    propose(store.root, "coder", "claude", "sonnet")
+    monkeypatch.setenv("FAKE_SCENARIO", scenario)
+    engine = factory()
+    monkeypatch.setattr(engine.worktrees, "apply_patch", lambda *args: pytest.fail("unsupported isolation applied patch"))
+    state = drive(engine, store, now, wanted="needs-you")
+    assert state["needs_run"] is False and len(state["runs"]) == 1
+    run_id, run = next(iter(state["runs"].items()))
+    assert run["status"] == "failed" and run["reason"] == "claude_isolation_unsupported"
+    assert run["argv"][run["argv"].index("--setting-sources") + 1] == ""
+    assert (store.task_dir("project", "T-1") / "runs" / run_id / "result.md").read_text() == ""
+    engine.tick(now)
+    events = store.read_events("project", "T-1")
+    assert sum(e.kind == "spawn.started" for e in events) == 1
+    assert any(e.kind == "run.blocked" and e.data["reason"] == "claude_isolation_unsupported" for e in events)
+
+
 @pytest.mark.parametrize("vendor", ["claude", "codex"])
 def test_trailing_null_session_survives_runner(runtime, monkeypatch, vendor):
     runner, _ = runtime
@@ -332,6 +387,18 @@ def test_latest_proposal_on_quota_resume(engine_env, monkeypatch, tmp_path, vend
         txn.state["resume_ready"] = True
         txn.emit("fixture.resume", {"set": {"resume_ready": True}})
     engine.tick(now)
+    if change_model:
+        state = store.read_state("project", "T-1")
+        assert state["status"] == "needs-you" and not state["resume_ready"]
+        assert len(state["runs"]) == 1 and not log.exists()
+        question = state["questions"][-1]
+        assert question["class"] == "owner-decision" and question["blocking"]
+        assert question["title"] == "Resume cannot keep the original vendor/model — approve a fresh session?"
+        assert len(question["options"]) == 2 and question["default"] == "none"
+        assert sum(e.kind == "session.resume_refused" for e in store.read_events("project", "T-1")) == 1
+        engine.tick(now)
+        assert not log.exists() and len(store.read_state("project", "T-1")["runs"]) == 1
+        return
     wait_until(log.exists)
     argv = json.loads(log.read_text())
     assert (SESSION in argv) is (not change_model)
@@ -375,7 +442,8 @@ def test_structured_usage_keeps_identifiers_and_scrubs_prose(runtime, monkeypatc
 
 
 @pytest.mark.parametrize("scenario", ["extra_tools", "extra_mcp", "missing_init", "extra_slash_commands",
-                                      "extra_terminal_slash_commands", "extra_skills", "extra_plugins", "missing_key"])
+                                      "extra_terminal_slash_commands", "extra_skills", "extra_plugins", "missing_key",
+                                      "hook_started", "hook_response", "missing_terminal_slash", "missing_terminal_skills"])
 @pytest.mark.parametrize("role", ["coder", "reviewer"])
 def test_tool_violation_fails_closed(engine_env, monkeypatch, scenario, role):
     factory, store, now, *_ = engine_env
@@ -402,10 +470,15 @@ def test_tool_violation_fails_closed(engine_env, monkeypatch, scenario, role):
     expected = {"extra_tools": {"tools": 6}, "extra_mcp": {"mcp_servers": 1}, "missing_init": {"init": 0},
                 "extra_slash_commands": {"slash_commands": 1},
                 "extra_terminal_slash_commands": {"terminal_slash_commands": 1},
-                "extra_skills": {"skills": 1}, "extra_plugins": {"plugins": 1}, "missing_key": {"skills": -1}}
+                "extra_skills": {"skills": 1}, "extra_plugins": {"plugins": 1}, "missing_key": {"skills": -1},
+                "hook_started": {"hooks_ran": 1}, "hook_response": {"hooks_ran": 1},
+                "missing_terminal_slash": {"terminal_slash_commands": -1, "slash_commands": 1},
+                "missing_terminal_skills": {"terminal_slash_commands": -1, "skills": 1}}
     assert violation.data["fields"] == expected[scenario]
     assert "fixture-agent" not in json.dumps(violation.data)
     assert "./fixture" not in json.dumps(violation.data)
+    assert "fixture-private" not in json.dumps(violation.data)
+    assert violation.data["hook_events"] == ([scenario] if scenario.startswith("hook_") else [])
 
 
 @pytest.mark.parametrize("tools,servers,violation", [

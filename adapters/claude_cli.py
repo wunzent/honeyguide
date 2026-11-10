@@ -12,6 +12,10 @@ from adapters.base import (Availability, InvalidResumeSession, InvocationSpec, O
 from state_writer import atomic_write_text
 
 
+# PENDING LIVE VERIFICATION: if the CLI rejects empty, the run fails (no fallback)
+CLAUDE_SETTING_SOURCES = ""
+
+
 def _limited(node: dict) -> bool:
     return (any(node.get(key) is True for key in ("is_limited", "is_rate_limited", "limited", "reached"))
             or node.get("status") in {"rejected", "limited", "reached", "rate_limited"})
@@ -62,8 +66,11 @@ class ClaudeAdapter:
         if route.vendor != self.vendor:
             raise ValueError("Route vendor mismatch")
         settings = run_dir / "claude-settings.json"
-        atomic_write_text(settings, json.dumps({"permissions": {
-            "deny": ["Edit", "Write", "Bash", "PowerShell"]}}), retries=10, backoff=0.01)
+        atomic_write_text(settings, json.dumps({
+            "disableAllHooks": True, "enableAllProjectMcpServers": False,
+            "permissions": {"deny": ["Edit", "Write", "Bash", "PowerShell", "NotebookEdit",
+                                     "WebFetch", "WebSearch", "Agent", "Task"]},
+        }), retries=10, backoff=0.01)
         tools = tuple(tool for capability, names in (("read", ("Read",)), ("search", ("Glob", "Grep")))
                       if capability in template.capabilities for tool in names)
         if not tools:
@@ -75,7 +82,8 @@ class ClaudeAdapter:
             "--tools", ",".join(tools), "--strict-mcp-config", "--disable-slash-commands",
             "--allowedTools", ",".join(tools), "--disallowedTools",
             "Bash,PowerShell,Edit,Write,NotebookEdit,Agent,Task,WebFetch,WebSearch",
-            "--permission-mode", "default", "--settings", str(settings),
+            "--permission-mode", "default", "--setting-sources", CLAUDE_SETTING_SOURCES,
+            "--settings", str(settings),
         ]
         if route.max_budget_usd is not None:
             argv += ["--max-budget-usd", str(route.max_budget_usd)]
@@ -103,7 +111,12 @@ class ClaudeAdapter:
         limited = [event for event in rate_events if any(_limited(node) for node in _dicts(event))]
         text = scrub(json.dumps(errors) + "\n" + stderr_tail).replace("_", " ")
         # PENDING VERIFICATION (LIVE-A/LIVE-E): provider error wording and reset fields.
-        if exit_code == 401 or re.search(r"\b(?:not logged in|login|authentication|401|invalid api key)\b", text, re.I):
+        unsupported = bool(re.search(
+            r"\b(?:unknown option|unrecognized option|invalid (?:option|value|argument|settings? sources?))\b"
+            r"|\b(?:option|argument)\b[^\r\n]*\binvalid\b", stderr_tail, re.I))
+        if unsupported:
+            status = "failed"
+        elif exit_code == 401 or re.search(r"\b(?:not logged in|login|authentication|401|invalid api key)\b", text, re.I):
             status = "auth_error"
         elif exit_code == 429 or limited or re.search(r"\b(?:usage limit|rate limit|429|quota)\b", text, re.I):
             status = "quota_limited"
@@ -118,8 +131,9 @@ class ClaudeAdapter:
         result = final.get("result", "")
         usage = final.get("usage", {})
         return Outcome(status, session, reset, "claude-stream" if reset else None,
-                       scrub(result) if isinstance(result, str) else "",
+                       scrub(result) if isinstance(result, str) and not unsupported else "",
                        usage if isinstance(usage, dict) else {},
+                       reason="claude_isolation_unsupported" if unsupported else None,
                        session_invalid=any(node.get("session_invalid") is True for node in nodes))
 
     def availability(self, run: Callable[[list[str]], tuple[int, str]]) -> Availability:

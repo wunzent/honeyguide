@@ -60,6 +60,57 @@ Open notes (low, owner decision): N1 a resume whose route vendor/model changed s
 event (not needs-you); N2 benign `session_id: null` also emits `session.invalid` (noise only).
 Live confirmation of F3/L4/F4 → `docs/LIVE-A-RERUN-PROCEDURE.md` (needs separate approval).
 
+## LIVE-A re-run T-2 — 2026-11-10 17:09–17:11 (owner approval: "APPROVED — LIVE-A RE-RUN ONLY…")
+No harness: routes via `bridge.py propose-route` (coder codex/gpt-6.1-sol/low; reviewer claude/sonnet/low, budget $0.50).
+Plan deviation (narrower): T-2 plan = "create hello.txt" instead of "append world" (target `main` has no hello.txt; allowed_paths = hello.txt).
+
+| Check | Result | Evidence |
+|---|---|---|
+| R1 Claude lockdown | **FAIL → correctly failed closed.** Real init under `--tools Read,Glob,Grep --strict-mcp-config --disable-slash-commands`: tools = **Glob, Grep, Read only** ✔, mcp_servers 0 ✔, slash_commands 0 ✔, skills 0 ✔, agents 27 (allowed: no Agent/Task) — but **plugins = 16 still loaded** ✘ and `terminal_slash_commands` key **absent** ✘ (unverifiable). Run marked failed, result discarded, `security.tool_violation` {terminal_slash_commands: -1, plugins: 16}, task → needs-you | run `R-20261110101044-67be`, events 24–26 |
+| R2 Codex launch | **PASS** — exe `…\nvm\v26.12.1\node.exe`, argv contains `codex.js` | event 10, meta.md |
+| R3 routing | **PASS** — coder and reviewer routes = proposals; Claude budget 0.5 in route; no `route.rejected` | events 6–9, 19–20 |
+| R4 session ids | **PASS** — verbatim UUIDs stored (`01a1c4ef-…`, `8000bd51-…`) | events 13, 25 |
+| R5 meta.md | **PASS** — argv, prompt_sha256, body_sha256, executable, budget; no prompt text, no run_token, no secrets | both runs |
+| R6 no unauthorized change | **PASS** — no commit (blocked before commit, as required); `hello.txt` only in worktree `hub/T-2`; target `main` 875b7f3, v1 75f4561/19 and v2 tracked files unchanged; 0 hub processes left | before/after |
+Cost: Claude **$0.0305** (3 tool calls: Read, Glob, Read). Codex coder ok in ~32 s; Python tests PASS (0.9 s).
+
+Remaining issue (blocks Claude workers): plugins still load with these flags. Plugins can register hooks that run
+commands inside the Claude process regardless of `--tools`, so this is a real gap, not noise. Corrective options (need
+owner approval + a live check): (a) add `--bare` (skips hooks, plugins, LSP; must verify login still works);
+(b) `--setting-sources` restricted so user-enabled plugins are not loaded; (c) treat a missing `terminal_slash_commands`
+key as empty only when `--disable-slash-commands` was passed (owner decision; currently = violation).
+
+Follow-up recorded (owner decision N1, 2026-11-10, separate approved change): when a resume cannot preserve the original
+vendor/model, go to **needs-you** instead of starting a fresh session. N2 accepted (log noise, no fix).
+
+## Fix round: Claude worker isolation (R1) + N1 — 2026-11-10
+Offline investigation: `--bare` rejected (help: OAuth/keychain never read; needs ANTHROPIC_API_KEY/apiKeyHelper — owner
+forbids keys). Plugin sources: 2 enabled in user settings, ~13 account-synced (`~/.claude/plugins/synced`); plugins with
+hooks exist (postman, understand-anything, one synced). Whether `--setting-sources` excludes account-synced plugins
+cannot be proven offline.
+Implemented (Codex): `--setting-sources ""` (PENDING LIVE) + worker-local `--settings` (`disableAllHooks: true`,
+`enableAllProjectMcpServers: false`, deny list); invalid option/value → failed `claude_isolation_unsupported`, needs-you,
+no fallback; init check: plugins must be empty, any `hook_*` event → `hooks_ran` violation, missing
+`terminal_slash_commands` accepted only with `--disable-slash-commands` + empty slash_commands + empty skills; N1: resume
+with a different vendor/model → owner-decision needs-you, `session.resume_refused`, no spawn.
+Evidence: full suite **882/882** (orchestrator); Claude review **PASS**; secret scan 0; v1 unchanged; owner
+`~/.claude/settings.json` untouched. Open low notes: answer to the `resume-route-changed` question is not consumed yet
+(owner must reset the checkpoint); isolation-unsupported regex should only apply on non-zero exit without a result event.
+Live proof still required: minimal R1 live check (separate approval).
+
+## LIVE-E — owner decision 2026-11-10 (explicit revision of Phase 1 acceptance)
+- **SIMULATED RECOVERY: PASS** — automated quota-recovery tests and controlled failure simulations pass in the full suite
+  (852/852 at `4bfb5d0`: verified-reset scheduling, bounded backoff 15/30/60/120/240 then needs-you, per-attempt keys,
+  `scheduler.py --once` without an AI session).
+- **REAL QUOTA RECOVERY: DEFERRED / NOT LIVE VERIFIED** — to be verified when a genuine quota event occurs; quotas are
+  never exhausted on purpose. This deferral does not mean the original LIVE-E requirement has passed.
+
+## In-progress migration bundle — 2026-11-10
+Docs commit `81b2dcdc336f0fce901bb0934dc25451998e9faf` (migration guide + session audit). Bundle
+`C:\Users\Natthawut.j\Desktop\ALI\multi-agent-hub-v2.bundle` (188 KB, `master` @ `81b2dcd`, 5 commits, 55 files):
+`git bundle verify` → okay, complete history; test clone OK; no `.venv`/caches/runtime/keys/settings.local; history
+secret scan 0 (only the known test string "Bearer test-free-text-secret"). Not included: uncommitted isolation/N1 fix round.
+
 AC status after LIVE-A: AC-1 **PASS (live)**, AC-2 **PASS (live)**; AC-3/6/7/8 unchanged (pending LIVE-B/C/D/E). Security Gate NOT PASS.
 
 The sections below are the original Phase 1 record (signing era) and are kept as history.

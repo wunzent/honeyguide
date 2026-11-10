@@ -540,6 +540,34 @@ def test_invalid_checkpoint_resume_never_starts_fresh(engine_env, monkeypatch, v
     assert not any(e.kind.startswith("spawn.") for e in events)
 
 
+@pytest.mark.parametrize("vendor", ["claude", "codex"])
+def test_checkpoint_vendor_change_requires_owner_without_spawn(engine_env, monkeypatch, vendor):
+    factory, store, now, *_ = engine_env
+    engine = factory()
+    original = "codex" if vendor == "claude" else "claude"
+    checkpoint = {"session_id": "previous-session", "role": "coder", "run": "fixture-run",
+                  "route": {"vendor": original, "model": "sonnet" if original == "claude" else "gpt-6.1-sol",
+                            "effort": "low"}, "resume_key": "T-1:coder:1:q1"}
+    engine._update("project", "T-1", "fixture.resume", {
+        "status": "waiting-quota", "resume_ready": True, "checkpoint": checkpoint,
+        "route_proposals": {"coder": {"vendor": vendor,
+            "model": "sonnet" if vendor == "claude" else "gpt-6.1-sol", "effort": "low"}}})
+    monkeypatch.setattr(engine.runner, "start", lambda *args, **kwargs: pytest.fail("changed vendor spawned"))
+    engine.tick(now)
+    engine.tick(now)
+    state = store.read_state("project", "T-1")
+    assert state["status"] == "needs-you" and state["needs_run"] is False and not state.get("runs")
+    assert state["checkpoint"] == checkpoint
+    question = state["questions"][-1]
+    assert question["title"] == "Resume cannot keep the original vendor/model — approve a fresh session?"
+    assert question["class"] == "owner-decision" and question["blocking"]
+    assert len(question["options"]) == 2 and question["default"] == "none"
+    assert (store.task_dir("project", "T-1") / "questions.md").exists()
+    events = store.read_events("project", "T-1")
+    assert sum(e.kind == "session.resume_refused" for e in events) == 1
+    assert not any(e.kind.startswith("spawn.") for e in events)
+
+
 def test_question_draft_class_and_atomic_mirror(engine_env, monkeypatch):
     factory, store, now, _, _, notices = engine_env
     monkeypatch.setenv('FAKE_SCENARIO', 'ask')

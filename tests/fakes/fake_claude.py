@@ -18,6 +18,14 @@ def main() -> int:
         return 0
     sys.stdin.read()
     scenario = os.environ.get("FAKE_SCENARIO", "ok")
+    if scenario in {"unknown_option", "invalid_value", "invalid_argument"}:
+        message = {
+            "unknown_option": "unknown option '--setting-sources'",
+            "invalid_value": "invalid value '' for '--setting-sources'",
+            "invalid_argument": "error: option '--setting-sources <sources>' argument '' is invalid",
+        }[scenario]
+        print(message, file=sys.stderr)
+        return 2
     if scenario == "slow":
         time.sleep(float(os.environ.get("FAKE_SLEEP", "30")))
     session = os.environ.get("FAKE_SESSION_ID", "claude-session")
@@ -37,8 +45,17 @@ def main() -> int:
             init[field] = [{"name": "fixture", "path": "./fixture"}] if field == "plugins" else ["fixture"]
     if scenario == "missing_key":
         del init["skills"]
+    if scenario.startswith("missing_terminal"):
+        del init["terminal_slash_commands"]
+        if scenario == "missing_terminal_slash":
+            init["slash_commands"] = ["fixture"]
+        if scenario == "missing_terminal_skills":
+            init["skills"] = ["fixture"]
     if scenario != "missing_init":
         print(json.dumps(init))
+    if scenario in {"hook_started", "hook_response"}:
+        print(json.dumps({"type": "system", "subtype": scenario,
+                          "hook_name": "fixture-private-hook", "command": "fixture-private-command"}))
     failed = scenario in {"fail", "quota_reset", "quota_noreset", "auth"}
     result = {
         "fail": "Task failed", "quota_reset": "Usage limit reached",

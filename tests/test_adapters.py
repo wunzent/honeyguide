@@ -79,7 +79,12 @@ def test_build(tmp_path, vendor, role, resume):
         deny = spec.argv[spec.argv.index("--disallowedTools") + 1].split(",")
         assert set(deny) == {"Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "Agent", "Task", "WebFetch", "WebSearch"}
         settings = Path(spec.argv[spec.argv.index("--settings") + 1])
-        assert json.loads(settings.read_text())["permissions"]["deny"] == ["Edit", "Write", "Bash", "PowerShell"]
+        data = json.loads(settings.read_text())
+        assert set(data["permissions"]["deny"]) == set(deny)
+        assert data["disableAllHooks"] is True and data["enableAllProjectMcpServers"] is False
+        assert settings == tmp_path / "run" / "claude-settings.json"
+        from adapters.claude_cli import CLAUDE_SETTING_SOURCES
+        assert spec.argv[spec.argv.index("--setting-sources") + 1] == CLAUDE_SETTING_SOURCES == ""
         assert spec.argv[spec.argv.index("--max-budget-usd") + 1] == "0.5"
         assert spec.argv[spec.argv.index("--permission-mode") + 1] == "default"
         assert spec.stdin_text == "Follow the system instructions. Work only inside the current directory."

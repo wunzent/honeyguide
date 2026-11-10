@@ -109,15 +109,25 @@ def _terminate_tree(pid: int, create_time: float, run_token: str, exe: str | Non
         raise PolicyError("could not stop owned process tree") from exc
 
 
-def _tool_violations(events: list[dict], allowed: list[str]) -> dict[str, int]:
+def _tool_violations(events: list[dict], allowed: list[str], argv: list[str] | None = None) -> dict[str, int]:
     inits = [event for event in events if event.get("type") == "system" and event.get("subtype") == "init"]
-    if not inits:
-        return {"init": 0}
     violations = {}
+    hooks = [event for event in events if event.get("type") == "system"
+             and isinstance(event.get("subtype"), str) and event["subtype"].startswith("hook_")]
+    if hooks:
+        violations["hooks_ran"] = len(hooks)
+    if not inits:
+        return {**violations, "init": 0}
     forbidden = {"Agent", "Task", "Bash", "PowerShell", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch"}
     for event in inits:
         for field in ("tools", "mcp_servers", "slash_commands", "terminal_slash_commands", "skills", "plugins", "agents"):
             value = event.get(field)
+            # LIVE-A 2.1.312: T-1 exposed terminal_slash_commands (144 slash commands,
+            # 108 skills); T-2 omitted it under --disable-slash-commands with both lists empty.
+            if (field == "terminal_slash_commands" and field not in event
+                    and "--disable-slash-commands" in (argv or [])
+                    and event.get("slash_commands") == [] and event.get("skills") == []):
+                continue
             if not isinstance(value, list):
                 violations[field] = -1  # Missing or unverifiable; never record values.
             elif field in {"slash_commands", "terminal_slash_commands", "skills", "plugins"} and value:
@@ -141,8 +151,8 @@ def _tool_violations(events: list[dict], allowed: list[str]) -> dict[str, int]:
     return violations
 
 
-def _tool_violation(events: list[dict], allowed: list[str]) -> bool:
-    return bool(_tool_violations(events, allowed))
+def _tool_violation(events: list[dict], allowed: list[str], argv: list[str] | None = None) -> bool:
+    return bool(_tool_violations(events, allowed, argv))
 
 
 class Runner:
@@ -496,16 +506,27 @@ class Runner:
             session_invalid=outcome.session_invalid or (
                 outcome.session_id is not None and validate_session_id(outcome.session_id) is None),
         )
-        violations = (_tool_violations(events, record.get("allowed_tools", []))
+        violations = (_tool_violations(events, record.get("allowed_tools", []), record.get("argv", []))
                       if record["route"]["vendor"] == "claude" else {})
         if violations:
-            outcome = replace(outcome, status="failed", result_text="", reason="tool_restriction_violated")
+            outcome = replace(outcome, status="failed", result_text="",
+                              reason=outcome.reason if outcome.reason == "claude_isolation_unsupported"
+                              else "tool_restriction_violated")
             if record["status"] == "running":
                 with self.store.transaction(project, task) as txn:
                     txn.state.update(status="needs-you", needs_run=False)
                     txn.emit("security.tool_violation", {"run": run_id, "reason": outcome.reason,
                              "fields": violations,
+                             "hook_events": sorted({event["subtype"] for event in events
+                                 if event.get("type") == "system" and isinstance(event.get("subtype"), str)
+                                 and event["subtype"].startswith("hook_")}),
                              "set": {"status": "needs-you", "needs_run": False}})
+        if outcome.reason == "claude_isolation_unsupported" and record["status"] == "running":
+            with self.store.transaction(project, task) as txn:
+                changes = {"status": "needs-you", "needs_run": False}
+                txn.state.update(changes)
+                txn.emit("security.isolation_unsupported", {"run": run_id, "reason": outcome.reason,
+                                                          "set": changes})
         if outcome.session_invalid and record["status"] == "running":
             self._event(project, task, "session.invalid", {"reason": "invalid session identifier"}, run_id, {})
         self._write(directory / "result.md", outcome.result_text)

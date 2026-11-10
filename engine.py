@@ -429,6 +429,8 @@ class Engine:
                     (directory / "result.md").exists()
                     or output.exists()
                     and output.stat().st_size
+                    or (directory / "stderr.txt").exists()
+                    and (directory / "stderr.txt").stat().st_size
                 ):
                     outcome = self._poll(project, task, run_id)
                     if outcome is not None:
@@ -963,6 +965,22 @@ class Engine:
                     proposal,
                     project=project, task=task,
                 )
+                if resume and resume_route and any(
+                    resume_route.get(key) != getattr(route, key) for key in ("vendor", "model")
+                ):
+                    self._question(project, task, {
+                        "title": "Resume cannot keep the original vendor/model — approve a fresh session?",
+                        "context": (f"The checkpoint uses {resume_route.get('vendor')}:{resume_route.get('model')}; "
+                                    f"routing selected {route.vendor}:{route.model}."),
+                        "impact": "No worker starts until the owner decides whether to lose session continuity.",
+                        "options": [{"label": "approve", "consequence": "Allow a fresh session on the selected route"},
+                                    {"label": "keep-original", "consequence": "Wait for the original vendor/model"}],
+                        "default": "none", "type": "resume-route-changed",
+                    }, {"run": key, "role": "engine"})
+                    self._update(project, task, "session.resume_refused",
+                                 {"status": "needs-you", "needs_run": False, "resume_ready": False},
+                                 reason="resume route changed")
+                    continue
                 config = self._project(project)
                 worktree = self.worktrees.create(
                     self.policy, project, task, Path(config["repo"]), config["base_ref"]
@@ -983,10 +1001,6 @@ class Engine:
                 session = (
                     state.get("checkpoint", {}).get("session_id") if resume else None
                 )
-                if resume_route and any(resume_route.get(key) != getattr(route, key) for key in ("vendor", "model")):
-                    if session is not None:
-                        self._update(project, task, "session.resume_refused", {}, reason="resume route changed")
-                    session = None
                 original = self.runner.adapters[route.vendor]
                 if session is not None:
                     self.runner.adapters[route.vendor] = _ResumeAdapter(
