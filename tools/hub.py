@@ -362,7 +362,8 @@ def sync(args):
                     expected[ROOT / target / relative] = data
     drift, conflicts = [], []
     for path, data in expected.items():
-        if not path.exists() or path.read_bytes() != data:
+        # git may check files out with CRLF on Windows; line endings alone are not drift
+        if not path.exists() or path.read_bytes().replace(b"\r\n", b"\n") != data.replace(b"\r\n", b"\n"):
             drift.append(path)
             if path.exists() and MARKER.encode() not in path.read_bytes()[:4096]:
                 conflicts.append(path)
