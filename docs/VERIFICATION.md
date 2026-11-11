@@ -225,6 +225,28 @@ quota-fallback `_route` call catches only `RouteError`; no test for non-scalar k
 Desktop delegation (Codex launched by the Desktop orchestrator) does not go through this router yet; that alignment is the
 next change.
 
+## Desktop delegation alignment — 2026-11-11 (owner directive "ORCHESTRATOR-CONTROLLED MODEL SELECTION")
+The orchestrator now chooses role, tier, vendor, model and effort; no launcher default. `delegation.py check` validates
+the exact route with the Hub router (`resolve`, `allow_premium=False`, same policy and catalog as Hub workers) and refuses
+any substitution, unverified or premium route, effort above the tier default without an escalation reason (max `high`),
+complex below default, and short reasons. `model_router.default_effort` is shared with `Engine._route` (behaviour unchanged;
+parity test for coder, tester, doc-keeper at every tier). `tools/run-codex-step.ps1` has no default model: refusal = exit 2,
+Codex not started; it passes exactly `-m <model> -c model_reasoning_effort=<effort>`, records requested and actual
+model/effort in `runtime/desktop-delegations.jsonl`, and exits 3 if the session record is missing or differs. Native
+subagents: explicit model, `check --vendor claude`, `record`, `verify-claude`.
+Evidence: targeted 74/74 (launcher test ran against a fake Codex, not skipped); full suite **999/999**; Claude reviewer
+(Sonnet) **PASS with caveats**; scope and secret scans PASS; v1 unchanged. Step 24 itself ran through the checked launcher:
+requested and actual `gpt-6.1-sol`/medium, 1.36M tokens (high for its size).
+Open review notes (not fixed; a fix round needs owner approval):
+- Medium: the launcher needs PowerShell 7.3+ (`[Convert]::ToHexString`, JSON argument quoting); on 5.1 it fails closed
+  before the start record.
+- Medium: a failure after `delegation.start` (codex missing, verify error) leaves no `delegation.end` record (still a
+  non-zero exit).
+- Low: `$matches` shadows an automatic variable; non-`RouteError` failures in `check` give a traceback (exit 1, launcher
+  still refuses); `verify_codex` reads only the last `turn_context`; the tier is caller-supplied, not tied to a plan;
+  prompt hash may differ from bytes sent for non-ASCII briefs; the routine-only rule is unreachable while Luna/Haiku are
+  unverified; no launcher success-path (exit 0) test.
+
 ## LIVE-E — owner decision 2026-11-10 (explicit revision of Phase 1 acceptance)
 - **SIMULATED RECOVERY: PASS** — automated quota-recovery tests and controlled failure simulations pass in the full suite
   (852/852 at `4bfb5d0`: verified-reset scheduling, bounded backoff 15/30/60/120/240 then needs-you, per-attempt keys,

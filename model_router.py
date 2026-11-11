@@ -17,6 +17,13 @@ class RouteError(ValueError):
 _EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 
 
+def default_effort(policy: Policy, role: str, tier: str) -> str:
+    efforts = ["low", "medium", "high"]
+    effort = policy.raw["routing"]["tiers"][tier]
+    cap = policy.routing_roles[role].get("max_default_effort", "high")
+    return efforts[min(efforts.index(effort), efforts.index(cap))]
+
+
 def load_catalog(path: Path) -> dict:
     try:
         document = tomllib.loads(read_text_retry(Path(path)))

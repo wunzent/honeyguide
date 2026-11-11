@@ -847,10 +847,9 @@ class Engine:
                         ).ok
                     ):
                         vendor, model = alternate.split(":", 1)
-                efforts = ["low", "medium", "high"]
-                effort = self.policy.raw["routing"]["tiers"][tier["tier"]]
-                cap = self.policy.routing_roles[role].get("max_default_effort", "high")
-                effort = efforts[min(efforts.index(effort), efforts.index(cap))]
+                from model_router import default_effort
+
+                effort = default_effort(self.policy, role, tier["tier"])
                 if effort in self.catalog.get(vendor, {}).get(
                     "premium_efforts", ["xhigh", "max"]
                 ):
