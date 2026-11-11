@@ -1,0 +1,13 @@
+[codex]
+verified = ["gpt-6.1-sol"]
+unverified = ["gpt-6-luna"]
+premium = []
+efforts = ["low", "medium", "high"]
+premium_efforts = ["xhigh", "max"]
+
+[claude]
+verified = ["sonnet", "opus"]
+unverified = ["haiku"]
+premium = ["opus"]
+efforts = ["low", "medium", "high"]
+premium_efforts = ["xhigh", "max"]

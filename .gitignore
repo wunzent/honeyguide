@@ -12,20 +12,17 @@ __pycache__/
 secrets/
 owner-keys/
 
-# Runtime state, evidence and logs (Markdown state lives outside source control)
+# Task workspaces: agent records, checkpoints, worker output (local, readable, not committed)
+work/
+
+# Local runtime and logs
 runtime/
 projects/*/
-!projects/README.md
 *.log
 logs/
-
-# Worktrees belong in the external data root; ignore defensively if one lands here
 worktrees/
 
-# Streamlit local config
-.streamlit/secrets.toml
-
-# Leftovers from the retired approval mechanism
+# Leftovers from the retired approval mechanism (owner key material stays local)
 config/owner.pub*
 config/*.sig
 config/manifest.json
