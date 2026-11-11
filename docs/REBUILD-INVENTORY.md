@@ -37,3 +37,9 @@ data root), `../mah-v2-liveb` (LIVE-B disposable env) - none modified.
   verification (actual model/effort from Codex session files; Claude model from the CLI) -> `models.toml`, `hub.py`.
 - v2 lesson: the `drive` no-progress window -> progress-based loop detection (`hub.py attempt`), no retry budget.
 - Native: Claude Code Agent tool + `.claude/agents`; Codex multi-agent (`features.multi_agent = true`) + `.codex/agents`.
+
+## Follow-up cleanup (owner: "ลบไฟล์ของเวอร์ชั่นก่อนหน้าออกให้หมด", 2026-11-11)
+Removed from the working tree: `docs/legacy/` (git history keeps it), ignored `projects/` (engine runtime data), `runtime/`,
+`config/` (old models/policy copies and retired signing key leftovers `owner.pub`, `owner.pub.old`, `policy.toml.sig`) and the
+untracked `docs/*.baseline.json`. All are in `v2-worktree.tar` of the backup. Not touched: v1, the backups and older bundles,
+`../multi-agent-hub-v2-data`, `../mah-v2-liveb`, `~/.mah-v2-owner`, global CLI configuration.

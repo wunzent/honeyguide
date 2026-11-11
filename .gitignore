@@ -17,12 +17,5 @@ work/
 
 # Local runtime and logs
 runtime/
-projects/*/
 *.log
 logs/
-worktrees/
-
-# Leftovers from the retired approval mechanism (owner key material stays local)
-config/owner.pub*
-config/*.sig
-config/manifest.json

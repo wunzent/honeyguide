@@ -38,4 +38,5 @@ To continue a task in the other vendor (quota, preference): "Continue task `<slu
 - Native subagent model/effort is not always reported back; records say `Unverified` instead of guessing.
 - Quota detection is text-based (usage-limit messages and exit codes); the handoff itself is the orchestrator's job.
 - Acceptance evidence: `docs/ACCEPTANCE.md`; research reuse: `docs/SKILLS-REUSE.md`.
-- History: `docs/legacy/` (old engine docs and evidence), `docs/WORKLOG.md`, `docs/REBUILD-INVENTORY.md`.
+- History: `docs/WORKLOG.md`, `docs/REBUILD-INVENTORY.md`. The previous version (engine, docs, evidence) is only in git
+  history before `1f1d677` and in the backup `ALI/multi-agent-hub-v2-backups/20261111-173509/`.
