@@ -7,7 +7,10 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tempfile
+import time
 import tomllib
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -37,7 +40,34 @@ def task_dir(task):
 
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(text.encode("utf-8") if isinstance(text, str) else text)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+
+
+@contextmanager
+def task_lock(directory):
+    path = directory / ".lock"
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            break
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                raise ValueError("timed out waiting for task lock: " + str(path))
+            time.sleep(0.05)
+    try:
+        os.close(descriptor)
+        yield
+    finally:
+        path.unlink()
 
 
 def cell(value):
@@ -56,7 +86,13 @@ def section(text, name, addition, replace=False):
 
 
 def checkpoint(task, name, text, replace=False):
-    path = task_dir(task) / "CHECKPOINT.md"
+    directory = task_dir(task)
+    with task_lock(directory):
+        update_checkpoint(directory, name, text, replace)
+
+
+def update_checkpoint(directory, name, text, replace=False):
+    path = directory / "CHECKPOINT.md"
     content = section(path.read_text(encoding="utf-8"), name, "- " + text, replace)
     content = re.sub(r"^Updated: .*", "Updated: " + now(), content, flags=re.M)
     write(path, content)
@@ -77,34 +113,40 @@ def new_agent(args, kind=None):
     directory = task_dir(args.task) / "agents"
     role = slug(args.role)
     number = 1
-    while (directory / f"{role}-{number}.md").exists():
-        number += 1
-    agent_id = f"{role}-{number}"
-    fields = {"Agent ID": agent_id, "Role": role, "Task": args.task,
+    fields = {"Agent ID": "", "Role": role, "Task": args.task,
               "Assignment": args.assignment, "Parent orchestrator": args.parent,
               "Vendor": args.vendor, "Kind": kind or args.kind,
               "Requested model": args.model, "Actual model": "Unverified",
               "Requested effort": args.effort, "Actual effort": "Unverified",
               "Skills": args.skills or "none", "Status": "planned",
               "Session / run": "Unknown", "Created": now()}
-    content = f"# Agent {agent_id}\n| Field | Value |\n|---|---|\n"
-    content += "".join(f"| {key} | {cell(value)} |\n" for key, value in fields.items())
-    content += "\n## Progress\n\n## Result\n\n## Blockers\n"
-    write(directory / (agent_id + ".md"), content)
-    return agent_id
+    while True:
+        agent_id = f"{role}-{number}"
+        fields["Agent ID"] = agent_id
+        content = f"# Agent {agent_id}\n| Field | Value |\n|---|---|\n"
+        content += "".join(f"| {key} | {cell(value)} |\n" for key, value in fields.items())
+        content += "\n## Progress\n\n## Result\n\n## Blockers\n"
+        try:
+            with (directory / (agent_id + ".md")).open("x", encoding="utf-8") as stream:
+                stream.write(content)
+            return agent_id
+        except FileExistsError:
+            number += 1
 
 
 def update_agent(task, agent_id, fields=None, entries=None):
-    path = task_dir(task) / "agents" / (slug(agent_id) + ".md")
-    if not path.is_file():
-        raise ValueError("unknown agent")
-    content = path.read_text(encoding="utf-8")
-    for key, value in (fields or {}).items():
-        pattern = r"^\| " + re.escape(key) + r" \| .* \|$"
-        content = re.sub(pattern, lambda m: f"| {key} | {cell(value)} |", content, flags=re.M)
-    for name, value in (entries or {}).items():
-        content = section(content, name, f"- {now()} {value}")
-    write(path, content)
+    directory = task_dir(task)
+    path = directory / "agents" / (slug(agent_id) + ".md")
+    with task_lock(directory):
+        if not path.is_file():
+            raise ValueError("unknown agent")
+        content = path.read_text(encoding="utf-8")
+        for key, value in (fields or {}).items():
+            pattern = r"^\| " + re.escape(key) + r" \| .* \|$"
+            content = re.sub(pattern, lambda m: f"| {key} | {cell(value)} |", content, flags=re.M)
+        for name, value in (entries or {}).items():
+            content = section(content, name, f"- {now()} {value}")
+        write(path, content)
 
 
 def events(path):
@@ -166,6 +208,9 @@ def validate_route(args):
 
 
 def delegate(args):
+    if args.write and not args.cwd:
+        print("REFUSED: --write requires explicit --cwd")
+        return 2
     refusal = validate_route(args)
     if refusal:
         print("REFUSED: " + refusal)
@@ -236,10 +281,12 @@ def attempt(args):
     normalized = re.sub(r"\d", "#", " ".join((args.action + "\n" + args.outcome).lower().split()))
     fingerprint = hashlib.sha256(normalized.encode()).hexdigest()
     path = directory / "attempts.jsonl"
-    previous = sum(e.get("fingerprint") == fingerprint for e in events(path)) if path.exists() else 0
-    with path.open("a", encoding="utf-8") as stream:
-        stream.write(json.dumps(dict(at=now(), fingerprint=fingerprint, action=args.action, outcome=args.outcome)) + "\n")
-    checkpoint(args.task, "Failures and attempted approaches", f"{now()} action: {args.action} | outcome: {args.outcome}")
+    with task_lock(directory):
+        previous = sum(e.get("fingerprint") == fingerprint for e in events(path)) if path.exists() else 0
+        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        content += json.dumps(dict(at=now(), fingerprint=fingerprint, action=args.action, outcome=args.outcome)) + "\n"
+        write(path, content)
+        update_checkpoint(directory, "Failures and attempted approaches", f"{now()} action: {args.action} | outcome: {args.outcome}")
     if previous:
         print(f"NO PROGRESS: same action and outcome seen {previous + 1} times; change approach or escalate")
         return 5
@@ -313,13 +360,14 @@ def sync(args):
                     pass
                 for target in (".claude", ".agents"):
                     expected[ROOT / target / relative] = data
-    drift = []
+    drift, conflicts = [], []
     for path, data in expected.items():
         if not path.exists() or path.read_bytes() != data:
             drift.append(path)
-            if not args.check:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(data)
+            if path.exists() and MARKER.encode() not in path.read_bytes()[:4096]:
+                conflicts.append(path)
+            elif not args.check:
+                write(path, data)
     for target in (".claude/agents", ".codex/agents", ".claude/skills", ".agents/skills"):
         for path in (ROOT / target).rglob("*"):
             if path.is_file() and path not in expected and MARKER.encode() in path.read_bytes()[:4096]:
@@ -327,8 +375,8 @@ def sync(args):
                 if not args.check:
                     path.unlink()
     for path in sorted(drift):
-        print(path.relative_to(ROOT).as_posix())
-    return 1 if args.check and drift else 0
+        print(("CONFLICT: " if path in conflicts else "") + path.relative_to(ROOT).as_posix())
+    return 1 if conflicts or (args.check and drift) else 0
 
 
 def parser():

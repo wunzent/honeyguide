@@ -95,6 +95,52 @@ def record(hub, agent_id="coder-1"):
     return (hub[0] / "work/sample/agents" / (agent_id + ".md")).read_text(encoding="utf-8")
 
 
+def parallel(hub, commands):
+    root, env, _ = hub
+    processes = [subprocess.Popen([sys.executable, "-B", str(root / "tools/hub.py"), *args],
+                                 cwd=root, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                 for args in commands]
+    outputs = []
+    for process in processes:
+        stdout, stderr = process.communicate(timeout=40)
+        assert process.returncode == 0, stdout + stderr
+        outputs.append(stdout.strip())
+    return outputs
+
+
+def test_parallel_agent_ids(hub):
+    args = ["agent", "new", "sample", "--role", "researcher", "--vendor", "codex", "--model", "gpt-6.1-sol",
+            "--effort", "low", "--assignment", "Read the logs", "--parent", "owner"]
+    ids = parallel(hub, [args] * 8)
+    assert set(ids) == {f"researcher-{number}" for number in range(1, 9)}
+    files = list((hub[0] / "work/sample/agents").glob("*.md"))
+    assert len(files) == 8
+    for agent_id in ids:
+        assert f"| Agent ID | {agent_id} |" in record(hub, agent_id)
+
+
+@pytest.mark.parametrize("operation", ["checkpoint", "update", "attempt"])
+def test_parallel_updates(hub, operation):
+    root, _, call = hub
+    lines = [f"Completed item {letter}" for letter in "abcdefgh"]
+    if operation == "update":
+        call("agent", "new", "sample", "--role", "coder", "--vendor", "codex", "--model", "gpt-6.1-sol",
+             "--effort", "low", "--assignment", "Implement", "--parent", "owner")
+        commands = [["agent", "update", "sample", "coder-1", "--progress", line] for line in lines]
+    elif operation == "attempt":
+        commands = [["attempt", "sample", "--action", line, "--outcome", "Failed"] for line in lines]
+    else:
+        commands = [["checkpoint", "sample", "--section", "Completed work", "--text", line] for line in lines]
+    parallel(hub, commands)
+    text = record(hub) if operation == "update" else (root / "work/sample/CHECKPOINT.md").read_text(encoding="utf-8")
+    for line in lines:
+        assert text.count(line) == 1
+    if operation == "attempt":
+        entries = [json.loads(line) for line in (root / "work/sample/attempts.jsonl").read_text().splitlines()]
+        assert {entry["action"] for entry in entries} == set(lines)
+    assert not (root / "work/sample/.lock").exists()
+
+
 def test_records_and_status(hub):
     root, _, call = hub
     cp = root / "work/sample/CHECKPOINT.md"
@@ -143,6 +189,14 @@ def test_refusals_start_nothing(hub, vendor, model, effort, reason, extra):
     assert not list((hub[0] / "work/sample/agents").iterdir())
 
 
+@pytest.mark.parametrize("vendor", ["codex", "claude"])
+def test_write_requires_explicit_cwd(hub, vendor):
+    fake(hub, vendor)
+    assert route(hub, vendor, extra=("--write",), expected=2) == "REFUSED: --write requires explicit --cwd\n"
+    assert not Path(hub[1]["FAKE_LOG"]).exists()
+    assert not list((hub[0] / "work/sample/agents").iterdir())
+
+
 def test_codex_verified_route(hub):
     fake(hub, "codex")
     summary = json.loads(route(hub, extra=("--write", "--cwd", str(hub[0]))))
@@ -179,7 +233,7 @@ def test_claude_route_and_permissions(hub):
     assert (hub[0] / "work/sample/agents/coder-1.last.md").read_text() == "Claude finished with evidence"
     argv = json.loads(Path(hub[1]["FAKE_LOG"]).read_text())["argv"]
     assert argv[argv.index("--allowedTools") + 1] == "Read,Glob,Grep"
-    route(hub, "claude", model="opus", effort="xhigh", extra=("--premium", "Owner approved premium", "--write", "--allow-shell"))
+    route(hub, "claude", model="opus", effort="xhigh", extra=("--premium", "Owner approved premium", "--write", "--cwd", str(hub[0]), "--allow-shell"))
     argv = json.loads(Path(hub[1]["FAKE_LOG"]).read_text())["argv"]
     assert argv[argv.index("--allowedTools") + 1] == "Read,Edit,Write,Glob,Grep,Bash"
     assert "acceptEdits" in argv
@@ -246,6 +300,25 @@ def test_sync_and_drift(hub):
     assert not (root / ".agents/skills/review/SKILL.md").exists()
     assert preserved.exists()
     call("sync", "--check")
+
+
+@pytest.mark.parametrize("target", [".claude/agents/reviewer.md", ".codex/agents/reviewer.toml",
+                                   ".claude/skills/review/SKILL.md", ".agents/skills/review/SKILL.md"])
+def test_sync_preserves_unmarked_target(hub, target):
+    root, _, call = hub
+    source = root / "agents/shared/reviewer.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("---\nname: reviewer\ndescription: Review changes\n---\nReview carefully.\n")
+    skill = root / "skills/review/SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("# Review\nRead the changes.\n")
+    path = root / target
+    path.parent.mkdir(parents=True)
+    original = b"Owner-authored content\n"
+    path.write_bytes(original)
+    for args in [("sync", "--check"), ("sync",)]:
+        assert "CONFLICT: " + target in call(*args, expected=1)
+        assert path.read_bytes() == original
 
 
 def test_missing_executable_and_process_failure(hub):

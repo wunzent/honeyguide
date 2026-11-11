@@ -36,7 +36,8 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   `python tools/hub.py agent update <slug> <id> --status done --actual-model <if known> --result "..."`
 - Other vendor (cross-vendor worker; the command validates the route, runs the CLI and records requested vs actual):
   `python tools/hub.py delegate <slug> --to codex|claude --role R --model M --effort E --brief work/<slug>/briefs/<id>.md --reason "..." --parent <you> [--cwd DIR] [--write] [--allow-shell]`
-  Exit 2 = refused (nothing started), 3 = actual model differs, 4 = quota unavailable, 1 = failed.
+  `--write` requires an explicit `--cwd` (the folder the worker may change). Exit 2 = refused (nothing started),
+  3 = actual model differs, 4 = quota unavailable, 1 = failed.
 - Write `Unknown`/`Unverified` when the CLI does not expose a value. Never invent actual model, skill use or state.
 - Do not run two writers on the same files at the same time. Independent read-only work may run in parallel.
 

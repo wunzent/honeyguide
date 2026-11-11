@@ -33,3 +33,28 @@ Codex: about 33k (coder-1), 48k (Codex orchestrator) and 38k (its native coder) 
 as reported by the CLI. Building `hub.py` (Codex, medium): 257k tokens.
 
 Security Gate: NOT PASS (no security verification was performed in this rebuild).
+
+## Final MVP review (owner decision "FINAL MVP REVIEW AND MIGRATION PREPARATION")
+Statuses: **real quota failover NOT VERIFIED**; **simulated quota handoff PASS**; **Security Gate NOT PASS**.
+
+Independent review of `tools/hub.py` (Claude reviewer subagent, sonnet; separate from the Codex author): FAIL with 1 blocker.
+- BLOCKER, confirmed by reproduction (8 parallel `agent new` -> `researcher-2` twice, 7 records): unlocked id allocation and
+  read-modify-write. Fixed by Codex worker `fix-hub-blockers/coder-1` (actual `gpt-6.1-sol`/medium): exclusive record creation,
+  per-task `.lock` around checkpoint/record/attempt updates, temp-file + `os.replace` writes. Re-run of the reproduction:
+  8 distinct ids, 8 of 8 checkpoint lines kept. Two data-preservation/scope items fixed with it: `sync` refuses to overwrite
+  files without the generated marker; `delegate --write` requires an explicit `--cwd`. `tests/test_hub.py` 27/27.
+- Open, not fixed (not blockers; owner rule "fix only confirmed blockers"):
+  - no worker timeout (a hung CLI leaves the record `running`; stop it and set the status by hand)
+  - quota detection matches `429`/`quota` anywhere in the output (possible false quota handoff on a failing worker)
+  - text written into checkpoints/records is not escaped (a line starting `## ` creates a fake section)
+  - Claude model match is a substring match, and an `is_error` result with exit 0 counts as done
+  - `sync` would prefix non-Markdown skill files (e.g. `.json`, `.js`) with a comment (only `SKILL.md` exists today)
+  - attempt fingerprints mask digits but not paths or hex ids
+  - a stale `work/<task>/.lock` after a killed process blocks for 30 s (delete it by hand)
+
+## Operational smoke test (task `smoke-quickstart`)
+Real task: a Thai quick-start guide, `docs/QUICKSTART-TH.md`. The orchestrator (Claude Code) loaded the `brief` skill (observed:
+Skill tool call) to write the brief. `doc-keeper-1`: Codex worker, requested and actual `gpt-6.1-sol`/low (session file), skills
+named brief and doc-coauthoring (whether the worker opened doc-coauthoring is not observable). `researcher-1`: native Claude
+project role (`.claude/agents/researcher.md`, now loaded natively), checked every command against `hub.py --help`: OK.
+Delivered; records in `work/smoke-quickstart/`. Owner Codex config hash unchanged.
