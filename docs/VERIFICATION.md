@@ -132,6 +132,52 @@ PASS; v1 unchanged; owner `~/.claude/settings.json` unchanged.
 **CLI compatibility: UNVERIFIED.** Whether Claude Code 2.1.312 honours `enabledPlugins: false` for `@builtin` plugins
 can only be shown by a live run; if they still load, the run fails closed. R1 stays FAIL until the next live check.
 
+## Minimal R1 live re-check T-4 — 2026-11-11 10:05 (owner approval: "DECISION: APPROVED — ONE LIVE RUN ONLY")
+Hub at `a2f64d7`; same reviewer-only harness as T-3 (event `harness.r1_reviewer_only`), hub `Runner` + `ClaudeAdapter`.
+Run `R-20261111030530-1f3b`, session `c96dc7da-0616-497f-bf67-6c7f78042404`, Claude Code 2.1.312,
+model `claude-sonnet-5-5`, effort low, `--max-budget-usd 0.5`, `apiKeySource: none` (existing login, no new credentials,
+no auth retry).
+- argv identical to T-3 (`--setting-sources ""`, worker `--settings` file); the settings file contained
+  `enabledPlugins` = false for the three `@builtin` plugins plus the unchanged hooks/MCP/deny keys.
+- Startup (`system/init`): tools **Glob, Grep, Read** · **plugins 0** (the three built-in plugins are absent) ·
+  mcp_servers 0 · slash_commands 0 · skills 0 · `terminal_slash_commands` absent (accepted rule) · no `hook_*` events ·
+  agents 6 built-in definitions (claude, Explore, general-purpose, Plan, statusline-setup, web-fetch) — not callable,
+  because Agent/Task are not in the tool list.
+- Validator: no violations → run `ok`, result kept (reviewer verdict PASS, no tool use). Task T-4 stays `reviewing`
+  (the harness does not tick the engine, so no commit step runs).
+- Cost **$0.0144**, 1 turn.
+- No unauthorized writes: T-4 worktree clean at `875b7f3`; target `main` still `875b7f3` (new worktree branch `hub/T-4`
+  only); v1 `75f4561`, 19 paths, unchanged; `~/.claude/settings.json` hash unchanged; hub HEAD `a2f64d7`, tracked files
+  unchanged apart from the orchestrator's docs; no stray Claude process.
+- **R1: PASS (LIVE VERIFIED)** — CLI 2.1.312 honours worker-only `enabledPlugins: false` for `@builtin` plugins.
+  Security Gate remains **NOT PASS** (LIVE-B, LIVE-C, LIVE-D still required; LIVE-E deferred).
+
+## LIVE-B — 2026-11-11 10:28 (owner approval: "DECISION: APPROVED — CONTROLLED LIVE-B TEST") — STOPPED, NOT COMPLETED
+Set up as in `docs/LIVE-B-PROCEDURE.md`: a disposable hub (`Desktop\ALI\mah-v2-liveb\hub`, a clone of `a2f64d7`, origin
+removed, policy pointed at the disposable data root, with the real hub and data root added to `deny`), its own venv
+(copies of PyYAML and psutil only), a disposable data root and target repo, and a decoy task file. Credential scan: only
+the known test strings. Real hub `projects/` + `runtime/` were backed up (70 files). The approval was recorded in the
+disposable hub only. The worker was given disposable paths only. Run `R-20261111032828-705d`: Codex coder via the
+disposable hub's `Runner` + `CodexAdapter`, argv `exec --json -C <W> -s workspace-write -m gpt-6.1-sol -c
+model_reasoning_effort=low …`.
+- **STOP after 42 s — owner-config tripwire.** `~/.codex/config.toml` changed. The Codex CLI itself added
+  `[projects.'c:\users\natthawut.j\desktop\ali\mah-v2-liveb\target']` with `trust_level = "trusted"`, the target repo
+  that the worker's worktree belongs to. No other key changed (56 section headers, previously 55). The worker was
+  killed (`Runner.stop`, exit 15) and nothing was retried or restored. The same mechanism likely produced the existing
+  entry for the LIVE-A target (`…scratchpad\live-a\target`).
+- Worker output: `output.jsonl` 0 bytes and `stderr.txt` empty, so **no command ran: A0–A12 all NOT RUN**. No usage
+  event was emitted, so quota use is unknown (startup only).
+- Before/after SHA-256 (`liveb_snap.py`), with additions limited to bookkeeping:
+  - Disposable hub: only the run directory (7 files written by the Runner/CLI) and the Runner bookkeeping in `state.md`
+    and `events.md` were added. Approval history is still 1 (the owner's) and status is still `approved`.
+  - Disposable data root, worktree, target repo (refs, branches) and decoy: unchanged.
+  - Real hub (320 files), real data root (14), v1 HEAD/status and `~/.claude/settings.json`: unchanged.
+- **LIVE-B: NOT COMPLETED (inconclusive).** The isolation boundary was not tested.
+- New finding: every Codex worker run can write a trust entry to the owner's global Codex config. This is outside the
+  hub's control. A `trusted` target repo may also let a repo-level `.codex/config.toml` apply to workers. In addition,
+  Codex workers inherit the owner's global Codex configuration (plugins, MCP servers, hooks, global AGENTS.md); there is
+  no Codex equivalent of the Claude R1 isolation yet.
+
 ## LIVE-E — owner decision 2026-11-10 (explicit revision of Phase 1 acceptance)
 - **SIMULATED RECOVERY: PASS** — automated quota-recovery tests and controlled failure simulations pass in the full suite
   (852/852 at `4bfb5d0`: verified-reset scheduling, bounded backoff 15/30/60/120/240 then needs-you, per-attempt keys,
