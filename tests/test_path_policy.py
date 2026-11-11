@@ -112,6 +112,10 @@ def test_auto_fallback_defaults_false(hub):
     ('allowed_vendors = ["claude", "codex"]', 'allowed_vendors = ["other"]'),
     ("auto_fallback = false", 'auto_fallback = "false"'),
     ("[routing.roles.planner]", "[routing.roles.unknown]"),
+    ('routine = "low"', ''),
+    ('standard = "medium"', 'standard = "xhigh"'),
+    ('complex = "high"', 'complex = true'),
+    ('max_default_effort = "low"', 'max_default_effort = "max"'),
 ])
 def test_policy_schema_fails_closed(hub, before, after):
     path = hub.config / "policy.toml"

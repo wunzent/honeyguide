@@ -1,8 +1,15 @@
 # Owner-maintained catalog; model availability is PENDING until LIVE-A.
 [vendors.claude]
+premium_models = ["opus", "claude-opus-5-5"]
+unverified_models = ["haiku", "claude-haiku-5-5"]
 models = ["opus", "sonnet", "haiku", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
 efforts = ["low", "medium", "high", "xhigh", "max"]
 
 [vendors.codex]
+premium_models = []
+unverified_models = ["gpt-6-luna"]
 models = ["gpt-6.1-sol", "gpt-6-luna"]
 efforts = ["low", "medium", "high", "xhigh"]
+
+[premium]
+efforts = ["xhigh", "max"]

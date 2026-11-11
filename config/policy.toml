@@ -28,6 +28,11 @@ verified_reset_grace_minutes = 2
 [questions]
 relay_types = ["clarify", "naming", "choose-approach"]
 
+[routing.tiers]
+routine = "low"
+standard = "medium"
+complex = "high"
+
 [routing.roles.planner]
 allowed_vendors = ["claude", "codex"]
 fallback = ["codex:gpt-6.1-sol", "claude:sonnet"]
@@ -39,6 +44,7 @@ fallback = ["codex:gpt-6.1-sol", "claude:sonnet"]
 auto_fallback = false
 
 [routing.roles.tester]
+max_default_effort = "low"
 allowed_vendors = ["claude", "codex"]
 fallback = ["codex:gpt-6.1-sol", "claude:sonnet"]
 auto_fallback = false
@@ -50,6 +56,7 @@ auto_fallback = false
 reviewer_must_differ = true
 
 [routing.roles.doc-keeper]
+max_default_effort = "low"
 allowed_vendors = ["claude", "codex"]
 fallback = ["codex:gpt-6.1-sol", "claude:sonnet"]
 auto_fallback = false

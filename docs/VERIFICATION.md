@@ -203,6 +203,28 @@ Open review notes (not fixed; a further fix round needs owner approval):
 (resume) and V3 (LIVE-B A0–A12) each need separate approval. Configuration isolation does not prove filesystem isolation;
 the unsandboxed Python test runner and same-user Windows boundaries remain open risks.
 
+## Cost-aware routing — 2026-11-11 (owner directive "COST-AWARE ROUTING"; completion approved "LIMITED COMPLETION & ROUTING CORRECTION")
+Tier comes from a `hub-tier` block in the approved Proposed Plan (`tier: routine|standard|complex`, `premium`; no block =
+standard; malformed, duplicate or unknown keys fail closed). The block is inside the plan hash, so changing it voids the
+approval. `[routing.tiers]` routine=low, standard=medium, complex=high, capped by `max_default_effort` (tester, doc-keeper =
+low). Premium models (`opus`) and efforts (`xhigh`, `max`) are refused unless the plan says `premium: true`; unverified models
+(`gpt-6-luna`, `haiku`) are always refused; defaults skip both. Tiers change effort only; the default model is still the
+policy fallback (`codex:gpt-6.1-sol`, `claude:sonnet`) until Luna passes a live check (`docs/LUNA-COMPAT-PROCEDURE.md`).
+Earlier failures (13 in the first targeted run) were test sample data assuming premium defaults, fixed in the tests only.
+`test_failed_python_tests_cap_three_rounds` was flaky, not a defect: the three-round flow progresses on every tick but
+takes 16–17 s on HEAD and on this tree, against a fixed 15 s budget. The test helper `drive` now uses a 15 s no-progress
+window (reset on each new task event) with a 120 s hard cap. Engine tick cost grows with state size (repeated YAML parse,
+git subprocesses); performance follow-up, not part of this change.
+The owner reformatted `engine.py`, `model_router.py`, `policy.py` and `state_writer.py`; AST comparison shows only import
+order differs from the reviewed implementation, and only `Engine._route`, `_parse_policy`, `plan_tier`, `load_catalog`
+and `resolve` (plus the `plan_tier` import) differ from `5e3c19a`.
+Evidence: full suite **973/973** on the committed files; Claude reviewer (Sonnet) **PASS**; scope and secret scans PASS; v1
+unchanged. Luna offline checks PASS; live checks L1/L2 NOT RUN (separate approval).
+Open review notes (low, not fixed): non-scalar YAML key in a `hub-tier` block raises TypeError instead of ValueError; the
+quota-fallback `_route` call catches only `RouteError`; no test for non-scalar keys or `~~~`/indented fences.
+Desktop delegation (Codex launched by the Desktop orchestrator) does not go through this router yet; that alignment is the
+next change.
+
 ## LIVE-E — owner decision 2026-11-10 (explicit revision of Phase 1 acceptance)
 - **SIMULATED RECOVERY: PASS** — automated quota-recovery tests and controlled failure simulations pass in the full suite
   (852/852 at `4bfb5d0`: verified-reset scheduling, bounded backoff 15/30/60/120/240 then needs-you, per-attempt keys,

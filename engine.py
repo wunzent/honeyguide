@@ -26,17 +26,24 @@ from adapters.base import (
     validate_session_id,
 )
 from agent_loader import AgentTemplate, load_template
+from approvals import ApprovalError, approval_nonces, check_approval, check_record
 from model_router import RouteError, load_catalog, resolve
-from policy import PolicyError, load_policy, may_spawn, question_class, team_active_seconds
+from policy import (
+    PolicyError,
+    load_policy,
+    may_spawn,
+    question_class,
+    team_active_seconds,
+)
 from runner import Runner, is_same_process
 from scheduler import NeedsOwner, Scheduler
-from approvals import ApprovalError, check_record, check_approval, approval_nonces
 from state_writer import (
     StateStore,
+    approved_scope,
     atomic_write_text,
     plan_hash,
-    approved_scope,
     plan_section,
+    plan_tier,
     read_text_retry,
 )
 from worktree_manager import WorktreeManager
@@ -179,8 +186,12 @@ class Engine:
             runs = dict(txn.state.get("runs", {}))
             if kind == "run.lost" and runs[run_id].get("status") == "running":
                 updates["team_active_seconds"] = team_active_seconds(
-                    {"team_active_seconds": txn.state.get("team_active_seconds", 0),
-                     "runs": {run_id: runs[run_id]}}, self.clock())
+                    {
+                        "team_active_seconds": txn.state.get("team_active_seconds", 0),
+                        "runs": {run_id: runs[run_id]},
+                    },
+                    self.clock(),
+                )
                 changes = {**changes, "finished_at": self.clock().isoformat()}
             runs[run_id] = {**runs[run_id], **changes}
             updates = {**updates, "runs": runs}
@@ -269,11 +280,20 @@ class Engine:
                 valid = False
                 if q["id"] in state.get("answers", {}):
                     try:
-                        check_record(answer, kind="answer", project=project, task=task,
-                                     question_id=q["id"],
-                                     plan_hash=plan_hash(self.store.read_spec(project, task)),
-                                     policy_hash=self.policy.policy_hash, used_nonces=[])
-                        if answer["answer"] not in [o["label"] for o in q["options"]] and answer["answer"] != answer["quote"]:
+                        check_record(
+                            answer,
+                            kind="answer",
+                            project=project,
+                            task=task,
+                            question_id=q["id"],
+                            plan_hash=plan_hash(self.store.read_spec(project, task)),
+                            policy_hash=self.policy.policy_hash,
+                            used_nonces=[],
+                        )
+                        if (
+                            answer["answer"] not in [o["label"] for o in q["options"]]
+                            and answer["answer"] != answer["quote"]
+                        ):
                             raise ApprovalError("invalid answer option")
                         text = {"quote": answer["quote"], "option": answer["answer"]}
                         context.append(
@@ -294,8 +314,11 @@ class Engine:
                                 "reason": "answer verification failed",
                             },
                         )
-                if (q.get("type") == "plan-policy-changed" and q.get("asked_by") == "engine"
-                        and state.get("approval_reason") is None):
+                if (
+                    q.get("type") == "plan-policy-changed"
+                    and q.get("asked_by") == "engine"
+                    and state.get("approval_reason") is None
+                ):
                     valid = True
                 if valid:
                     q["status"] = "answered"
@@ -382,7 +405,9 @@ class Engine:
     def reconcile(self) -> None:
         now = self.clock()
         for project, task, state in self._tasks():
-            if not self._check_task_approval(project, task, state) or state.get("status") in {"paused", "cancelled"}:
+            if not self._check_task_approval(project, task, state) or state.get(
+                "status"
+            ) in {"paused", "cancelled"}:
                 continue
             for run_id, run in state.get("runs", {}).items():
                 if run.get("status") not in {"intent", "running"}:
@@ -530,10 +555,21 @@ class Engine:
                 )
                 if run["route"]["vendor"] == "claude" and patches:
                     self.worktrees.apply_patch(
-                        worktree, "\n".join(patches), (config["allowed_paths"] + approved_scope(self.store.read_spec(project, task)))
+                        worktree,
+                        "\n".join(patches),
+                        (
+                            config["allowed_paths"]
+                            + approved_scope(self.store.read_spec(project, task))
+                        ),
                     )
                 if self.runner.scope_check(
-                    project, task, worktree, (config["allowed_paths"] + approved_scope(self.store.read_spec(project, task)))
+                    project,
+                    task,
+                    worktree,
+                    (
+                        config["allowed_paths"]
+                        + approved_scope(self.store.read_spec(project, task))
+                    ),
                 ):
                     return
                 self._update(
@@ -567,8 +603,12 @@ class Engine:
                         "needs_run": False,
                         "quota": quota,
                         "quota_blocked": [],
-                        "review": {"verdict": "PASS", "round": state.get("round", 1),
-                                   "run": run_id, "test_run": state.get("last_test_run")},
+                        "review": {
+                            "verdict": "PASS",
+                            "round": state.get("round", 1),
+                            "run": run_id,
+                            "test_run": state.get("last_test_run"),
+                        },
                     },
                 )
             elif state.get("review_fix_cycles", 0) < min(
@@ -597,9 +637,11 @@ class Engine:
     ) -> None:
         base_key = state.get("checkpoint", {}).get("base_key", run["idem_key"])
         checkpoint = {
-            "session_id": (validate_session_id(outcome.session_id)
-                           or validate_session_id(run.get("session_id"))
-                           or validate_session_id(state.get("checkpoint", {}).get("session_id"))),
+            "session_id": (
+                validate_session_id(outcome.session_id)
+                or validate_session_id(run.get("session_id"))
+                or validate_session_id(state.get("checkpoint", {}).get("session_id"))
+            ),
             "run": run_id,
             "round": state.get("round", 1),
             "role": run["role"],
@@ -612,7 +654,12 @@ class Engine:
         try:
             blocked = set(state.get("quota_blocked", [])) | {run["route"]["vendor"]}
             route, reasons = self._route(
-                run["role"], state, blocked, Route(**run["route"]), project=project, task=task
+                run["role"],
+                state,
+                blocked,
+                Route(**run["route"]),
+                project=project,
+                task=task,
             )
         except RouteError:
             route = None
@@ -686,10 +733,19 @@ class Engine:
         self._update(project, task, "round.next", updates)
 
     def _route(
-        self, role: str, state: dict, blocked: set[str], proposal: Route | None = None,
-        *, project: str, task: str,
+        self,
+        role: str,
+        state: dict,
+        blocked: set[str],
+        proposal: Route | None = None,
+        *,
+        project: str,
+        task: str,
     ) -> tuple[Route, list[str]]:
-        availability = {vendor: self.availability_probe(vendor) for vendor in self.adapters}
+        tier = plan_tier(self.store.read_spec(project, task))
+        availability = {
+            vendor: self.availability_probe(vendor) for vendor in self.adapters
+        }
         latest = state.get("route_proposals", {}).get(role)
         legacy = state.get("route_proposal", {})
         if latest is None and legacy.get("role") == role:
@@ -697,23 +753,52 @@ class Engine:
         rejected_vendor = None
         if latest is not None:
             try:
-                proposed = Route(**{key: value for key, value in latest.items() if key not in {"role", "reason"}})
-                return resolve(proposed, role, policy=self.policy, catalog=self.catalog,
-                               availability=availability, quota_blocked=blocked,
-                               coder_vendor=state.get("coder_vendor"))
+                proposed = Route(
+                    **{
+                        key: value
+                        for key, value in latest.items()
+                        if key not in {"role", "reason"}
+                    }
+                )
+                return resolve(
+                    proposed,
+                    role,
+                    policy=self.policy,
+                    catalog=self.catalog,
+                    availability=availability,
+                    quota_blocked=blocked,
+                    coder_vendor=state.get("coder_vendor"),
+                    allow_premium=tier["premium"],
+                )
             except (RouteError, TypeError, AttributeError) as exc:
-                rejected_vendor = latest.get("vendor") if isinstance(latest, dict) else None
+                rejected_vendor = (
+                    latest.get("vendor") if isinstance(latest, dict) else None
+                )
                 reason = scrub(str(exc))
-                canonical = json.dumps(latest, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                canonical = json.dumps(
+                    latest, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                )
                 digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-                rejection_key = json.dumps([role, digest, reason], separators=(",", ":"))
+                rejection_key = json.dumps(
+                    [role, digest, reason], separators=(",", ":")
+                )
                 with self.store.transaction(project, task) as txn:
                     keys = list(txn.state.get("route_rejected_keys", []))
                     if rejection_key not in keys:
                         keys.append(rejection_key)
                         changes = {"route_rejected_keys": keys}
                         txn.state.update(changes)
-                        txn.emit("route.rejected", {"role": role, "reason": reason, "set": changes})
+                        txn.emit(
+                            "route.rejected",
+                            {"role": role, "reason": reason, "set": changes},
+                        )
+                if reason.startswith(
+                    (
+                        "needs owner: premium route",
+                        "needs owner: model not live-verified",
+                    )
+                ):
+                    raise
                 proposal = None
         if proposal is None:
             configured = (
@@ -726,13 +811,25 @@ class Engine:
             if configured:
                 proposal = Route(**configured)
             else:
-                vendor, model = self.policy.routing_roles[role]["fallback"][0].split(
-                    ":", 1
-                )
+                options = [
+                    value
+                    for value in self.policy.routing_roles[role]["fallback"]
+                    if value.split(":", 1)[1]
+                    not in (
+                        self.catalog.get(value.split(":", 1)[0], {}).get(
+                            "premium_models", []
+                        )
+                        + self.catalog.get(value.split(":", 1)[0], {}).get(
+                            "unverified_models", []
+                        )
+                    )
+                ]
+                if not options:
+                    raise RouteError("no verified non-premium default model")
+                vendor, model = options[0].split(":", 1)
                 # Start cross-vendor review directly; choosing the reviewer is
                 # distinct from automatically changing a running vendor.
                 if role == "reviewer" and vendor == state.get("coder_vendor"):
-                    options = self.policy.routing_roles[role]["fallback"]
                     alternate = next(
                         (
                             value
@@ -744,12 +841,29 @@ class Engine:
                     if (
                         alternate
                         and alternate.split(":", 1)[0] not in blocked
-                        and availability.get(alternate.split(":", 1)[0], Availability(False, None, None, "")).ok
+                        and availability.get(
+                            alternate.split(":", 1)[0],
+                            Availability(False, None, None, ""),
+                        ).ok
                     ):
                         vendor, model = alternate.split(":", 1)
-                proposal = Route(vendor, model, "medium")
-        if rejected_vendor and proposal.vendor != rejected_vendor and not self.policy.routing_roles[role].get("auto_fallback", False):
-            raise RouteError(f"needs owner: vendor change {rejected_vendor} -> {proposal.vendor}")
+                efforts = ["low", "medium", "high"]
+                effort = self.policy.raw["routing"]["tiers"][tier["tier"]]
+                cap = self.policy.routing_roles[role].get("max_default_effort", "high")
+                effort = efforts[min(efforts.index(effort), efforts.index(cap))]
+                if effort in self.catalog.get(vendor, {}).get(
+                    "premium_efforts", ["xhigh", "max"]
+                ):
+                    raise RouteError("default effort must be non-premium")
+                proposal = Route(vendor, model, effort)
+        if (
+            rejected_vendor
+            and proposal.vendor != rejected_vendor
+            and not self.policy.routing_roles[role].get("auto_fallback", False)
+        ):
+            raise RouteError(
+                f"needs owner: vendor change {rejected_vendor} -> {proposal.vendor}"
+            )
         return resolve(
             proposal,
             role,
@@ -758,34 +872,71 @@ class Engine:
             availability=availability,
             quota_blocked=blocked,
             coder_vendor=state.get("coder_vendor"),
+            allow_premium=tier["premium"],
         )
 
     def _check_task_approval(self, project: str, task: str, state: dict) -> bool:
-        if state.get("status") in {"draft", "draft-with-plan", "awaiting-approval", "committed", "delivered", "cancelled", "paused"}:
+        if state.get("status") in {
+            "draft",
+            "draft-with-plan",
+            "awaiting-approval",
+            "committed",
+            "delivered",
+            "cancelled",
+            "paused",
+        }:
             return True
         if not state.get("approval"):
             return True  # The spawn gate reports missing approvals.
         try:
-            check_approval(state["approval"], project=project, task=task,
-                           plan_hash=plan_hash(self.store.read_spec(project, task)),
-                           policy_hash=load_policy(self.root).policy_hash,
-                           used_nonces=approval_nonces(state))
+            check_approval(
+                state["approval"],
+                project=project,
+                task=task,
+                plan_hash=plan_hash(self.store.read_spec(project, task)),
+                policy_hash=load_policy(self.root).policy_hash,
+                used_nonces=approval_nonces(state),
+            )
             return True
         except (ApprovalError, PolicyError, ValueError, OSError, KeyError, TypeError):
             if state.get("approval_reason") != "plan or policy changed":
                 questions = list(state.get("questions", []))
-                questions.append({"id": "q-plan-" + str(len(questions) + 1),
-                    "title": "Plan/policy changed — approve again?",
-                    "context": "The current plan or policy no longer matches the recorded owner approval.",
-                    "impact": "Task execution and local commit wait for renewed approval.",
-                    "options": [{"label": "approve", "consequence": "Approve the revised plan and policy"},
-                                {"label": "revise", "consequence": "Keep the task blocked while revising"}],
-                    "default": "none", "blocking": True, "type": "plan-policy-changed",
-                    "class": "owner-decision", "status": "open", "asked_by": "engine"})
-                self._update(project, task, "approval.invalidated", {
-                    "status": "needs-you", "needs_run": False,
-                    "resume_stage": state.get("resume_stage") or state["status"],
-                    "approval_reason": "plan or policy changed", "questions": questions})
+                questions.append(
+                    {
+                        "id": "q-plan-" + str(len(questions) + 1),
+                        "title": "Plan/policy changed — approve again?",
+                        "context": "The current plan or policy no longer matches the recorded owner approval.",
+                        "impact": "Task execution and local commit wait for renewed approval.",
+                        "options": [
+                            {
+                                "label": "approve",
+                                "consequence": "Approve the revised plan and policy",
+                            },
+                            {
+                                "label": "revise",
+                                "consequence": "Keep the task blocked while revising",
+                            },
+                        ],
+                        "default": "none",
+                        "blocking": True,
+                        "type": "plan-policy-changed",
+                        "class": "owner-decision",
+                        "status": "open",
+                        "asked_by": "engine",
+                    }
+                )
+                self._update(
+                    project,
+                    task,
+                    "approval.invalidated",
+                    {
+                        "status": "needs-you",
+                        "needs_run": False,
+                        "resume_stage": state.get("resume_stage") or state["status"],
+                        "approval_reason": "plan or policy changed",
+                        "questions": questions,
+                    },
+                )
                 self._mirror_questions(project, task)
             return False
 
@@ -798,11 +949,16 @@ class Engine:
         except PolicyError:
             pass  # Each task's approval check records the policy problem below.
         self.scheduler.run_due(now)
-        ready = {(project, task) for project, task, state in self._tasks()
-                 if state.get("status") == "ready_to_commit"}
+        ready = {
+            (project, task)
+            for project, task, state in self._tasks()
+            if state.get("status") == "ready_to_commit"
+        }
         self.reconcile()
         for project, task, state in self._tasks():
-            if not self._check_task_approval(project, task, state) or state.get("status") in {"paused", "cancelled"}:
+            if not self._check_task_approval(project, task, state) or state.get(
+                "status"
+            ) in {"paused", "cancelled"}:
                 if state.get("status") == "cancelled":
                     for run in self.runner.live_runs():
                         if (run["project"], run["task"]) == (project, task):
@@ -826,7 +982,9 @@ class Engine:
                     if outcome is not None:
                         self._handle(project, task, run_id, outcome)
         for project, task, state in self._tasks():
-            if not self._check_task_approval(project, task, state) or state.get("status") in {"paused", "cancelled"}:
+            if not self._check_task_approval(project, task, state) or state.get(
+                "status"
+            ) in {"paused", "cancelled"}:
                 continue
             if state.get("status") == "ready_to_commit":
                 if (project, task) not in ready:
@@ -834,7 +992,13 @@ class Engine:
                 try:
                     self.runner.commit_task(project, task)
                 except (OSError, ValueError, PolicyError) as exc:
-                    self._update(project, task, "commit.blocked", {"status": "needs-you"}, reason=scrub(str(exc)))
+                    self._update(
+                        project,
+                        task,
+                        "commit.blocked",
+                        {"status": "needs-you"},
+                        reason=scrub(str(exc)),
+                    )
                 continue
             state = self._resume_questions(project, task, state)
             if team_active_seconds(state, now) >= self.policy.team_minutes * 60:
@@ -964,23 +1128,53 @@ class Engine:
                     state,
                     set() if resume else set(state.get("quota_blocked", [])),
                     proposal,
-                    project=project, task=task,
+                    project=project,
+                    task=task,
                 )
-                if resume and resume_route and any(
-                    resume_route.get(key) != getattr(route, key) for key in ("vendor", "model")
+                if (
+                    resume
+                    and resume_route
+                    and any(
+                        resume_route.get(key) != getattr(route, key)
+                        for key in ("vendor", "model")
+                    )
                 ):
-                    self._question(project, task, {
-                        "title": "Resume cannot keep the original vendor/model — approve a fresh session?",
-                        "context": (f"The checkpoint uses {resume_route.get('vendor')}:{resume_route.get('model')}; "
-                                    f"routing selected {route.vendor}:{route.model}."),
-                        "impact": "No worker starts until the owner decides whether to lose session continuity.",
-                        "options": [{"label": "approve", "consequence": "Allow a fresh session on the selected route"},
-                                    {"label": "keep-original", "consequence": "Wait for the original vendor/model"}],
-                        "default": "none", "type": "resume-route-changed",
-                    }, {"run": key, "role": "engine"})
-                    self._update(project, task, "session.resume_refused",
-                                 {"status": "needs-you", "needs_run": False, "resume_ready": False},
-                                 reason="resume route changed")
+                    self._question(
+                        project,
+                        task,
+                        {
+                            "title": "Resume cannot keep the original vendor/model — approve a fresh session?",
+                            "context": (
+                                f"The checkpoint uses {resume_route.get('vendor')}:{resume_route.get('model')}; "
+                                f"routing selected {route.vendor}:{route.model}."
+                            ),
+                            "impact": "No worker starts until the owner decides whether to lose session continuity.",
+                            "options": [
+                                {
+                                    "label": "approve",
+                                    "consequence": "Allow a fresh session on the selected route",
+                                },
+                                {
+                                    "label": "keep-original",
+                                    "consequence": "Wait for the original vendor/model",
+                                },
+                            ],
+                            "default": "none",
+                            "type": "resume-route-changed",
+                        },
+                        {"run": key, "role": "engine"},
+                    )
+                    self._update(
+                        project,
+                        task,
+                        "session.resume_refused",
+                        {
+                            "status": "needs-you",
+                            "needs_run": False,
+                            "resume_ready": False,
+                        },
+                        reason="resume route changed",
+                    )
                     continue
                 config = self._project(project)
                 worktree = self.worktrees.create(

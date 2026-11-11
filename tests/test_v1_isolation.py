@@ -251,7 +251,7 @@ def routing(hub):
 
 
 def test_catalog_and_route_validation(routing, tmp_path):
-    route = Route("claude", "sonnet", "max")
+    route = Route("claude", "sonnet", "high")
     assert resolve(route, "coder", **routing) == (route, [])
     for invalid in (replace(route, model="unknown"), replace(route, effort="extreme"), replace(route, vendor="unknown")):
         with pytest.raises(RouteError):
@@ -267,6 +267,7 @@ def test_catalog_and_route_validation(routing, tmp_path):
 
 
 def test_fallback_owner_gate_and_effort_downgrade(routing):
+    routing["allow_premium"] = True
     proposal = Route("claude", "sonnet", "max", 0.5)
     routing["quota_blocked"] = {"claude"}
     with pytest.raises(RouteError, match="needs owner:"):
@@ -275,7 +276,7 @@ def test_fallback_owner_gate_and_effort_downgrade(routing):
     roles = {role: {**settings, "auto_fallback": True} for role, settings in policy.routing_roles.items()}
     routing["policy"] = replace(policy, routing_roles=roles)
     route, reasons = resolve(proposal, "coder", **routing)
-    assert route == Route("codex", "gpt-6.1-sol", "xhigh", None)
+    assert route == Route("codex", "gpt-6.1-sol", "high", None)
     assert reasons
     routing["quota_blocked"] = {"claude", "codex"}
     with pytest.raises(RouteError, match="no available"):
@@ -283,7 +284,7 @@ def test_fallback_owner_gate_and_effort_downgrade(routing):
 
 
 def test_reviewer_vendor_separation(routing):
-    proposal = Route("codex", "gpt-6-luna", "high")
+    proposal = Route("codex", "gpt-6.1-sol", "high")
     with pytest.raises(RouteError, match="needs owner:"):
         resolve(proposal, "reviewer", coder_vendor="codex", **routing)
     routing["quota_blocked"] = {"claude"}
@@ -303,4 +304,4 @@ def test_router_disallowed_vendor_and_missing_availability(routing):
     with pytest.raises(RouteError, match="not allowed"):
         resolve(Route("claude", "sonnet", "high"), "coder", **{**routing, "policy": replace(policy, routing_roles=roles)})
     with pytest.raises(RouteError, match="no available"):
-        resolve(Route("codex", "gpt-6-luna", "high"), "coder", **{**routing, "availability": {}})
+        resolve(Route("codex", "gpt-6.1-sol", "high"), "coder", **{**routing, "availability": {}})

@@ -275,17 +275,17 @@ def propose(root, role, vendor, model, effort="low", *extra):
 
 def test_role_proposals_dispatch_and_claude_budget(engine_env):
     factory, store, now, *_ = engine_env
-    propose(store.root, "coder", "codex", "gpt-6-luna", "high")
-    propose(store.root, "reviewer", "claude", "haiku", "low", "--budget-usd", "0.5")
+    propose(store.root, "coder", "codex", "gpt-6.1-sol", "high")
+    propose(store.root, "reviewer", "claude", "sonnet", "low", "--budget-usd", "0.5")
     proposals = store.read_state("project", "T-1")["route_proposals"]
     assert set(proposals) == {"coder", "reviewer"}
     engine = factory()
     state = drive(engine, store, now, wanted="reviewing")
     coder = next(run for run in state["runs"].values() if run.get("role") == "coder")
-    assert coder["route"] == {"vendor": "codex", "model": "gpt-6-luna", "effort": "high", "max_budget_usd": None}
+    assert coder["route"] == {"vendor": "codex", "model": "gpt-6.1-sol", "effort": "high", "max_budget_usd": None}
     engine.tick(now)
     reviewer = next(run for run in store.read_state("project", "T-1")["runs"].values() if run.get("role") == "reviewer")
-    assert reviewer["route"] == {"vendor": "claude", "model": "haiku", "effort": "low", "max_budget_usd": 0.5}
+    assert reviewer["route"] == {"vendor": "claude", "model": "sonnet", "effort": "low", "max_budget_usd": 0.5}
     assert reviewer["argv"][reviewer["argv"].index("--max-budget-usd") + 1] == "0.5"
 
 
@@ -306,13 +306,13 @@ def test_invalid_proposal_rejected_then_policy_default(engine_env, model, effort
 def test_proposal_cannot_bypass_policy(engine_env, case):
     factory, store, now, *_ = engine_env
     propose(store.root, "coder", "claude" if case == "invalid-other-vendor" else "codex",
-            "unknown" if case == "invalid-other-vendor" else "gpt-6-luna")
+            "unknown" if case == "invalid-other-vendor" else "gpt-6.1-sol")
     if case == "quota":
         with store.transaction("project", "T-1") as txn:
             txn.state["quota_blocked"] = ["codex"]
             txn.emit("fixture.quota", {"set": {"quota_blocked": ["codex"]}})
     if case == "reviewer":
-        propose(store.root, "reviewer", "codex", "gpt-6-luna")
+        propose(store.root, "reviewer", "codex", "gpt-6.1-sol")
         with store.transaction("project", "T-1") as txn:
             updates = {"status": "reviewing", "coder_vendor": "codex", "needs_run": True}
             txn.state.update(updates)
@@ -383,7 +383,10 @@ def test_latest_proposal_on_quota_resume(engine_env, monkeypatch, tmp_path, vend
     state = drive(engine, store, now, wanted="waiting-quota")
     assert state["checkpoint"]["session_id"] == SESSION
     if change_model:
-        model = "haiku" if vendor == "claude" else "gpt-6-luna"
+        model = "claude-sonnet-5-5" if vendor == "claude" else "fixture-verified-model"
+        # Exercise session continuity independently of the live-verification gate.
+        if vendor == "codex":
+            engine.catalog[vendor]["models"].append(model)
     propose(store.root, role, vendor, model, "high")
     log = tmp_path / "resume-argv.json"
     monkeypatch.setenv("FAKE_ARGV_LOG", str(log))

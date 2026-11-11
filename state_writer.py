@@ -73,14 +73,45 @@ def plan_hash(spec_text: str) -> str:
     return sha256_text(section)
 
 
+def plan_tier(spec_text: str) -> dict:
+    """Read routing authority exclusively from the hashed Proposed Plan."""
+    section = plan_section(spec_text)
+    starts = list(re.finditer(r"^[ \t]*```hub-tier\b[^\r\n]*", section, re.M))
+    if not starts:
+        return {"tier": "standard", "premium": False}
+    blocks = re.findall(
+        r"^[ \t]*```hub-tier[ \t]*\r?\n(.*?)^[ \t]*```[ \t]*$", section, re.M | re.S
+    )
+    if len(starts) != 1 or len(blocks) != 1:
+        raise ValueError("plan requires one well-formed hub-tier block")
+    try:
+        node = yaml.compose(blocks[0])
+        if not isinstance(node, yaml.MappingNode):
+            raise ValueError("hub-tier must be a mapping")
+        keys = [key.value for key, _ in node.value]
+        if len(keys) != len(set(keys)) or not set(keys) <= {"tier", "premium"}:
+            raise ValueError("invalid or duplicate hub-tier fields")
+        settings = yaml.safe_load(blocks[0])
+        tier, premium = settings.get("tier"), settings.get("premium", False)
+        if tier not in ("routine", "standard", "complex") or type(premium) is not bool:
+            raise ValueError("invalid hub-tier tier or premium")
+        return {"tier": tier, "premium": premium}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"invalid hub-tier: {exc}") from None
+
+
 def approved_scope(spec_text: str) -> list[str]:
-    blocks = re.findall(r"^```hub-scope\r?\n(.*?)^```[ \t]*$", plan_section(spec_text), re.M | re.S)
+    blocks = re.findall(
+        r"^```hub-scope\r?\n(.*?)^```[ \t]*$", plan_section(spec_text), re.M | re.S
+    )
     if not blocks:
         return []
     if len(blocks) != 1:
         raise ValueError("plan requires at most one hub-scope block")
     paths = yaml.safe_load(blocks[0])
-    if not isinstance(paths, list) or any(not isinstance(p, str) or not p.strip() for p in paths):
+    if not isinstance(paths, list) or any(
+        not isinstance(p, str) or not p.strip() for p in paths
+    ):
         raise ValueError("hub-scope must be a YAML list of globs")
     return paths
 
@@ -338,8 +369,12 @@ class StateStore:
         pending = events[state["last_event_seq"] :]
         for event in pending:
             if event.kind == "spec.updated":
-                atomic_write_text(directory / "spec.md", event.data["spec_text"],
-                                  self.replace_retries, self.replace_backoff)
+                atomic_write_text(
+                    directory / "spec.md",
+                    event.data["spec_text"],
+                    self.replace_retries,
+                    self.replace_backoff,
+                )
             state = apply_event(state, event)
         if pending and save:
             self._save_state(directory, state)
@@ -376,8 +411,12 @@ class StateStore:
                     self._fault_hook("after_event_append")
             for event in txn._events:
                 if event.kind == "spec.updated":
-                    atomic_write_text(directory / "spec.md", event.data["spec_text"],
-                                      self.replace_retries, self.replace_backoff)
+                    atomic_write_text(
+                        directory / "spec.md",
+                        event.data["spec_text"],
+                        self.replace_retries,
+                        self.replace_backoff,
+                    )
             self._save_state(directory, txn.state)
 
     def _runtime_path(self, name: str) -> Path:

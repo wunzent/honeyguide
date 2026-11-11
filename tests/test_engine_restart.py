@@ -326,16 +326,26 @@ def engine_env(runtime, hub, target):
 
 
 def drive(engine, store, now, task="T-1", wanted="ready_to_commit", *,
-          condition: Callable[[dict], bool] | None = None, timeout_s: float = 15):
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
+          condition: Callable[[dict], bool] | None = None, timeout_s: float = 15,
+          max_total_s: float = 120):
+    started = time.monotonic()
+    deadline = started + timeout_s
+    total_deadline = started + max_total_s
+    task_events = store.read_events("project", task)
+    highest_seq = task_events[-1].seq if task_events else 0
+    while time.monotonic() < min(deadline, total_deadline):
         engine.tick(now)
+        task_events = store.read_events("project", task)
+        latest_seq = task_events[-1].seq if task_events else 0
+        if latest_seq > highest_seq:
+            highest_seq = latest_seq
+            deadline = time.monotonic() + timeout_s
         state = store.read_state("project", task)
         if condition(state) if condition is not None else state["status"] == wanted:
             return state
         time.sleep(0.02)
     events = [(event.seq, event.kind) for event in store.read_events("project", task)[-12:]]
-    pytest.fail(f"engine did not reach {wanted} within {timeout_s}s; state={state}; last events={events}")
+    pytest.fail(f"engine did not reach {wanted} without progress for {timeout_s}s or {max_total_s}s total; state={state}; last events={events}")
 
 
 def test_engine_restart_twice_reattaches_one_spawn(engine_env, held_fakes):
