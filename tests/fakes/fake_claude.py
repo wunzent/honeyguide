@@ -45,6 +45,9 @@ def main() -> int:
             init[field] = [{"name": "fixture", "path": "./fixture"}] if field == "plugins" else ["fixture"]
     if scenario == "missing_key":
         del init["skills"]
+    if scenario == "builtin_plugin":
+        init["plugins"] = [{"name": "cc-plugin-agents-md", "path": "builtin",
+                            "source": "cc-plugin-agents-md@builtin"}]
     if scenario.startswith("missing_terminal"):
         del init["terminal_slash_commands"]
         if scenario == "missing_terminal_slash":

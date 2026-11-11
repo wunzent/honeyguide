@@ -113,7 +113,12 @@ def test_missing_terminal_uses_worker_argv(runtime, monkeypatch, disabled):
             return replace(spec, argv=[arg for arg in spec.argv if arg != "--disable-slash-commands"])
         monkeypatch.setattr(adapter, "build", without_disable)
     run_id = start(runtime, "claude")
-    assert finished(runner, run_id).status == ("ok" if disabled else "failed")
+    outcome = finished(runner, run_id)
+    assert outcome.status == ("ok" if disabled else "failed")
+    if disabled:
+        assert outcome.reason is None and outcome.result_text
+        run_dir = runner.store.task_dir("project", "T-1") / "runs" / run_id
+        assert (run_dir / "result.md").read_text() == outcome.result_text
     assert any(e.kind == "security.tool_violation" for e in runner.store.read_events("project", "T-1")) is (not disabled)
 
 
@@ -442,7 +447,7 @@ def test_structured_usage_keeps_identifiers_and_scrubs_prose(runtime, monkeypatc
 
 
 @pytest.mark.parametrize("scenario", ["extra_tools", "extra_mcp", "missing_init", "extra_slash_commands",
-                                      "extra_terminal_slash_commands", "extra_skills", "extra_plugins", "missing_key",
+                                      "extra_terminal_slash_commands", "extra_skills", "extra_plugins", "builtin_plugin", "missing_key",
                                       "hook_started", "hook_response", "missing_terminal_slash", "missing_terminal_skills"])
 @pytest.mark.parametrize("role", ["coder", "reviewer"])
 def test_tool_violation_fails_closed(engine_env, monkeypatch, scenario, role):
@@ -470,7 +475,8 @@ def test_tool_violation_fails_closed(engine_env, monkeypatch, scenario, role):
     expected = {"extra_tools": {"tools": 6}, "extra_mcp": {"mcp_servers": 1}, "missing_init": {"init": 0},
                 "extra_slash_commands": {"slash_commands": 1},
                 "extra_terminal_slash_commands": {"terminal_slash_commands": 1},
-                "extra_skills": {"skills": 1}, "extra_plugins": {"plugins": 1}, "missing_key": {"skills": -1},
+                "extra_skills": {"skills": 1}, "extra_plugins": {"plugins": 1}, "builtin_plugin": {"plugins": 1},
+                "missing_key": {"skills": -1},
                 "hook_started": {"hooks_ran": 1}, "hook_response": {"hooks_ran": 1},
                 "missing_terminal_slash": {"terminal_slash_commands": -1, "slash_commands": 1},
                 "missing_terminal_skills": {"terminal_slash_commands": -1, "skills": 1}}

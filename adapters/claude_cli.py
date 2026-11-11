@@ -15,6 +15,14 @@ from state_writer import atomic_write_text
 # PENDING LIVE VERIFICATION: if the CLI rejects empty, the run fails (no fallback)
 CLAUDE_SETTING_SOURCES = ""
 
+# PENDING LIVE VERIFICATION: whether CLI 2.1.312 honours enabledPlugins=false for @builtin plugins;
+# if any still loads, runner._tool_violations fails the run (plugins must be empty)
+CLAUDE_DISABLED_BUILTIN_PLUGINS = (
+    "cc-plugin-agents-md@builtin",
+    "cc-plugin-telemetry@builtin",
+    "cc-plugin-plugin-authoring@builtin",
+)
+
 
 def _limited(node: dict) -> bool:
     return (any(node.get(key) is True for key in ("is_limited", "is_rate_limited", "limited", "reached"))
@@ -70,6 +78,7 @@ class ClaudeAdapter:
             "disableAllHooks": True, "enableAllProjectMcpServers": False,
             "permissions": {"deny": ["Edit", "Write", "Bash", "PowerShell", "NotebookEdit",
                                      "WebFetch", "WebSearch", "Agent", "Task"]},
+            "enabledPlugins": {plugin: False for plugin in CLAUDE_DISABLED_BUILTIN_PLUGINS},
         }), retries=10, backoff=0.01)
         tools = tuple(tool for capability, names in (("read", ("Read",)), ("search", ("Glob", "Grep")))
                       if capability in template.capabilities for tool in names)

@@ -82,11 +82,34 @@ def test_build(tmp_path, vendor, role, resume):
         data = json.loads(settings.read_text())
         assert set(data["permissions"]["deny"]) == set(deny)
         assert data["disableAllHooks"] is True and data["enableAllProjectMcpServers"] is False
+        from adapters.claude_cli import CLAUDE_DISABLED_BUILTIN_PLUGINS
+        disabled_plugins = {
+            "cc-plugin-agents-md@builtin": False,
+            "cc-plugin-telemetry@builtin": False,
+            "cc-plugin-plugin-authoring@builtin": False,
+        }
+        assert CLAUDE_DISABLED_BUILTIN_PLUGINS == tuple(disabled_plugins)
+        assert data == {
+            "disableAllHooks": True, "enableAllProjectMcpServers": False,
+            "permissions": {"deny": ["Edit", "Write", "Bash", "PowerShell", "NotebookEdit",
+                                     "WebFetch", "WebSearch", "Agent", "Task"]},
+            "enabledPlugins": disabled_plugins,
+        }
         assert settings == tmp_path / "run" / "claude-settings.json"
         from adapters.claude_cli import CLAUDE_SETTING_SOURCES
         assert spec.argv[spec.argv.index("--setting-sources") + 1] == CLAUDE_SETTING_SOURCES == ""
         assert spec.argv[spec.argv.index("--max-budget-usd") + 1] == "0.5"
         assert spec.argv[spec.argv.index("--permission-mode") + 1] == "default"
+        assert spec.argv[2:] == [
+            "-p", "--output-format", "stream-json", "--verbose",
+            "--model", "test-model", "--effort", "medium",
+            "--append-system-prompt-file", str(tmp_path / "prompt.md"),
+            "--tools", "Read,Glob,Grep", "--strict-mcp-config", "--disable-slash-commands",
+            "--allowedTools", "Read,Glob,Grep", "--disallowedTools",
+            "Bash,PowerShell,Edit,Write,NotebookEdit,Agent,Task,WebFetch,WebSearch",
+            "--permission-mode", "default", "--setting-sources", "", "--settings", str(settings),
+            "--max-budget-usd", "0.5",
+        ] + (["--resume", resume] if resume else [])
         assert spec.stdin_text == "Follow the system instructions. Work only inside the current directory."
         if resume:
             assert spec.argv[-2:] == ["--resume", resume]

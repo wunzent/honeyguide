@@ -98,6 +98,40 @@ Evidence: full suite **882/882** (orchestrator); Claude review **PASS**; secret 
 (owner must reset the checkpoint); isolation-unsupported regex should only apply on non-zero exit without a result event.
 Live proof still required: minimal R1 live check (separate approval).
 
+## Minimal R1 live check T-3 — 2026-11-11 09:03 (owner approval: "DECISION: APPROVED — R1 LIVE VERIFICATION ONLY")
+Reviewer only (no coder): a scratch harness made a fresh worktree of the throwaway repo, moved T-3 to `reviewing`
+(event `harness.r1_reviewer_only`) and called the hub's own `Runner` + `ClaudeAdapter`. Run `R-20261111020346-be4f`,
+Claude Code (sonnet, low effort, `--max-budget-usd 0.5`), session `4b183f4b-7c16-4418-8e75-99ab82932b5e`.
+- argv: `-p --output-format stream-json --verbose --model sonnet --effort low --append-system-prompt-file <prompt>
+  --tools Read,Glob,Grep --strict-mcp-config --disable-slash-commands --allowedTools Read,Glob,Grep --disallowedTools
+  Bash,PowerShell,Edit,Write,NotebookEdit,Agent,Task,WebFetch,WebSearch --permission-mode default --setting-sources ""
+  --settings <run>/claude-settings.json --max-budget-usd 0.5`. The CLI accepted the empty `--setting-sources` value.
+- Startup (`system/init`): tools Glob, Grep, Read · mcp_servers 0 · slash_commands 0 · skills 0 ·
+  `terminal_slash_commands` absent (accepted rule) · agents 6 (was 27) · no `hook_*` events (was 1 in T-1) ·
+  **plugins 3** (was 16): `cc-plugin-agents-md`, `cc-plugin-telemetry`, `cc-plugin-plugin-authoring`, all
+  `path: builtin` / `source: …@builtin` (shipped inside the CLI). No user-enabled or account-synced plugin loaded.
+- Validator: violation `{"plugins": 3}` → run `failed` / `tool_restriction_violated`, result discarded,
+  `security.tool_violation`, T-3 → **needs-you** (fail closed as designed).
+- Auth: one `api_retry` (401 `authentication_failed`, attempt 1/10), then success with the existing login
+  (`apiKeySource: none`); no new credentials. The agent used no tools. Cost **$0.0144**, 1 turn.
+- No unauthorized writes: T-3 worktree clean at `875b7f3`; target `main` still `875b7f3` (new branch `hub/T-3` from the
+  worktree, as for T-1/T-2); v1 `75f4561`, 19 paths, unchanged; `~/.claude/settings.json` hash unchanged; hub tracked
+  files unchanged.
+- **R1: FAIL (fail-closed correct).** `--setting-sources ""` + `disableAllHooks` removed all user/synced plugins, hooks,
+  MCP servers, slash commands and skills; only 3 CLI-built-in plugins remain. Owner decision needed: allow exactly these
+  built-in plugins (name + `@builtin` source), find a CLI switch that disables them, or keep R1 as FAIL.
+
+## Fix round: R1 built-in plugin isolation — 2026-11-11 (owner approval: "DECISION: APPROVED — ONE FOCUSED FIX ROUND")
+Implemented (Codex): the worker-only `claude-settings.json` adds `enabledPlugins` = false for
+`cc-plugin-agents-md@builtin`, `cc-plugin-telemetry@builtin`, `cc-plugin-plugin-authoring@builtin`
+(`CLAUDE_DISABLED_BUILTIN_PLUGINS`). All other flags, settings and the validator rule "plugins must be empty" are unchanged;
+no plugin allow-list. Tests: full settings JSON and full argv pinned; a fake run with a `@builtin` plugin fails closed
+(coder and reviewer).
+Evidence: full suite **884/884** (orchestrator); Claude review **PASS** (3 low, style/doc only); scope and secret scans
+PASS; v1 unchanged; owner `~/.claude/settings.json` unchanged.
+**CLI compatibility: UNVERIFIED.** Whether Claude Code 2.1.312 honours `enabledPlugins: false` for `@builtin` plugins
+can only be shown by a live run; if they still load, the run fails closed. R1 stays FAIL until the next live check.
+
 ## LIVE-E — owner decision 2026-11-10 (explicit revision of Phase 1 acceptance)
 - **SIMULATED RECOVERY: PASS** — automated quota-recovery tests and controlled failure simulations pass in the full suite
   (852/852 at `4bfb5d0`: verified-reset scheduling, bounded backoff 15/30/60/120/240 then needs-you, per-attempt keys,
