@@ -408,6 +408,12 @@ def test_latest_proposal_on_quota_resume(engine_env, monkeypatch, tmp_path, vend
     argv = json.loads(log.read_text())
     assert (SESSION in argv) is (not change_model)
     assert ("--resume" in argv if vendor == "claude" else "resume" in argv) is (not change_model)
+    if vendor == "codex":
+        from adapters.codex_cli import CODEX_DISABLED_FEATURES
+        assert "--ignore-user-config" in argv and "--ignore-rules" in argv
+        assert "features.multi_agent=false" in argv and "mcp_servers={}" in argv
+        assert all(argv[argv.index(feature) - 1] == "--disable" for feature in CODEX_DISABLED_FEATURES)
+        assert "skills.config=[]" in argv
     run = store.read_state("project", "T-1")["runs"][store.read_state("project", "T-1")["active_run"]]
     assert run["route"]["model"] == model and run["route"]["effort"] == "high"
     assert sum(e.kind == "session.resume_refused" for e in store.read_events("project", "T-1")) == int(change_model)
@@ -616,3 +622,76 @@ def test_metadata_evidence_without_secrets(runtime, monkeypatch, vendor):
                           "Implement hello.txt only."):
             assert forbidden not in text
     assert "[REDACTED]" in meta_text
+
+
+@pytest.mark.parametrize("failure", ["marker", "version", "missing-pin"])
+def test_codex_spawn_isolation_gate(runtime, monkeypatch, failure):
+    import os
+    from adapters.codex_cli import codex_home
+    runner, _ = runtime
+    if failure == "marker":
+        if os.name != "nt":
+            pytest.skip("Windows sandbox marker")
+        (codex_home() / ".sandbox" / "setup_marker.json").unlink()
+        reason = "codex_sandbox_unverified"
+    elif failure == "version":
+        runner.availability_probe = lambda vendor: Availability(True, "codex-cli 0.168.0", True, "")
+        reason = "codex_version_unverified"
+    else:
+        path = runner.hub_root / "config" / "policy.toml"
+        path.write_text(path.read_text().replace('[codex]\nverified_version = "0.167.0"', ''), encoding="utf-8")
+        reason = "codex_version_unverified"
+    monkeypatch.setattr("runner.subprocess.Popen", lambda *a, **kw: pytest.fail("unverified worker spawned"))
+    with pytest.raises(PolicyError, match=reason):
+        start(runtime)
+    state = runner.store.read_state("project", "T-1")
+    assert state["status"] == "needs-you" and not state.get("runs")
+    assert any(e.kind == "security.codex_isolation_blocked" and e.data["reason"] == reason
+               for e in runner.store.read_events("project", "T-1"))
+
+
+@pytest.mark.parametrize("scenario,reason", [("config_changed", "codex_owner_config_changed"),
+                                              ("unsupported", "codex_isolation_unsupported"), ("ok", None)])
+@pytest.mark.parametrize("adopted", [False, True])
+def test_codex_config_guard_and_unsupported(runtime, monkeypatch, scenario, reason, adopted):
+    from adapters.codex_cli import codex_home
+    runner, _ = runtime
+    config = codex_home() / "config.toml"
+    config.write_text("original = true\n", encoding="utf-8")
+    expected_hash = hashlib.sha256(config.read_bytes()).hexdigest()
+    monkeypatch.setenv("FAKE_SCENARIO", scenario)
+    run_id = start(runtime)
+    state = runner.store.read_state("project", "T-1")
+    assert state["runs"][run_id]["owner_codex_config_sha256"] == expected_hash
+    if adopted:
+        runner = Runner(runner.store, runner.adapters, runner.worktrees, runner.hub_root, runner.clock)
+    outcome = finished(runner, run_id)
+    assert outcome.reason == reason
+    assert outcome.status == ("failed" if reason or adopted else "ok")
+    state = runner.store.read_state("project", "T-1")
+    events = runner.store.read_events("project", "T-1")
+    assert sum(e.kind == "spawn.started" for e in events) == 1
+    if reason:
+        assert state["status"] == "needs-you" and not state["needs_run"]
+    if scenario == "config_changed":
+        directory = runner.store.task_dir("project", "T-1") / "runs" / run_id
+        assert (directory / "result.md").read_text() == "" and outcome.result_text == ""
+        assert any(e.kind == "security.owner_config_changed" for e in events)
+        assert config.read_text() == "changed = true\n"
+
+
+@pytest.mark.parametrize("scenario,reason", [("config_changed", "codex_owner_config_changed"),
+                                              ("unsupported", "codex_isolation_unsupported")])
+def test_engine_codex_failure_never_retries(engine_env, monkeypatch, scenario, reason):
+    factory, store, now, *_ = engine_env
+    propose(store.root, "coder", "codex", "gpt-6.1-sol", "high")
+    monkeypatch.setenv("FAKE_SCENARIO", scenario)
+    engine = factory()
+    state = drive(engine, store, now, wanted="needs-you")
+    run = next(iter(state["runs"].values()))
+    assert run["status"] == "failed" and run["reason"] == reason
+    engine.tick(now)
+    engine.tick(now)
+    events = store.read_events("project", "T-1")
+    assert sum(e.kind == "spawn.started" for e in events) == 1
+    assert any(e.kind == "run.blocked" and e.data["reason"] == reason for e in events)

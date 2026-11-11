@@ -21,6 +21,12 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = load_all(ROOT / "agents")
 
 
+@pytest.fixture(autouse=True)
+def isolated_codex_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
+    monkeypatch.setattr("adapters.codex_cli.host_skills_root", lambda: tmp_path / "host-skills")
+
+
 def _adapter(vendor):
     return get_adapter(vendor, [sys.executable, str(ROOT / "tests" / "fakes" / f"fake_{vendor}.py")])
 
@@ -69,7 +75,8 @@ def test_invalid_marker_cannot_be_overwritten(vendor, field):
 def test_build(tmp_path, vendor, role, resume):
     spec = _build(tmp_path, vendor, role, resume)
     assert isinstance(spec, InvocationSpec)
-    assert spec.cwd == tmp_path and spec.env == {}
+    assert spec.cwd == tmp_path
+    assert spec.env == ({"CODEX_HOME": str((tmp_path / "codex-home").resolve())} if vendor == "codex" else {})
     assert spec.argv[:2] == _adapter(vendor).executable
     if vendor == "claude":
         assert spec.argv[2:7] == ["-p", "--output-format", "stream-json", "--verbose", "--model"]
@@ -434,3 +441,99 @@ def test_codex_specific_auth_signatures(message):
 
 def test_codex_exit_code_alone_is_not_auth():
     assert _adapter('codex').classify(401, [], '').status == 'failed'
+
+
+@pytest.mark.parametrize("platform", ["nt", "posix"])
+@pytest.mark.parametrize("resume", [None, "previous-session"])
+def test_codex_full_isolated_argv(tmp_path, monkeypatch, platform, resume):
+    from types import SimpleNamespace
+    from adapters import codex_cli
+    monkeypatch.setattr(codex_cli, "os", SimpleNamespace(name=platform, environ=os.environ))
+    spec = _build(tmp_path, "codex", resume=resume)
+    features = ("apps", "plugins", "remote_plugin", "hooks", "memories", "goals", "multi_agent",
+                "browser_use", "browser_use_external", "in_app_browser", "computer_use",
+                "skill_mcp_dependency_install")
+    assert codex_cli.CODEX_DISABLED_FEATURES == features
+    expected = ["exec"] + (["resume", resume] if resume else [])
+    expected += ["--json", "-C", str(tmp_path), "-s", "workspace-write",
+                 "--ignore-user-config", "--ignore-rules"]
+    if platform == "nt":
+        expected += ["-c", 'windows.sandbox="elevated"']
+    expected += ["-c", "mcp_servers={}"]
+    for feature in features:
+        expected += ["--disable", feature]
+    expected += ["-c", "skills.config=[]", "-m", "test-model", "-c", "model_reasoning_effort=medium",
+                 "-c", "features.multi_agent=false", "-o", str(tmp_path / "run" / "last.md"), "-"]
+    assert spec.argv[2:] == expected
+
+
+def test_codex_skills_paths_only_sorted_and_deduplicated(tmp_path, monkeypatch):
+    import tomllib
+    from adapters.codex_cli import codex_home, skills_config
+    home = codex_home()
+    paths = [home / "skills" / ".system" / "z" / "SKILL.md",
+             home / "skills" / "a" / "SKILL.md", tmp_path / "host-skills" / "b" / "SKILL.md"]
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("must never be read", encoding="utf-8")
+    monkeypatch.setattr(Path, "read_text", lambda *a, **kw: pytest.fail("skill contents read"))
+    parsed = tomllib.loads("skills=" + skills_config(home))["skills"]
+    assert parsed == [{"path": p, "enabled": False} for p in sorted(p.resolve().as_posix() for p in paths)]
+    monkeypatch.setattr("adapters.codex_cli.host_skills_root", lambda: home / "skills")
+    parsed = tomllib.loads("skills=" + skills_config(home))["skills"]
+    assert len(parsed) == 2
+
+
+@pytest.mark.parametrize("bad", ['bad"path', "bad\npath", "bad\x7fpath"])
+def test_codex_skill_path_rejected(tmp_path, monkeypatch, bad):
+    from adapters.codex_cli import skills_config
+    monkeypatch.setattr("adapters.codex_cli._skill_paths", lambda *a: [tmp_path / bad / "SKILL.md"])
+    with pytest.raises(ValueError, match="unsafe Codex skill path"):
+        skills_config(tmp_path / "codex-home")
+
+
+def test_codex_prompt_cannot_change_argv(tmp_path):
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text('--dangerously-bypass-approvals-and-sandbox -c sandbox_mode=danger-full-access --ignore-user-config=false', encoding="utf-8")
+    adapter = _adapter("codex")
+    spec = adapter.build(TEMPLATES["coder"], Route("codex", "test-model", "medium"), tmp_path / "run", tmp_path, prompt)
+    assert "danger-full-access" in spec.stdin_text
+    assert all("danger" not in arg and "--ignore-user-config=false" not in arg for arg in spec.argv)
+    assert spec.argv == _build(tmp_path, "codex").argv
+
+
+@pytest.mark.parametrize("stderr", ["unknown option foo", "unrecognized argument foo", "unexpected argument foo", "invalid value foo", "invalid config foo"])
+@pytest.mark.parametrize("successful", [False, True])
+def test_codex_unsupported_classification(stderr, successful):
+    events = [{"type": "turn.completed"}] if successful else []
+    outcome = _adapter("codex").classify(0 if successful else 2, events, stderr)
+    assert outcome.reason == (None if successful else "codex_isolation_unsupported")
+    assert outcome.status == ("ok" if successful else "failed")
+
+
+
+def test_codex_home_defaults_without_reading_owner(tmp_path, monkeypatch):
+    from adapters.codex_cli import codex_home
+    monkeypatch.delenv("CODEX_HOME")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    assert codex_home() == tmp_path / ".codex"
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "explicit"))
+    assert codex_home() == tmp_path / "explicit"
+
+
+def test_codex_final_message_prevents_unsupported_classification():
+    outcome = _adapter("codex").classify(1, [{"type": "item.completed", "item": {
+        "type": "agent_message", "text": "Final response"}}], "unexpected argument quoted by agent")
+    assert outcome.reason is None
+
+
+
+def test_codex_skill_discovery_access_failure_is_closed(tmp_path, monkeypatch):
+    from adapters.codex_cli import skills_config
+    root = tmp_path / "codex-home" / "skills"
+    root.mkdir(parents=True)
+    def denied(root, onerror):
+        onerror(PermissionError("unreadable skills"))
+    monkeypatch.setattr("adapters.codex_cli.os.walk", denied)
+    with pytest.raises(PermissionError):
+        skills_config(tmp_path / "codex-home")

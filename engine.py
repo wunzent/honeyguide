@@ -102,6 +102,7 @@ class Engine:
             clock,
             availability_probe,
         )
+        self.runner.availability_probe = self.availability_probe
         self.notifier = notifier
         self._lock = None
         self._acquire()
@@ -1013,6 +1014,7 @@ class Engine:
                         if state.get("answer_context")
                         else ""
                     )
+                    self.runner.availability_probe = self.availability_probe
                     self.runner.start(
                         project,
                         task,

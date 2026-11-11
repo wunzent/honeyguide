@@ -55,6 +55,7 @@ class Policy:
     policy_hash: str
     raw: dict
     ignored_artifact_globs: list[str]
+    codex_verified_version: str | None = None
 
 
 def _parse_policy(root: Path, raw: dict, digest: str) -> Policy:
@@ -104,6 +105,10 @@ def _parse_policy(root: Path, raw: dict, digest: str) -> Policy:
                 raise ValueError(f"invalid routing for {role}")
         if roles["reviewer"].get("reviewer_must_differ") is not True:
             raise ValueError("reviewer must differ from coder")
+        section = raw.get("codex")
+        pin = section.get("verified_version") if isinstance(section, dict) else None
+        # An absent or invalid pin disables Codex without blocking Claude-only use.
+        pin = pin if isinstance(pin, str) and re.fullmatch(r"\d+\.\d+\.\d+", pin) else None
         return Policy(root, hub["max_processes"], hub["max_dynamic"], hub["security_gate"], hub["mode"],
                       paths["data_root"], paths["owner_secret_dir"], paths["deny"], paths["max_path_len"],
                       caps["coder_tester_rounds"], caps["review_fix_cycles"], caps["respawn_per_key"],
@@ -111,7 +116,7 @@ def _parse_policy(root: Path, raw: dict, digest: str) -> Policy:
                       quota["max_episodes_per_task_per_day"], quota["verified_reset_grace_minutes"],
                       questions["relay_types"],
                       {role: {**settings, "auto_fallback": settings.get("auto_fallback", False)}
-                       for role, settings in roles.items()}, digest, raw, artifacts)
+                       for role, settings in roles.items()}, digest, raw, artifacts, pin)
     except (KeyError, TypeError, ValueError) as exc:
         raise PolicyError(f"invalid policy: {exc}") from None
 

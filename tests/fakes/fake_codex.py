@@ -11,13 +11,18 @@ def main() -> int:
     if os.environ.get("FAKE_ARGV_LOG"):
         Path(os.environ["FAKE_ARGV_LOG"]).write_text(json.dumps(args), encoding="utf-8")
     if args == ["--version"]:
-        print("fake-codex 1.0")
+        print("codex-cli 0.167.0")
         return 0
     if args == ["login", "status"]:
         print("Logged in using fake credentials")
         return 0
     sys.stdin.read()
     scenario = os.environ.get("FAKE_SCENARIO", "ok")
+    if scenario == "config_changed":
+        (Path(os.environ["CODEX_HOME"]) / "config.toml").write_text("changed = true\n", encoding="utf-8")
+    if scenario == "unsupported":
+        print("error: unexpected argument --ignore-user-config", file=sys.stderr)
+        return 2
     if scenario == "slow":
         time.sleep(float(os.environ.get("FAKE_SLEEP", "30")))
     print(json.dumps({"type": "thread.started", "thread_id": os.environ.get("FAKE_SESSION_ID", "codex-thread")}))

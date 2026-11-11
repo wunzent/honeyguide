@@ -53,3 +53,6 @@ reviewer_must_differ = true
 allowed_vendors = ["claude", "codex"]
 fallback = ["codex:gpt-6.1-sol", "claude:sonnet"]
 auto_fallback = false
+
+[codex]
+verified_version = "0.167.0"

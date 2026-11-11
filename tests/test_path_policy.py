@@ -29,7 +29,12 @@ def git_run(*args):
 
 
 @pytest.fixture
-def hub(tmp_path):
+def hub(tmp_path, monkeypatch):
+    home = tmp_path / "codex-home"
+    (home / ".sandbox").mkdir(parents=True)
+    (home / ".sandbox" / "setup_marker.json").touch()
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    monkeypatch.setattr("adapters.codex_cli.host_skills_root", lambda: tmp_path / "host-skills")
     root = tmp_path / "hub"
     config = root / "config"
     config.mkdir(parents=True)
@@ -72,6 +77,8 @@ def test_production_defaults(hub):
     defaults = tomllib.loads(DEFAULTS)
     assert defaults["hub"] == {"max_processes": 2, "max_dynamic": 1,
                                "security_gate": "NOT PASS", "mode": "manual-trusted-approval"}
+    assert defaults["codex"]["verified_version"] == "0.167.0"
+    assert hub.policy.codex_verified_version == "0.167.0"
     assert defaults["paths"]["max_path_len"] == 200
     assert defaults["paths"]["owner_secret_dir"] == "%USERPROFILE%\\.mah-v2-owner"
     assert defaults["caps"] == {"coder_tester_rounds": 3, "review_fix_cycles": 1,
@@ -417,3 +424,17 @@ def test_artifact_allowlist_schema(hub, value):
 def test_artifact_allowlist_is_explicit(hub):
     assert hub.policy.ignored_artifact_globs == [
         '**/__pycache__/**', '**/*.pyc', '.pytest_cache/**', '**/.pytest_cache/**']
+
+
+@pytest.mark.parametrize("value", [None, {}, {"verified_version": 167}, {"verified_version": ""}])
+def test_missing_or_invalid_codex_pin_keeps_claude_policy_usable(hub, value):
+    from policy import _parse_policy
+    raw = deepcopy(hub.policy.raw)
+    if value is None:
+        raw.pop("codex")
+    else:
+        raw["codex"] = value
+    parsed = _parse_policy(hub.root, raw, "test-policy-hash")
+    assert parsed.codex_verified_version is None
+    assert parsed.routing_roles["coder"] == hub.policy.routing_roles["coder"]
+    assert parsed.security_gate == "NOT PASS"

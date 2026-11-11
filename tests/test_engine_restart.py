@@ -57,6 +57,8 @@ def runtime(hub, target, monkeypatch):
                 for vendor in ("claude", "codex")}
     runner = Runner(store, adapters, manager, hub.root,
                     clock=lambda: datetime(2026, 11, 9, 12, 34, 56, tzinfo=timezone.utc))
+    from adapters.base import Availability
+    runner.availability_probe = lambda vendor: Availability(True, "codex-cli 0.167.0", True, "")
     yield runner, worktree
     for process in runner._processes.values():
         if process.poll() is None:
@@ -307,7 +309,7 @@ def engine_env(runtime, hub, target):
         scheduler = Scheduler(initial.store, hub.policy, lambda: now, rng=lambda a, b: 0)
         engine = Engine(hub.root, store=initial.store, policy_loader=load_policy,
                         adapters=runner.adapters, runner=runner, worktrees=initial.worktrees, scheduler=scheduler,
-                        clock=lambda: now, availability_probe=lambda vendor: Availability(True, "fake", True, ""),
+                        clock=lambda: now, availability_probe=lambda vendor: Availability(True, "codex-cli 0.167.0", True, ""),
                         notifier=lambda *args: notices.append(args))
         engines.append(weakref.ref(engine))
         return engine
@@ -810,7 +812,7 @@ def test_child_environment_allowlist(runtime, monkeypatch, tmp_path, kind):
         build = adapter.build
         script += "; assert os.environ['EXPLICIT_OVERRIDE'] == 'yes'; print('{\"type\":\"turn.completed\"}')"
         monkeypatch.setattr(adapter, 'build', lambda *a, **k: replace(build(*a, **k),
-            argv=[sys.executable, '-c', script], stdin_text=None, env={'EXPLICIT_OVERRIDE': 'yes'}))
+            argv=[sys.executable, '-c', script], stdin_text=None, env={'EXPLICIT_OVERRIDE': 'yes', 'CODEX_HOME': os.environ['CODEX_HOME']}))
         assert finished(runner, start(runtime)).status == 'ok'
 
 

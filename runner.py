@@ -22,6 +22,7 @@ import psutil
 import yaml
 
 from adapters.base import Adapter, InvalidResumeSession, Outcome, Route, _clean, scrub, validate_session_id
+from adapters.codex_cli import codex_home
 from agent_loader import AgentTemplate, render_prompt
 from policy import (
     PolicyError,
@@ -171,6 +172,7 @@ class Runner:
         if store.root.resolve() != self.hub_root:
             raise ValueError("store must belong to the configured hub")
         self.clock = clock
+        self.availability_probe = None
         self._processes: dict[tuple[str, str, str], subprocess.Popen] = {}
 
     def _new_run(self, project: str, task: str) -> tuple[str, Path]:
@@ -220,7 +222,8 @@ class Runner:
     def _metadata(self, directory: Path, record: dict) -> None:
         fields = ("argv", "prompt_sha256", "template_role", "body_sha256", "route",
                   "executable_resolved_path", "launcher_note", "finished_at", "status",
-                  "reset_at", "reset_source", "session_id", "exit_code", "reason", "agents_count")
+                  "reset_at", "reset_source", "session_id", "exit_code", "reason", "agents_count",
+                  "owner_codex_config_sha256", "codex_home")
         self._write(directory / "meta.md", "# Run metadata\n\n```json\n"
                     + json.dumps({key: record[key] for key in fields if key in record}, indent=2)
                     + "\n```\n")
@@ -262,6 +265,29 @@ class Runner:
         ):
             raise PolicyError("spawn requires the task's policy worktree")
         adapter = self.adapters[route.vendor]
+        if route.vendor == "codex":
+            def probe(argv):
+                result = subprocess.run(argv, capture_output=True, text=True, timeout=15,
+                                        env=_child_env({"CODEX_HOME": str(codex_home().resolve())}))
+                return result.returncode, result.stdout + result.stderr
+            try:
+                available = (self.availability_probe("codex") if self.availability_probe
+                             else adapter.availability(probe))
+                version_text = available.version or ""
+            except (OSError, subprocess.SubprocessError):
+                version_text = ""
+            version = re.fullmatch(r"codex-cli (\d+\.\d+\.\d+)", version_text)
+            reason = None
+            if not policy.codex_verified_version or not version or version[1] != policy.codex_verified_version:
+                reason = "codex_version_unverified"
+            elif os.name == "nt" and not (codex_home() / ".sandbox" / "setup_marker.json").exists():
+                reason = "codex_sandbox_unverified"
+            if reason:
+                with self.store.transaction(project, task) as txn:
+                    changes = {"status": "needs-you", "needs_run": False}
+                    txn.state.update(changes)
+                    txn.emit("security.codex_isolation_blocked", {"reason": reason, "set": changes})
+                raise PolicyError(reason)
         snapshot = self.store.read_state(project, task)
         for prior_id, prior in snapshot.get("runs", {}).items():
             if prior.get("idem_key") == idem_key and prior.get("status") == "abandoned":
@@ -334,6 +360,12 @@ class Runner:
                 "executable_resolved_path": str(Path(shutil.which(invocation.argv[0]) or invocation.argv[0]).resolve()),
                 "launcher_note": invocation.launcher_note,
             }
+            if route.vendor == "codex":
+                home = Path(invocation.env["CODEX_HOME"])
+                config_hash = self._config_hash(home)
+                if config_hash == "unreadable":
+                    raise PolicyError("codex owner config cannot be verified")
+                record.update(codex_home=str(home), owner_codex_config_sha256=config_hash)
             runs[run_id] = record
             keys = dict(txn.state.get("spawned_keys", {}))
             keys[idem_key] = keys.get(idem_key, 0) + 1
@@ -473,10 +505,45 @@ class Runner:
             raise PolicyError("orphan process inspection is incomplete or ambiguous")
         return False
 
+    @staticmethod
+    def _config_hash(home: Path) -> str:
+        path = home / "config.toml"
+        try:
+            return sha256_file(path)
+        except FileNotFoundError:
+            return "absent"
+        except OSError:
+            return "unreadable"
+
     def poll(self, project: str, task: str, run_id: str) -> Outcome | None:
         directory = self._directory(project, task, run_id)
         record = self.store.read_state(project, task)["runs"][run_id]
         process = self._processes.get((project, task, run_id))
+        config_changed = False
+        if record["route"]["vendor"] == "codex":
+            before = record.get("owner_codex_config_sha256")
+            after = self._config_hash(Path(record["codex_home"])) if record.get("codex_home") else "unverified"
+            config_changed = before != after or record.get("reason") == "codex_owner_config_changed"
+            if config_changed and record["status"] == "running":
+                if is_same_process(record.get("pid"), record.get("create_time")):
+                    try:
+                        _terminate_tree(record["pid"], record["create_time"], record.get("run_token", ""), record.get("exe"))
+                    except PolicyError:
+                        # The worker may exit between the identity check and signal.
+                        # Never relax identity checks or signal a replacement PID.
+                        try:
+                            psutil.Process(record["pid"]).wait(timeout=0.1)
+                        except psutil.NoSuchProcess:
+                            pass
+                        except psutil.TimeoutExpired:
+                            raise
+                    if process is not None:
+                        process.wait(timeout=5)
+                with self.store.transaction(project, task) as txn:
+                    changes = {"status": "needs-you", "needs_run": False}
+                    txn.state.update(changes)
+                    txn.emit("security.owner_config_changed", {"run": run_id, "before": before,
+                             "after": after, "set": changes})
         if record["status"] == "intent":
             return None
         if process is not None:
@@ -497,6 +564,16 @@ class Runner:
             if event is not None:
                 events.append(event)
         errors = read_text_retry(directory / "stderr.txt")
+        if record["route"]["vendor"] == "codex" and not config_changed:
+            before = record.get("owner_codex_config_sha256")
+            after = self._config_hash(Path(record["codex_home"])) if record.get("codex_home") else "unverified"
+            if before != after:
+                config_changed = True
+                with self.store.transaction(project, task) as txn:
+                    changes = {"status": "needs-you", "needs_run": False}
+                    txn.state.update(changes)
+                    txn.emit("security.owner_config_changed", {"run": run_id, "before": before,
+                             "after": after, "set": changes})
         outcome = adapter.classify(exit_code, events, scrub(errors[-8192:]))
         outcome = replace(
             outcome,
@@ -506,6 +583,8 @@ class Runner:
             session_invalid=outcome.session_invalid or (
                 outcome.session_id is not None and validate_session_id(outcome.session_id) is None),
         )
+        if config_changed:
+            outcome = replace(outcome, status="failed", reason="codex_owner_config_changed", result_text="")
         violations = (_tool_violations(events, record.get("allowed_tools", []), record.get("argv", []))
                       if record["route"]["vendor"] == "claude" else {})
         if violations:
@@ -521,7 +600,7 @@ class Runner:
                                  if event.get("type") == "system" and isinstance(event.get("subtype"), str)
                                  and event["subtype"].startswith("hook_")}),
                              "set": {"status": "needs-you", "needs_run": False}})
-        if outcome.reason == "claude_isolation_unsupported" and record["status"] == "running":
+        if outcome.reason in {"claude_isolation_unsupported", "codex_isolation_unsupported"} and record["status"] == "running":
             with self.store.transaction(project, task) as txn:
                 changes = {"status": "needs-you", "needs_run": False}
                 txn.state.update(changes)

@@ -178,6 +178,31 @@ model_reasoning_effort=low …`.
   Codex workers inherit the owner's global Codex configuration (plugins, MCP servers, hooks, global AGENTS.md); there is
   no Codex equivalent of the Claude R1 isolation yet.
 
+## Fix round: Codex worker isolation — 2026-11-11 (owner approval: "DECISION: APPROVED — IMPLEMENTATION")
+Plan: `docs/PLAN-CODEX-ISOLATION.md` Rev 1. Implemented (Codex): `--ignore-user-config --ignore-rules`, explicit
+`-c windows.sandbox="elevated"` (Windows; requires `<codex_home>/.sandbox/setup_marker.json`), `-c mcp_servers={}`,
+`--disable` for apps/plugins/remote_plugin/hooks/memories/goals/multi_agent/browser_use/browser_use_external/
+in_app_browser/computer_use/skill_mcp_dependency_install, automatic `skills.config` disable list (paths only).
+Same `CODEX_HOME`, no credentials copied. Guards: owner `config.toml` hashed before/after every run (change → failed
+`codex_owner_config_changed`, result discarded, needs-you, no restore); CLI pinned to `0.167.0` (`[codex] verified_version`;
+mismatch or missing → no spawn, needs-you); unsupported flag → `codex_isolation_unsupported`, needs-you, no fallback. Task
+content reaches the worker via stdin only (test pins argv against injected flags). The `config/policy.toml` edit makes
+earlier approvals in the real hub invalid (expected).
+Evidence: full suite **921/921** (orchestrator); Claude review **PASS**; scope and secret scans PASS; v1 unchanged; owner
+`~/.codex/config.toml` and `~/.claude/settings.json` unchanged by this round.
+Open review notes (not fixed; a further fix round needs owner approval):
+- Medium: unsupported-flag detection is a stderr regex. A CLI that warns and continues on an unknown `--disable`/`-c`
+  would not be caught (only the version pin protects), and other fatal wordings ("unknown feature", "unknown field",
+  "error loading config") become a generic `failed` rather than `codex_isolation_unsupported`.
+- Medium: repo-scoped skills (`<worktree>/.agents/skills` and parents) are not disabled, and symlinked skill folders under
+  `~/.codex/skills` are missed.
+- Low: `skills_config` errors raise before the intent record (no spawn, but no needs-you event); the version probe is
+  separate from the spawned executable and the sandbox check is existence-only; two concurrent Codex workers can cause a
+  false config-changed failure if a trust write persists; a very large skills list could reach the Windows argv limit.
+**NOT LIVE VERIFIED:** none of the flags has run against the real CLI. V1 (startup, login, config isolation, sandbox), V2
+(resume) and V3 (LIVE-B A0–A12) each need separate approval. Configuration isolation does not prove filesystem isolation;
+the unsandboxed Python test runner and same-user Windows boundaries remain open risks.
+
 ## LIVE-E — owner decision 2026-11-10 (explicit revision of Phase 1 acceptance)
 - **SIMULATED RECOVERY: PASS** — automated quota-recovery tests and controlled failure simulations pass in the full suite
   (852/852 at `4bfb5d0`: verified-reset scheduling, bounded backoff 15/30/60/120/240 then needs-you, per-attempt keys,

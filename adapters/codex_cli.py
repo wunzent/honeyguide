@@ -14,6 +14,55 @@ from adapters.base import (Availability, InvalidResumeSession, InvocationSpec, O
 from state_writer import read_text_retry
 
 
+CODEX_DISABLED_FEATURES = (
+    "apps", "plugins", "remote_plugin", "hooks", "memories", "goals",
+    "multi_agent", "browser_use", "browser_use_external", "in_app_browser",
+    "computer_use", "skill_mcp_dependency_install",
+)
+
+
+def codex_home() -> Path:
+    return Path(os.environ["CODEX_HOME"]) if "CODEX_HOME" in os.environ else Path.home() / ".codex"
+
+
+def host_skills_root() -> Path:
+    return Path.home() / ".agents" / "skills"
+
+
+def _skill_paths(root: Path, recursive: bool) -> list[Path]:
+    try:
+        root.stat()
+    except FileNotFoundError:
+        return []
+
+    def fail(error: OSError) -> None:
+        raise error
+
+    if recursive:
+        return [Path(directory) / "SKILL.md"
+                for directory, _, files in os.walk(root, onerror=fail) if "SKILL.md" in files]
+    paths = []
+    with os.scandir(root) as entries:
+        for entry in entries:
+            if entry.is_dir():
+                path = Path(entry.path) / "SKILL.md"
+                try:
+                    path.stat()
+                except FileNotFoundError:
+                    continue
+                paths.append(path)
+    return paths
+
+
+def skills_config(home: Path) -> str:
+    # walk/scandir propagate access failures; glob can silently omit unreadable skills.
+    paths = {path.resolve().as_posix() for path in _skill_paths(home / "skills", True)}
+    paths.update(path.resolve().as_posix() for path in _skill_paths(host_skills_root(), False))
+    if any('"' in path or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in path) for path in paths):
+        raise ValueError("unsafe Codex skill path")
+    return "[" + ",".join('{path=' + json.dumps(path, ensure_ascii=False) + ', enabled=false}' for path in sorted(paths)) + "]"
+
+
 def read_session_rate_limits(sessions_dir: Path) -> dict | None:
     try:
         paths = sorted(sessions_dir.rglob("*.jsonl"),
@@ -83,11 +132,18 @@ class CodexAdapter:
             if session is None:
                 raise InvalidResumeSession("invalid resume session identifier")
             argv += ["resume", session]
+        home = codex_home().resolve()
         argv += ["--json", "-C", str(worktree), "-s",
                  "read-only" if template.writes == "none" else "workspace-write",
-                 "-m", route.model, "-c", f"model_reasoning_effort={route.effort}",
+                 "--ignore-user-config", "--ignore-rules"]
+        if os.name == "nt":
+            argv += ["-c", 'windows.sandbox="elevated"']
+        argv += ["-c", "mcp_servers={}"]
+        for feature in CODEX_DISABLED_FEATURES:
+            argv += ["--disable", feature]
+        argv += ["-c", "skills.config=" + skills_config(home), "-m", route.model, "-c", f"model_reasoning_effort={route.effort}",
                  "-c", "features.multi_agent=false", "-o", str(run_dir / "last.md"), "-"]
-        return InvocationSpec(argv, worktree, read_text_retry(prompt_path), {}, launcher_note=self.launcher_note)
+        return InvocationSpec(argv, worktree, read_text_retry(prompt_path), {"CODEX_HOME": str(home)}, launcher_note=self.launcher_note)
 
     def parse_line(self, line: str) -> dict | None:
         return _parse_line(line)
@@ -127,8 +183,15 @@ class CodexAdapter:
         messages = [node["text"] for node in nodes
                     if node.get("type") == "agent_message" and isinstance(node.get("text"), str)]
         usage = next((node["usage"] for node in reversed(nodes) if isinstance(node.get("usage"), dict)), {})
+        successful = any(event.get("type") in ("turn.completed", "turn_completed") for event in events) or bool(messages)
+        unsupported = not successful and re.search(
+            r"unknown (?:option|argument)|unrecognized (?:option|argument)|unexpected argument|invalid (?:value|config)",
+            stderr_tail, re.I)
+        if unsupported:
+            status = "failed"
         return Outcome(status, session, reset, "codex-stream" if reset else None,
                        scrub("\n".join(messages)), usage,
+                       reason="codex_isolation_unsupported" if unsupported else None,
                        session_invalid=any(node.get("session_invalid") is True for node in nodes))
 
     def availability(self, run: Callable[[list[str]], tuple[int, str]]) -> Availability:
