@@ -33,8 +33,9 @@ To continue a task in the other vendor (quota, preference): "Continue task `<slu
 ## Limits (honest)
 - Prompt rules are not enforcement: file limits come from the CLI sandbox (Codex `-s read-only|workspace-write`) and
   tool permissions (Claude `--allowedTools`). Claude Code has no OS sandbox.
-- Codex -> Claude delegation needs network and writes under the user profile, which the Codex workspace sandbox blocks:
-  approve that command's escalation when Codex asks.
+- Codex -> Claude delegation needs network and writes under the user profile. In the acceptance run it worked from the
+  default Codex workspace sandbox on this Windows machine; other setups may block it - then approve the escalation Codex asks for.
 - Native subagent model/effort is not always reported back; records say `Unverified` instead of guessing.
 - Quota detection is text-based (usage-limit messages and exit codes); the handoff itself is the orchestrator's job.
+- Acceptance evidence: `docs/ACCEPTANCE.md`; research reuse: `docs/SKILLS-REUSE.md`.
 - History: `docs/legacy/` (old engine docs and evidence), `docs/WORKLOG.md`, `docs/REBUILD-INVENTORY.md`.

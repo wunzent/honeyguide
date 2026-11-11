@@ -192,10 +192,11 @@ def delegate(args):
             argv = [exe, "exec", "--json", "-C", cwd, "-s", "workspace-write" if args.write else "read-only",
                     "-m", args.model, "-c", f"model_reasoning_effort={args.effort}", "-o", str(last), "-"]
         else:
-            argv = [exe, "-p", "--model", args.model, "--effort", args.effort, "--output-format", "stream-json", "--verbose"]
+            argv = [exe, "-p", "--model", args.model, "--effort", args.effort, "--output-format", "stream-json", "--verbose",
+                    "--add-dir", str(directory.parent.resolve())]  # the task folder holds the shared checkpoint
             argv += (["--permission-mode", "acceptEdits", "--allowedTools", "Read,Edit,Write,Glob,Grep" + (",Bash" if args.allow_shell else "")]
                      if args.write else ["--allowedTools", "Read,Glob,Grep"])
-        prompt = f"You are a worker agent delegated by the {args.parent} orchestrator for task {args.task}. Stay inside the assignment and the working directory. Report what you changed and the evidence. If blocked, say so; do not guess.\n\n" + brief
+        prompt = f"You are a worker agent delegated by the {args.parent} orchestrator for task {args.task}. Stay inside the assignment and the working directory. Report what you changed and the evidence. If blocked, say so; do not guess.\nTask checkpoint (shared state, read it when the brief refers to it or you need context): {(directory.parent / 'CHECKPOINT.md').resolve()}\n\n" + brief
         try:
             process = subprocess.run(argv, input=prompt, text=True, encoding="utf-8", errors="replace", capture_output=True, cwd=cwd)
             write(event_path, process.stdout)

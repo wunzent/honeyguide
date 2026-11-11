@@ -13,9 +13,9 @@ The hub folder must be a trusted project in Codex so the project `.codex/` folde
 
 ## Cross-vendor: Codex -> Claude
 - `python tools/hub.py delegate <task> --to claude --role <role> --model sonnet --effort low|medium|high --brief <file> --reason "..." --parent codex-orchestrator [--cwd <repo>] [--write] [--allow-shell]`
-- The Claude CLI needs network access and writes its own session files under the user profile, which the Codex
-  workspace sandbox blocks. Run this one command with escalated permission (Codex asks the owner to approve it), or
-  start Codex with network access enabled for the session. Do not change the owner's global Codex config for it.
+- The Claude CLI needs network access and writes its own session files under the user profile. On this Windows machine
+  it ran from the default Codex workspace sandbox (acceptance run 2026-11-11); if a sandbox blocks it, run that one
+  command with escalated permission (Codex asks the owner). Do not change the owner's global Codex config for it.
 - The record shows the actual Claude model from the CLI's init event; Claude does not report effort (`Unverified`).
 
 ## Limits to remember
