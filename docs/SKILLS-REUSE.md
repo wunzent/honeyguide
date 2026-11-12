@@ -68,7 +68,7 @@ Trendshift picks (2026-11-12, read-only clones in `C:\Users\Natthawut.j\src\tren
   Details, tests and undo: `docs/DEEP-DIVE-2026-11-12.md#cc-safety-net`.
 - Hub skills moved into the repo (2026-11-12, owner request): `skills/` now holds every skill a role names except
   `graphify` (third-party, needs its own CLI; install per machine). Owner's own skills copied from v1 `skills/`
-  (investigate-first, lean-build, safe-refactor, surgical-patch, swc, verify-and-stop) and from the user
+  (investigate-first, lean-build, safe-refactor, surgical-patch, swc (now software-component), verify-and-stop) and from the user
   folder (backend-api-safety); api-and-interface-design and security-and-hardening keep their MIT LICENSE
   (addyosmani/agent-skills aeac41d). `hub.py sync` copies them to `.claude/skills` and `.agents/skills`, so both vendors
   get the same set on any clone; it also prints `SKILL NOT IN REPO` for role skills that do not travel with the repo.
@@ -76,3 +76,5 @@ Trendshift picks (2026-11-12, read-only clones in `C:\Users\Natthawut.j\src\tren
 - swc (owner, 2026-11-12): one SWC skill only, kept as a template standard. `swc-central` (read-only pointer to the
   owner's real spec folders) removed from the repo; `swc` no longer names real paths, projects or project examples
   (project SWC folder comes from the project card, default `docs/swc/FE|BE`; work log template in `references/templates/`).
+- 2026-11-12 (owner): skill `swc` renamed `software-component` (folder `skills/software-component/`). Document names
+  stay "SWC" (SWC-Overview.md, SWC/ folders, `docs/swc/`): SWC is the document type, the skill is its standard.

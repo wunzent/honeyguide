@@ -16,7 +16,7 @@ One list of every reusable agent the orchestrators can use. Vendor, model and ef
 | coder | implements one bounded slice or brief | code in the working dir | brief, surgical-patch, lean-build, safe-refactor | v1 `codex/agents/coder.toml` |
 | reviewer | independent read-only review, PASS/FAIL + max 10 issues | nothing | security-and-hardening, backend-api-safety, verify-and-stop | v1 `codex/agents/reviewer.toml` + `~/.claude/agents/reviewer.md` |
 | tester | runs lint/typecheck/tests, reports exactly | nothing in code | verify-and-stop | v1 `codex/agents/tester.toml` (TEAM MODE dropped) |
-| doc-keeper | updates specs/docs to match the code | docs only | swc | v1 `codex/agents/doc-keeper.toml` |
+| doc-keeper | updates specs/docs to match the code | docs only | software-component | v1 `codex/agents/doc-keeper.toml` |
 | style-scout | writes ARCHITECTURE / PROJECT_STYLE / layers draft | `.agents/` files only | graphify | v1 `codex/agents/style-scout.toml` |
 | researcher | read-only investigation, evidence-ranked answer | nothing | investigate-first, graphify | new (covers v1 investigate-first usage as an agent) |
 
@@ -40,6 +40,6 @@ Custom roles: `agents/custom/` (none yet). Agent instances: `work/<task>/agents/
 - Project skill: `skills/brief/` (copied by `hub.py sync` to `.claude/skills/brief/` and `.agents/skills/brief/`).
 - Installed skills are discovered at run time, not copied: Claude `~/.claude/skills` (investigate-first, surgical-patch,
   lean-build, safe-refactor, verify-and-stop, migration, security-and-hardening, api-and-interface-design,
-  browser-testing-with-devtools, swc, backend-api-safety, adonisjs-backend, graphify, plugin skills);
+  browser-testing-with-devtools, software-component, backend-api-safety, adonisjs-backend, graphify, plugin skills);
   Codex `~/.codex/skills` (code-reviewer, security-best-practices, playwright, ui-ux-pro-max, technical-docs-writing,
   domain-modeling, grilling, ...). A role's "suggested skills" are hints; the orchestrator names the relevant ones per brief.
