@@ -1,0 +1,60 @@
+# Approved sources are cloned only by `hub.py skills install`, never by sync or discovery.
+# No LICENSE found at the reviewed ref: copies stay local and must never be committed.
+[[sources]]
+id = "9arm-skills"
+repo = "https://github.com/thananon/9arm-skills.git"
+ref = "a1fc303b274ed06c32d405ba5a6db00ded6e5663"
+
+[[skills]]
+name = "debug-mantra"
+source = "9arm-skills"
+path = "skills/engineering/debug-mantra"
+licence = "unknown (no LICENSE at reviewed ref); local only"
+status = "supported"
+requires = []
+notes = "Text instructions; read before use."
+
+[[skills]]
+name = "scrutinize"
+source = "9arm-skills"
+path = "skills/engineering/scrutinize"
+licence = "unknown (no LICENSE at reviewed ref); local only"
+status = "supported"
+requires = []
+notes = "Text instructions; read before use."
+
+[[skills]]
+name = "post-mortem"
+source = "9arm-skills"
+path = "skills/engineering/post-mortem"
+licence = "unknown (no LICENSE at reviewed ref); local only"
+status = "supported"
+requires = []
+notes = "Text instructions; read before use."
+
+[[skills]]
+name = "management-talk"
+source = "9arm-skills"
+path = "skills/productivity/management-talk"
+licence = "unknown (no LICENSE at reviewed ref); local only"
+status = "supported"
+requires = []
+notes = "Text instructions; read before use."
+
+[[skills]]
+name = "qwenchance"
+source = "9arm-skills"
+path = "skills/productivity/qwenchance"
+licence = "unknown (no LICENSE at reviewed ref); local only"
+status = "supported"
+requires = []
+notes = "AGENTS.md wins over its fixed retry cap: use progress-based attempts."
+
+[[skills]]
+name = "qwen-agent"
+source = "9arm-skills"
+path = "skills/engineering/qwen-agent"
+licence = "unknown (no LICENSE at reviewed ref); local only"
+status = "unsupported"
+requires = ["claude-9arm alias", "9arm Qwen gateway"]
+notes = "Adapt delegation to hub.py delegate using the cheapest suitable verified model and a self-contained brief; Qwen is not required."

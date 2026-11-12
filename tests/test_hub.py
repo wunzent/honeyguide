@@ -14,11 +14,13 @@ import pytest
 
 
 @pytest.fixture
-def hub(tmp_path):
+def hub(tmp_path, monkeypatch):
     source = Path(__file__).resolve().parents[1]
     root = tmp_path / "hub"
     (root / "tools").mkdir(parents=True)
     shutil.copyfile(source / "tools/hub.py", root / "tools/hub.py")
+    shutil.copyfile(source / "tools/hub_skills.py", root / "tools/hub_skills.py")
+    monkeypatch.syspath_prepend(str(root / "tools"))
     shutil.copyfile(source / "models.toml", root / "models.toml")
     home = tmp_path / "home"
     home.mkdir()
@@ -278,31 +280,31 @@ def test_attempt_repetition(hub):
 
 def test_sync_and_drift(hub):
     root, _, call = hub
-    source = root / "agents/shared/reviewer.md"
+    source = root / "agents/shells/hub-readonly.md"
     source.parent.mkdir(parents=True)
-    source.write_text("---\nname: reviewer\ndescription: Review changes\ntools: Read,Glob,Grep\nsandbox: read-only\nskills: python,review\n---\nReview carefully.\n")
-    skipped = root / "agents/shared/private.md"
+    source.write_text("---\nname: hub-readonly\ndescription: Read-only duty\ntools: Read,Glob,Grep\nsandbox: read-only\n---\nFollow the brief.\n")
+    skipped = root / "agents/shells/private.md"
     skipped.write_text("---\nname: private\ndescription: Internal\nnative: false\n---\nInternal\n")
     skill = root / "skills/review/SKILL.md"
     skill.parent.mkdir(parents=True)
     skill.write_text("# Review\nRead the changes.\n")
     first = call("sync", "--check", expected=1)
-    assert "reviewer" in first
-    assert "SKILL NOT IN REPO: python (roles: reviewer)" in first and "SKILL NOT IN REPO: review" not in first
+    assert "hub-readonly" in first
     assert not (root / ".claude").exists()
     call("sync")
-    claude = root / ".claude/agents/reviewer.md"
-    codex = root / ".codex/agents/reviewer.toml"
+    claude = root / ".claude/agents/hub-readonly.md"
+    codex = root / ".codex/agents/hub-readonly.toml"
     claude_text, codex_text = claude.read_text(), codex.read_text()
     assert "\nmodel:" not in claude_text and "\nmodel =" not in codex_text
-    assert "Suggested skills: python,review" in claude_text
-    assert tomllib.loads(codex_text)["developer_instructions"].startswith("Review carefully.")
+    assert "Suggested skills:" not in claude_text
+    assert tomllib.loads(codex_text)["developer_instructions"].startswith("Follow the brief.")
+    assert tomllib.loads(codex_text)["sandbox_mode"] == "read-only"
     assert not (root / ".claude/agents/private.md").exists()
     assert "Read the changes." in (root / ".agents/skills/review/SKILL.md").read_text()
     assert "Read the changes." in (root / ".claude/skills/review/SKILL.md").read_text()
     call("sync", "--check")
     claude.write_text(claude_text + "drift\n")
-    assert ".claude/agents/reviewer.md" in call("sync", "--check", expected=1)
+    assert ".claude/agents/hub-readonly.md" in call("sync", "--check", expected=1)
     call("sync")
     preserved = root / ".codex/agents/manual.toml"
     preserved.write_text("name = 'manual'\n")
@@ -315,13 +317,13 @@ def test_sync_and_drift(hub):
     call("sync", "--check")
 
 
-@pytest.mark.parametrize("target", [".claude/agents/reviewer.md", ".codex/agents/reviewer.toml",
+@pytest.mark.parametrize("target", [".claude/agents/hub-readonly.md", ".codex/agents/hub-readonly.toml",
                                    ".claude/skills/review/SKILL.md", ".agents/skills/review/SKILL.md"])
 def test_sync_preserves_unmarked_target(hub, target):
     root, _, call = hub
-    source = root / "agents/shared/reviewer.md"
+    source = root / "agents/shells/hub-readonly.md"
     source.parent.mkdir(parents=True)
-    source.write_text("---\nname: reviewer\ndescription: Review changes\n---\nReview carefully.\n")
+    source.write_text("---\nname: hub-readonly\ndescription: Read-only duty\n---\nFollow the brief.\n")
     skill = root / "skills/review/SKILL.md"
     skill.parent.mkdir(parents=True)
     skill.write_text("# Review\nRead the changes.\n")

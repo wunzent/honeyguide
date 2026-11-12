@@ -457,7 +457,7 @@ def attempt(args):
 
 def status(args):
     directories = [task_dir(args.task)] if args.task else sorted((ROOT / "work").glob("*/"))
-    keys = ["Agent ID", "Role", "Vendor", "Kind", "Requested model", "Actual model", "Requested effort", "Actual effort", "Status"]
+    keys = ["Agent ID", "Role", "Skills", "Vendor", "Kind", "Requested model", "Actual model", "Requested effort", "Actual effort", "Status"]
     for directory in directories:
         checkpoint_path = directory / "CHECKPOINT.md"
         if not checkpoint_path.is_file():
@@ -472,12 +472,11 @@ def status(args):
                 print("| " + " | ".join(fields.get(k, "Unknown") for k in keys) + " |")
 
 
-USER_SKILL_DIRS = (".claude/skills", ".codex/skills", ".agents/skills")
-
-
 def sync(args):
-    expected, role_skills = {}, {}
-    for source in sorted(list((ROOT / "agents/shared").glob("*.md")) + list((ROOT / "agents/custom").glob("*.md"))):
+    from hub_skills import local_skill_dirs
+    local = local_skill_dirs(ROOT)
+    expected = {}
+    for source in sorted((ROOT / "agents/shells").glob("*.md")):
         if source.name.lower() == "readme.md":
             continue
         text = source.read_text(encoding="utf-8")
@@ -492,19 +491,17 @@ def sync(args):
         if meta.get("native", "true").lower() == "false":
             continue
         name = slug(meta["name"])
-        for skill in filter(None, (part.strip() for part in meta.get("skills", "").split(","))):
-            role_skills.setdefault(skill, []).append(name)
         sandbox = meta.get("sandbox", "read-only")
         if sandbox not in ("read-only", "workspace-write"):
             raise ValueError("invalid sandbox")
-        body = match[2].rstrip() + "\n\nSuggested skills: " + meta.get("skills", "none") + "\n"
+        body = match[2].rstrip() + "\n"
         marker = MARKER + source.relative_to(ROOT).as_posix() + "; edit the source"
         front = "---\nname: " + json.dumps(name) + "\ndescription: " + json.dumps(meta["description"])
         if meta.get("tools"):
             front += "\ntools: " + meta["tools"]
         expected[ROOT / ".claude/agents" / (name + ".md")] = (front + "\n---\n<!-- " + marker + " -->\n" + body).encode()
         if "'''" in body:
-            raise ValueError("TOML literal delimiter in role body")
+            raise ValueError("TOML literal delimiter in shell body")
         expected[ROOT / ".codex/agents" / (name + ".toml")] = ("# " + marker + "\nname = " + json.dumps(name) + "\ndescription = " + json.dumps(meta["description"]) + "\nsandbox_mode = " + json.dumps(sandbox) + "\ndeveloper_instructions = '''\n" + body + "'''\n").encode()
     for directory in sorted((ROOT / "skills").glob("*/")):
         for source in sorted(directory.rglob("*")):
@@ -529,6 +526,10 @@ def sync(args):
                     expected[ROOT / target / relative] = data
     drift, conflicts = [], []
     for path, data in expected.items():
+        if any(path.is_relative_to(directory) for directory in local):
+            drift.append(path)
+            conflicts.append(path)
+            continue
         # git may check files out with CRLF on Windows; line endings alone are not drift
         if not path.exists() or path.read_bytes().replace(b"\r\n", b"\n") != data.replace(b"\r\n", b"\n"):
             drift.append(path)
@@ -538,19 +539,16 @@ def sync(args):
                 write(path, data)
     for target in (".claude/agents", ".codex/agents", ".claude/skills", ".agents/skills"):
         for path in (ROOT / target).rglob("*"):
-            if path.is_file() and path not in expected and MARKER.encode() in path.read_bytes()[:4096]:
+            if (path.is_file() and path not in expected
+                    and not any(path.is_relative_to(directory) for directory in local)
+                    and MARKER.encode() in path.read_bytes()[:4096]):
                 drift.append(path)
                 if not args.check:
                     path.unlink()
     for path in sorted(drift):
         print(("CONFLICT: " if path in conflicts else "") + path.relative_to(ROOT).as_posix())
-    # A role skill outside skills/ does not travel with the repo; report where this machine has it (a note, not drift).
-    for skill, roles in sorted(role_skills.items()):
-        if (ROOT / "skills" / skill).is_dir():
-            continue
-        found = [d for d in USER_SKILL_DIRS if (Path.home() / d / skill).is_dir()]
-        print(f"SKILL NOT IN REPO: {skill} (roles: {', '.join(sorted(roles))}) - "
-              + ("user-installed in ~/" + ", ~/".join(found) if found else "not found on this machine"))
+    for directory in local:
+        print("LOCAL SKILL: " + directory.relative_to(ROOT).as_posix())
     return 1 if conflicts or (args.check and drift) else 0
 
 
@@ -604,6 +602,8 @@ def parser():
     state.add_argument("task", nargs="?")
     sync_cli = commands.add_parser("sync")
     sync_cli.add_argument("--check", action="store_true")
+    skills_cli = commands.add_parser("skills", help="Index installed skills or install approved local sources")
+    skills_cli.add_argument("operation", nargs="?", choices=["install"])
     return cli
 
 
@@ -633,6 +633,9 @@ def main(argv=None):
             status(args)
         elif args.command == "sync":
             return sync(args)
+        elif args.command == "skills":
+            from hub_skills import install_skills, index_skills
+            return install_skills(ROOT) if args.operation == "install" else index_skills(ROOT)
     except (ValueError, OSError, KeyError, tomllib.TOMLDecodeError) as exc:
         print("ERROR: " + str(exc))
         return 1

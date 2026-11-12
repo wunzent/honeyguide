@@ -19,3 +19,7 @@ work/
 runtime/
 *.log
 logs/
+
+# Third-party source checkouts (local copies are in git info/exclude)
+.hub/vendor/
+.hub/staging/
