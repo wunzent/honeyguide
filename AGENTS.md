@@ -7,6 +7,8 @@ vendor-neutral checkpoints (`tools/hub.py`). Everything else is native: your own
 Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestrators/codex.md`. Agent inventory: `agents/INVENTORY.md`.
 
 ## 1. Start a task
+0. Read `LEARNED.md` (the owner's standing preferences; they override your defaults) and the target repo's card
+   `projects/<name>.md`. No card yet: write one from `projects/README.md` and ask the owner to confirm its summary.
 1. Restate the goal and scope in 2-3 lines. Ask the owner only when the goal, scope or a product decision is unclear.
 2. `python tools/hub.py task new <slug> --objective "..." --scope "..." --orchestrator claude|codex` (Codex uses the
    same command). This creates `work/<slug>/CHECKPOINT.md` and `work/<slug>/agents/`.
@@ -35,6 +37,10 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   efforts (xhigh/max) only with a stated reason (failed cheaper attempt, review evidence, or the owner asked).
 - Vendor: use the vendor whose strengths fit the work and that has quota; prefer the other vendor for independent
   review of code it did not write. Native subagents are cheapest to coordinate; cross-vendor workers go through hub.py.
+- High-stakes work with several valid designs (costs double, so only with a stated reason as for premium, or when the
+  owner asks): both vendors build the same brief in separate
+  worktrees; a reviewer compares the two diffs labelled A and B without vendor or model names, picks one and states why;
+  record the pick and reasons as a ruling. One pick says nothing general about either model.
 
 ## 4. Delegate
 - Native subagent (your own vendor): record first, then spawn with an explicit model, then update the record:
@@ -43,7 +49,14 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
 - Other vendor (cross-vendor worker; the command validates the route, runs the CLI and records requested vs actual):
   `python tools/hub.py delegate <slug> --to codex|claude --role R --model M --effort E --brief work/<slug>/briefs/<id>.md --reason "..." --parent <you> [--cwd DIR] [--write] [--allow-shell]`
   `--write` requires an explicit `--cwd` (the folder the worker may change). Exit 2 = refused (nothing started),
-  3 = actual model differs, 4 = quota unavailable, 1 = failed.
+  3 = actual model differs, 4 = quota unavailable, 6 = the worker's own reply says BLOCKED or NEEDS_CONTEXT
+  (record `Worker status`; act on it per the CONTRACT rules below), 1 = failed. Add `--timeout <minutes>` for any worker that could hang (killed and recorded as failed on expiry).
+- Follow-up to the same cross-vendor worker (review findings, a correction = "steer"): `delegate ... --resume <agent-id>`
+  with a short brief (findings verbatim, or the correction); it continues that worker's own session, same vendor only,
+  with the same model and effort (Codex verification reads the whole session). Resume implementers only: every review
+  and re-review gets a fresh reviewer, never a resumed one (a reviewer that saw the previous round is no longer independent).
+  `python tools/hub.py stop <slug> <agent-id>` cancels a running worker (wrong direction, no longer needed); then steer
+  it with `--resume` or re-delegate. Never resume one vendor's session on the other vendor.
 - Write `Unknown`/`Unverified` when the CLI does not expose a value. Never invent actual model, skill use or state.
 - Plans with several tasks: before the first dispatch, scan once for tasks that share a file or interface or contradict
   each other or the spec; rule on each conflict (spec wins) and record the ruling (section 6).
@@ -76,7 +89,10 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   continue, pause and report.
 - Rulings: every decision you take on the owner's behalf (plan conflict, parked finding, plan correction) goes in the
   checkpoint as `checkpoint <slug> --section "Completed work" --text "Ruling: <what> - <why> - cost if wrong: <...>"`.
-  Handoff briefs repeat them under DECISIONS.
+  Handoff briefs repeat them under DECISIONS. The checkpoint is the only place for in-task rulings; the work log gets a
+  `log decision` line only for the owner's own answers and decisions that bind other tasks (never both for one ruling).
+- Your own session is ending (quota, context): update the checkpoint, then follow `skills/handoff/SKILL.md` but write the
+  handoff to `work/<slug>/HANDOFF.md` (not the OS temp folder), referencing the checkpoint, plans and briefs by path.
 
 ## 7. Verify and deliver
 - Run the project's checks yourself (or via tester) and get an independent review for code changes.
@@ -85,6 +101,12 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   minor findings; send all its findings to ONE fixer, then one scoped re-review. Residual issues go to the owner.
 - Deliver: what changed, evidence, agent table (`python tools/hub.py status <slug>`), open issues, and every `Ruling:`
   line from the checkpoint under "Rulings I made" (the owner reviews those decisions).
+- Work log (`work/log/<date>.md`, read for "what got done" and retros): after delivery
+  `python tools/hub.py log outcome --task <slug> --text "<delivered>. <rework/blocks>. Lesson: <one line or none>"`;
+  owner corrections: `log feedback` plus a `LEARNED.md` line; new owner context: `log context` plus the project card.
+  One factual line each; skip what would not matter a month later. Retro on request: read `log --show <date>` for the
+  period, report patterns (where work stalled or was redone and why), propose edits to instructions, apply only after
+  the owner agrees.
 
 ## Boundaries (always)
 - Work only in the target repository/working directory the owner named. No push, merge, deploy or destructive

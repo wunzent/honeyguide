@@ -14,7 +14,11 @@ read itself, and no rules its role already has.
 ## Rules
 - Never send the conversation, a transcript or accumulated history. Codex native spawns: `fork_turns: "none"` (see
   `agents/orchestrators/codex.md`). Decisions from earlier work go in as one line each under DECISIONS.
+- If owner context truly matters (a preference, a quoted requirement), add a BACKGROUND excerpt: only the owner's own
+  words, at most 2,000 characters, marked "background - this brief wins on conflict"; no tool output, reasoning or
+  other agents' text. The brief file is the record of exactly what the worker was told.
 - Paths and line ranges, not pasted files. The worker never reads the whole plan: point at its rows or task section.
+  Project commands and conventions: cite `projects/<name>.md#Commands` instead of re-deriving them.
 - Order: stable part first (ROLE, CONTRACT - identical across briefs), task-specific part after it, the deliverable
   (DONE WHEN, REPORT FILE) last, where the worker reads it right before acting.
 - Size: at most about 300 words; extra rules for one assignment at most 100-250 tokens. Longer means split the work.

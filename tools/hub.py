@@ -2,10 +2,12 @@
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -119,7 +121,8 @@ def new_agent(args, kind=None):
               "Requested model": args.model, "Actual model": "Unverified",
               "Requested effort": args.effort, "Actual effort": "Unverified",
               "Skills": args.skills or "none", "Status": "planned",
-              "Session / run": "Unknown", "Created": now()}
+              "Session / run": "Unknown", "Resume id": "Unknown", "PID": "Unknown",
+              "Worker status": "Unknown", "Created": now()}
     while True:
         agent_id = f"{role}-{number}"
         fields["Agent ID"] = agent_id
@@ -134,23 +137,40 @@ def new_agent(args, kind=None):
             number += 1
 
 
-def update_agent(task, agent_id, fields=None, entries=None):
+def agent_fields(path):
+    return dict(re.findall(r"^\| ([^|]+) \| (.*?) \|$", path.read_text(encoding="utf-8"), re.M))
+
+
+def update_agent(task, agent_id, fields=None, entries=None, preserve_cancelled=False):
     directory = task_dir(task)
     path = directory / "agents" / (slug(agent_id) + ".md")
     with task_lock(directory):
         if not path.is_file():
             raise ValueError("unknown agent")
         content = path.read_text(encoding="utf-8")
-        for key, value in (fields or {}).items():
-            pattern = r"^\| " + re.escape(key) + r" \| .* \|$"
+        if preserve_cancelled and agent_fields(path).get("Status") == "cancelled":
+            return False
+        write_agent(path, content, fields, entries)
+    return True
+
+
+def write_agent(path, content, fields=None, entries=None):
+    for key, value in (fields or {}).items():
+        pattern = r"^\| " + re.escape(key) + r" \| .* \|$"
+        if re.search(pattern, content, re.M):
             content = re.sub(pattern, lambda m: f"| {key} | {cell(value)} |", content, flags=re.M)
-        for name, value in (entries or {}).items():
-            content = section(content, name, f"- {now()} {value}")
-        write(path, content)
+        else:
+            content = content.replace("\n\n## Progress", f"\n| {key} | {cell(value)} |\n\n## Progress", 1)
+    for name, value in (entries or {}).items():
+        content = section(content, name, f"- {now()} {value}")
+    write(path, content)
 
 
-def events(path):
-    for line in path.read_text(encoding="utf-8-sig").splitlines():
+def events(path, offset=0):
+    with path.open("rb") as stream:
+        stream.seek(offset)
+        text = stream.read().decode("utf-8-sig")
+    for line in text.splitlines():
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
@@ -163,17 +183,22 @@ def distinct(values):
     return list(dict.fromkeys(v for v in values if isinstance(v, str) and v))
 
 
-def verify(vendor, event_path):
+def codex_session_dir():
+    return Path(os.environ.get("HUB_CODEX_SESSIONS", str(Path.home() / ".codex/sessions")))
+
+
+def verify(vendor, event_path, rollout_offsets=None):
     data = list(events(event_path))
-    models, efforts, session, tokens, result = [], [], "Unknown", "Unknown", ""
+    models, efforts, session, tokens, result, resume_id = [], [], "Unknown", "Unknown", "", "Unknown"
     if vendor == "codex":
         thread = next((e.get("thread_id") for e in data if e.get("type") == "thread.started"), None)
-        directory = Path(os.environ.get("HUB_CODEX_SESSIONS", str(Path.home() / ".codex/sessions")))
+        resume_id = thread if isinstance(thread, str) and thread else "Unknown"
+        directory = codex_session_dir()
         matches = sorted(p for p in directory.rglob("rollout-*.jsonl")
                          if isinstance(thread, str) and thread and p.name.endswith(thread + ".jsonl")) if thread else []
         if matches:
             session = matches[-1].name
-            for event in events(matches[-1]):
+            for event in events(matches[-1], (rollout_offsets or {}).get(matches[-1], 0)):
                 payload = event.get("payload") or {}
                 if event.get("type") == "turn_context":
                     models.append(payload.get("model"))
@@ -185,11 +210,12 @@ def verify(vendor, event_path):
             if event.get("type") == "system" and event.get("subtype") == "init":
                 models.append(event.get("model"))
                 session = event.get("session_id") or "Unknown"
+                resume_id = session
             if event.get("type") == "assistant":
                 models.append((event.get("message") or {}).get("model"))
             if event.get("type") == "result":
                 result = event.get("result") or ""
-    return distinct(models), distinct(efforts), session, tokens, result
+    return distinct(models), distinct(efforts), session, tokens, result, resume_id
 
 
 def validate_route(args):
@@ -216,16 +242,34 @@ def delegate(args):
         print("REFUSED: " + refusal)
         return 2
     directory = task_dir(args.task) / "agents"
+    resume_id = None
+    if args.resume:
+        try:
+            previous = directory / (slug(args.resume) + ".md")
+        except ValueError:
+            print("REFUSED: invalid resume agent identifier")
+            return 2
+        fields = agent_fields(previous) if previous.is_file() else {}
+        if fields.get("Task") != args.task or fields.get("Vendor") != args.to:
+            print("REFUSED: resume requires an agent from the same task and vendor")
+            return 2
+        resume_id = fields.get("Resume id")
+        if not resume_id or resume_id in ("Unknown", "Unverified"):
+            print("REFUSED: agent has no Resume id")
+            return 2
     brief = Path(args.brief).read_text(encoding="utf-8")
     cwd = str(Path(args.cwd or ROOT).resolve())
     first = next((line.strip() for line in brief.splitlines() if line.strip()), "")
     args.vendor, args.assignment = args.to, f"brief {args.brief}: {first[:200]}"
     agent_id = new_agent(args, "delegated")
     update_agent(args.task, agent_id, {"Status": "running"}, {"Progress": "Route reason: " + args.reason + ("; Premium: " + args.premium if args.premium else "")})
+    if args.resume:
+        update_agent(args.task, agent_id, entries={"Progress": "Resumes " + args.resume})
     last = directory / (agent_id + ".last.md")
     event_path = directory / (agent_id + ".events.jsonl")
-    models, efforts, session = [], [], "Unknown"
+    models, efforts, session, observed_resume = [], [], "Unknown", "Unknown"
     blocker, result, tokens = "", "", "Unknown"
+    process = None
     simulated = os.environ.get("HUB_SIMULATE_QUOTA") == args.to
     exe = shutil.which(args.to)
     if simulated:
@@ -234,27 +278,63 @@ def delegate(args):
         status, code, blocker = "failed", 1, "executable not found: " + args.to
     else:
         if args.to == "codex":
-            argv = [exe, "exec", "--json", "-C", cwd, "-s", "workspace-write" if args.write else "read-only",
-                    "-m", args.model, "-c", f"model_reasoning_effort={args.effort}", "-o", str(last), "-"]
+            sandbox = "workspace-write" if args.write else "read-only"
+            argv = ([exe, "exec", "resume", resume_id, "--json"] if resume_id else
+                    [exe, "exec", "--json", "-C", cwd, "-s", sandbox])
+            argv += ["-m", args.model, "-c", f"model_reasoning_effort={args.effort}"]
+            if resume_id:
+                argv += ["-c", f'sandbox_mode="{sandbox}"']
+            argv += ["-o", str(last), "-"]
         else:
             argv = [exe, "-p", "--model", args.model, "--effort", args.effort, "--output-format", "stream-json", "--verbose",
                     "--add-dir", str(directory.parent.resolve())]  # the task folder holds the shared checkpoint
             argv += (["--permission-mode", "acceptEdits", "--allowedTools", "Read,Edit,Write,Glob,Grep" + (",Bash" if args.allow_shell else "")]
                      if args.write else ["--allowedTools", "Read,Glob,Grep"])
+            if resume_id:
+                argv += ["--resume", resume_id]
         prompt = f"You are a worker agent delegated by the {args.parent} orchestrator for task {args.task}. Stay inside the assignment and the working directory. Report what you changed and the evidence. If blocked, say so; do not guess.\nTask checkpoint (shared state, read it when the brief refers to it or you need context): {(directory.parent / 'CHECKPOINT.md').resolve()}\n\n" + brief
         try:
-            process = subprocess.run(argv, input=prompt, text=True, encoding="utf-8", errors="replace", capture_output=True, cwd=cwd)
-            write(event_path, process.stdout)
-            models, efforts, session, tokens, result = verify(args.to, event_path)
+            timed_out = False
+            kill_failure = ""
+            rollout_offsets = {path: path.stat().st_size for path in codex_session_dir().rglob("rollout-*.jsonl")} if args.to == "codex" else {}
+            # Publish the PID while holding the same lock used by stop, so stop
+            # cannot race process creation or the final status update.
+            with task_lock(directory.parent):
+                process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True, encoding="utf-8", errors="replace", cwd=cwd,
+                                           start_new_session=os.name != "nt")
+                path = directory / (agent_id + ".md")
+                write_agent(path, path.read_text(encoding="utf-8"), {"PID": process.pid})
+            try:
+                stdout, stderr = process.communicate(prompt, timeout=args.timeout * 60 if args.timeout else None)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                try:
+                    kill_tree(process.pid)
+                except OSError as exc:
+                    kill_failure = "; process tree termination failed: " + str(exc)
+                    # Recover available output without hanging again on a worker
+                    # that the OS refused to stop. Keep its PID until exit is proven.
+                    try:
+                        stdout, stderr = process.communicate(timeout=1)
+                    except subprocess.TimeoutExpired as pending:
+                        stdout, stderr = (value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
+                                          for value in (pending.output, pending.stderr))
+                else:
+                    stdout, stderr = process.communicate()
+            write(event_path, stdout)
+            models, efforts, session, tokens, result, observed_resume = verify(args.to, event_path, rollout_offsets)
             if args.to == "codex" and last.is_file():
                 result = last.read_text(encoding="utf-8")
-            quota = next((line[:300] for line in (process.stdout + "\n" + process.stderr).splitlines()
+            quota = next((line[:300] for line in (stdout + "\n" + stderr).splitlines()
                           if re.search(r"usage limit|rate limit|quota|429|too many requests", line, re.I)), None)
             match = (models == [args.model] and efforts == [args.effort]) if args.to == "codex" else bool(models) and all(args.model in m for m in models)
-            if process.returncode and quota:
+            if timed_out:
+                status, code, blocker = "failed", 1, f"timeout after {args.timeout:g} min" + kill_failure
+            elif process.returncode and quota:
                 status, code, blocker = "quota-unavailable", 4, quota
             elif process.returncode:
-                status, code, blocker = "failed", 1, f"process exited {process.returncode}: {process.stderr[:300]}"
+                status, code, blocker = "failed", 1, f"process exited {process.returncode}: {stderr[:300]}"
             elif not match:
                 status, code, blocker = "failed", 3, "route mismatch or missing verification evidence"
             else:
@@ -266,14 +346,76 @@ def delegate(args):
     if args.to == "claude" or not last.exists():
         write(last, result or "Unknown\n")
     actual_model, actual_effort = ", ".join(models) or "Unverified", ", ".join(efforts) or "Unverified"
+    reported = re.findall(r"^\**STATUS:\**[ \t]*(DONE_WITH_CONCERNS|NEEDS_CONTEXT|BLOCKED|DONE)\**[ \t]*\r?$", result, re.M | re.I)
+    worker_status = reported[-1].upper() if reported else "Unknown"
+    if status == "done" and worker_status in ("BLOCKED", "NEEDS_CONTEXT"):
+        status, code, blocker = "blocked", 6, "worker reported " + worker_status
     entries = {"Result": (result[:2000] or "Unknown") + f"\n\nArtifact: {last}", "Progress": f"Total tokens: {tokens}"}
+    if status == "done" and worker_status == "DONE_WITH_CONCERNS":
+        entries["Progress"] += "\nworker reported DONE_WITH_CONCERNS"
     if blocker:
         entries["Blockers"] = blocker
-    update_agent(args.task, agent_id, {"Status": status, "Actual model": actual_model,
-                 "Actual effort": actual_effort, "Session / run": session}, entries)
+    pid = process.pid if process is not None and process.poll() is None else "Unknown"
+    updated = update_agent(args.task, agent_id, {"Status": status, "PID": pid, "Actual model": actual_model,
+                           "Actual effort": actual_effort, "Session / run": session,
+                           "Resume id": observed_resume, "Worker status": worker_status}, entries, preserve_cancelled=True)
+    if not updated:
+        status, code = "cancelled", 1
     print(json.dumps(dict(id=agent_id, status=status, requested_model=args.model, actual_model=actual_model,
-                          actual_effort=actual_effort, session=session, exit=code)))
+                          actual_effort=actual_effort, session=session, worker_status=worker_status, exit=code)))
     return code
+
+
+def kill_tree(pid):
+    if os.name == "nt":
+        result = subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True, text=True)
+        if result.returncode:
+            raise OSError(result.stderr.strip() or result.stdout.strip())
+    else:
+        os.killpg(pid, signal.SIGKILL)
+
+
+def stop(args):
+    directory = task_dir(args.task)
+    path = directory / "agents" / (slug(args.id) + ".md")
+    with task_lock(directory):
+        fields = agent_fields(path)
+        pid = fields.get("PID", "")
+        if fields.get("Status") != "running" or not pid.isdecimal() or int(pid) <= 0:
+            raise ValueError("agent is not running with a PID")
+        kill_tree(int(pid))
+        write_agent(path, path.read_text(encoding="utf-8"), {"Status": "cancelled", "PID": "Unknown"},
+                    {"Blockers": "stopped by orchestrator"})
+
+
+def work_log(args):
+    timestamp = datetime.now(timezone.utc)
+    day = timestamp.date().isoformat() if args.show in (None, "") else args.show
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        raise ValueError("log day must be YYYY-MM-DD")
+    directory = ROOT / "work/log"
+    path = directory / (day + ".md")
+    if args.show is not None:
+        if args.kind or args.text is not None or args.task:
+            raise ValueError("--show cannot be combined with a log entry")
+        if path.is_file():
+            print(path.read_text(encoding="utf-8"), end="")
+        return
+    if not args.kind or args.text is None:
+        raise ValueError("log entry requires kind and --text")
+    task = "[" + slug(args.task) + "] " if args.task else ""
+    line = f"- {timestamp:%H:%M:%SZ} {args.kind}: {task}{' '.join(args.text.splitlines())}\n"
+    directory.mkdir(parents=True, exist_ok=True)
+    with task_lock(directory):
+        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        write(path, content + line)
+
+
+def positive_minutes(value):
+    minutes = float(value)
+    if not math.isfinite(minutes) or minutes <= 0:
+        raise argparse.ArgumentTypeError("timeout must be a finite number greater than zero")
+    return minutes
 
 
 def attempt(args):
@@ -412,6 +554,16 @@ def parser():
         run.add_argument("--" + flag)
     for flag in ("write", "allow-shell"):
         run.add_argument("--" + flag, action="store_true")
+    run.add_argument("--resume")
+    run.add_argument("--timeout", type=positive_minutes)
+    cancel = commands.add_parser("stop")
+    cancel.add_argument("task")
+    cancel.add_argument("id")
+    log = commands.add_parser("log")
+    log.add_argument("kind", nargs="?", choices=["outcome", "decision", "feedback", "context"])
+    log.add_argument("--text")
+    log.add_argument("--task")
+    log.add_argument("--show", nargs="?", const="")
     tried = commands.add_parser("attempt")
     tried.add_argument("task")
     tried.add_argument("--action", required=True)
@@ -439,6 +591,10 @@ def main(argv=None):
                 update_agent(args.task, args.id, fields, entries)
         elif args.command == "delegate":
             return delegate(args)
+        elif args.command == "stop":
+            stop(args)
+        elif args.command == "log":
+            work_log(args)
         elif args.command == "attempt":
             return attempt(args)
         elif args.command == "status":
