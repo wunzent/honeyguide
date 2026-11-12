@@ -41,9 +41,11 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   | Strong (premium) | gpt-6-astra (unverified) | opus (fable unverified) | hard bugs a middle tier failed on, architecture, security, final review |
   Effort: low by default; medium for several files or ordinary logic; high for hard logic or after a failed lower
   attempt. A higher effort on the same tier is the first step up; change tier when effort did not help. Back down to the
-  cheap tier once the cause or design is known. xhigh/max and premium models only with a stated reason. Evidence: one
-  trial task (2026-11-12) where every pair passed, so cheap-tier quality on hard work is unproven; the cheap tier also
-  misreported a written file, so its claims always get an independent check.
+  cheap tier once the cause or design is known. xhigh/max and premium models only with a stated reason. Evidence: two
+  trial tasks (2026-11-12, one run per pair): on the harder one (semver ranges, 110 hidden tests) gpt-6-luna low missed
+  2 rules while gpt-6-luna high, haiku low/high and every middle-tier pair passed all, so one effort step on the cheap
+  tier matched the middle tier at about 1/7-1/10 the cost. The cheap tier once claimed a file it had not written and
+  once said "no known issue" with two bugs: its claims always get an independent check.
 - Vendor: use the vendor whose strengths fit the work and that has quota; prefer the other vendor for independent
   review of code it did not write. Native subagents are cheapest to coordinate; cross-vendor workers go through hub.py.
 - High-stakes work with several valid designs (costs double, so only with a stated reason as for premium, or when the
