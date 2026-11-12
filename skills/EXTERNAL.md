@@ -1,13 +1,26 @@
 # External skills and plugins (not shipped in this repo)
 
-Skills in `skills/` travel with the repo. Everything below was installed per machine on the owner's computer
-(2026-11-12) and is only listed here, so it costs no context until someone looks it up. Read this file only when a
-brief or task needs a capability that is not in your native skill list.
+Hub-owned skills in `skills/` travel with the repo. The machine snapshot below is historical (2026-11-12), not a
+selection list. Run `python tools/hub.py skills` and search `work/skills-index.md` for project/user/on-disk plugin skills.
+Check native plugin activation and real requirements, even for skills naming another model/vendor.
 
-Rule: if a task needs a skill or plugin from this list and it is not installed where you run, do not copy or install
-it yourself. Tell the owner: "This task needs skill/plugin `<name>` (<vendor>, source <source>). Please install it,
-or tell me to continue without it." Then continue without it only if the owner says so. Installing third-party
-items follows LEARNED.md (clone and read first; the owner decides on scope).
+`skills/external.toml` is the maintained source/ref/path/licence/status/requires/notes manifest for approved local
+third-party installs. Check dependencies, compatibility, licence and install behaviour first; the owner chooses scope.
+After approval, `python tools/hub.py skills install` clones/fetches into ignored `.hub/vendor/`, copies supported skills
+into `.claude/skills/<name>` and `.agents/skills/<name>` with `.hub-local`, and adds paths to git info/exclude.
+Sources require full 40-character lowercase SHA refs; checkout identity is verified. Copies stage under ignored
+`.hub/staging/` before moving into excluded targets. Git ownership failures are reported without a safe.directory override.
+Plugin catalogs are labelled not installed and excluded from available counts; cache activation remains unverified.
+No global changes, symlinks or install scripts. Unmarked directories are preserved. Requirement flags mean check,
+never ok. Unsupported entries and errors are reported. A linked worktree's outside-scope common info/exclude must be
+handled by the orchestrator. `sync` preserves local copies; `sync --check` prints `LOCAL SKILL` without drift.
+
+9arm-skills at the reviewed ref has no LICENSE: copies stay local and must never be committed.
+`qwenchance` follows the hub's progress-based attempts instead of its retry cap. `qwen-agent` is unsupported as-is
+(claude-9arm alias and Qwen gateway); adapt delegation to `hub.py delegate` on the cheapest suitable verified model
+with a self-contained brief. Codex-only and Claude-only operation work without Qwen.
+For missing/unapproved skills or plugins, report name/vendor/source/dependencies and ask for owner installation or
+an explicit decision to continue without it. Never copy third-party files into tracked paths.
 
 `Vendor` = which CLI had it (Claude: `~/.claude/skills`; Codex: `~/.codex/skills` or `~/.agents/skills`).
 `Source` comes from `~/.agents/.skill-lock.json` where recorded. `License` = a LICENSE file was present.

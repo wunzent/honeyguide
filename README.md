@@ -1,7 +1,7 @@
 # Multi-Agent Hub (minimal native, Claude Code + Codex)
 
-A small shared workspace in which **Claude Code or Codex** acts as the orchestrator, builds a task-specific team from a
-shared agent library, delegates within and across vendors, and keeps readable records and checkpoints.
+A small shared workspace in which **Claude Code or Codex** acts as the orchestrator, builds a team with duties defined
+per assignment and two generic permission shells, delegates within and across vendors, and keeps readable records and checkpoints.
 There is no engine, scheduler, dashboard or approval ceremony: planning, skills and subagents are the CLIs' own.
 
 ## Start a task
@@ -16,19 +16,30 @@ To continue a task in the other vendor (quota, preference): "Continue task `<slu
 ## What you can inspect
 | What | Where |
 |---|---|
-| Agents of a task (role, vendor, requested/actual model and effort, status) | `python tools/hub.py status <task>` or `work/<task>/agents/*.md` |
+| Agents of a task (duty, skills, vendor, requested/actual model and effort, status) | `python tools/hub.py status <task>` or `work/<task>/agents/*.md` |
 | Task state, remaining work, failures tried | `work/<task>/CHECKPOINT.md` |
 | Worker output | `work/<task>/agents/<id>.last.md` |
-| Reusable roles | `agents/INVENTORY.md`, `agents/shared/`, `agents/custom/` |
+| Permission shells and duty notes | `agents/INVENTORY.md`, `agents/shells/`, `skills/brief/SKILL.md` |
+| Discovered skills | `python tools/hub.py skills` -> local `work/skills-index.md` |
+| Approved third-party sources | `skills/external.toml`; `skills/EXTERNAL.md` |
 | Orchestrator rules | `AGENTS.md` (both), `CLAUDE.md`, `agents/orchestrators/` |
 | Models allowed for routing | `models.toml` |
 
 ## Maintenance
-- Edit roles in `agents/shared|custom/*.md` or skills in `skills/`, then `python tools/hub.py sync`
+- Edit shells in `agents/shells/*.md` or hub-owned skills in `skills/`, then `python tools/hub.py sync`
   (regenerates `.claude/agents`, `.codex/agents`, `.claude/skills`, `.agents/skills`; `--check` shows drift).
 - Python: `.venv\Scripts\python.exe` (stdlib only; `pytest` for `tests/test_hub.py`). Create with
   `py -3.11 -m venv .venv` and `.venv\Scripts\pip install -r requirements.txt` on a new machine.
-- `gpt-6-luna` and `haiku` are listed as unverified in `models.toml`; move one to `verified` only after a live check.
+- Discover all project/user/plugin skills with `python tools/hub.py skills`; it prints counts and the index path.
+  Read selected SKILL.md files, check requirements and native availability. After owner approval, `... skills install`
+  clones pinned sources to ignored `.hub/vendor/` and copies supported skills into `.claude/skills` and `.agents/skills`.
+  Local copies have `.hub-local` and git info/exclude entries; `sync --check` lists them as `LOCAL SKILL`, not drift.
+  A linked worktree's outside-scope info/exclude is reported for the orchestrator to handle. Globals are untouched;
+  unclear-licence copies never belong in commits. See `skills/EXTERNAL.md`.
+- Plugin catalogs are shown as not installed and excluded from available counts; plugin cache activation is unverified.
+  Read-only duties needing commands use Codex hub-readonly or `hub.py delegate`; Claude native hub-readonly has no Bash.
+- Either vendor works alone with native/same-vendor CLI workers; with both, cross-vendor delegation and quota handoff work.
+- `models.toml` is the routing catalog; use only verified models and record actual values when observable.
 
 ## Limits (honest)
 - Prompt rules are not enforcement: file limits come from the CLI sandbox (Codex `-s read-only|workspace-write`) and

@@ -1,29 +1,38 @@
 # Codex as Orchestrator
 
-Entry: open Codex (Desktop or `codex`) in this hub folder and give the task. Codex reads `AGENTS.md` natively.
-The hub folder must be a trusted project in Codex so the project `.codex/` folder is loaded (it is on this machine).
+Open this hub in Codex and follow `AGENTS.md` (`CLAUDE.md` imports it for Claude Code).
+Codex must trust the project to load `.codex/` definitions. Use only exposed features; never change global configuration.
 
-## Native subagents (Codex)
-- Definitions: `.codex/agents/<role>.toml`, generated from `agents/shared|custom` by `python tools/hub.py sync`
-  (no model pinned). Codex multi-agent (`features.multi_agent`) is enabled in the owner's config.
-- Spawn a native subagent with the role name as the agent type. Codex does not expose a per-spawn model choice in all
-  versions: the subagent then uses the session model. When the assignment needs a specific model or effort, use a
-  Codex CLI worker instead: `hub.py delegate --to codex` (exact `-m` and effort, verified from the session file).
-- Spawn with a clean context: `spawn_agent` with `fork_turns: "none"` (the default `"all"` copies your whole transcript
-  into the child, which defeats the brief and costs tokens). The child gets the brief path, not the conversation.
-- Fix rounds: resume the same child with `followup_task` and the findings verbatim instead of spawning a new one.
-  Do not poll `wait_agent` with short timeouts; a finished child's answer arrives on your next turn.
-  (Tool names from the superpowers v7.0.2 Codex notes for multi-agent V2; not yet verified on this machine. If your
-  tool list differs, trust the tool list and still give the child no history.)
-- Record each native spawn with `hub.py agent new ... --vendor codex --kind native` and update it when it finishes.
+## Discover and choose
+Run `python tools/hub.py skills`, search `work/skills-index.md` and read matching SKILL.md files.
+Discover project/user/plugin skills dynamically. Check real requirements and native plugin activation, even for
+skills naming another model/vendor. Requirement flags mean check. Approved project-local third-party installation:
+`hub.py skills install`; source/ref/licence/status/adaptations are in `skills/external.toml`.
+Unsupported qwen-agent delegation maps to `hub.py delegate` with a suitable verified model and a self-contained brief;
+Qwen is not required. No global changes or unclear-licence files in commits.
 
-## Cross-vendor: Codex -> Claude
-- `python tools/hub.py delegate <task> --to claude --role <role> --model sonnet --effort low|medium|high --brief <file> --reason "..." --parent codex-orchestrator [--cwd <repo>] [--write] [--allow-shell]`
-- The Claude CLI needs network access and writes its own session files under the user profile. On this Windows machine
-  it ran from the default Codex workspace sandbox (acceptance run 2026-11-11); if a sandbox blocks it, run that one
-  command with escalated permission (Codex asks the owner). Do not change the owner's global Codex config for it.
-- The record shows the actual Claude model from the CLI's init event; Claude does not report effort (`Unverified`).
+## Native agents
+- Definitions: `.codex/agents/hub-writer.toml` and `hub-readonly.toml`, from `agents/shells/` via `hub.py sync`.
+- Spawn the permission shell as `agent_type`, with `fork_turns: "none"`, the brief/path and chosen model/effort where
+  supported. The brief defines the duty (`--role` in records), scope, skills and limits.
+- If native spawning cannot choose the required model/effort, use `hub.py delegate --to codex`; it passes exact
+  model/effort and verifies session evidence. Native actual values stay Unverified unless observed.
+- Record first: `hub.py agent new <task> --role <duty> --vendor codex --model <model> --effort <effort>
+  --assignment "..." --parent codex-orchestrator --skills <selected> --kind native`; update after completion.
+- Resume an implementer with `followup_task` and verbatim findings; each review/re-review uses fresh context.
+  Trust the exposed tool list if names differ. Prompt rules do not enforce file limits; the CLI sandbox does.
+- Read-only duties needing commands use Codex hub-readonly (read-only sandbox) or `hub.py delegate` with explicit
+  limits; Claude native hub-readonly has Read/Grep/Glob only, without Bash.
 
-## Limits to remember
-- Read-only roles run Claude with Read/Glob/Grep only; `--write` adds Edit/Write; Bash only with `--allow-shell`.
-- Your own quota: if your session is limited, write the checkpoint and tell the owner to continue in Claude Code.
+## CLI workers and quota
+`python tools/hub.py delegate <task> --to <codex|claude> --role <duty> --model <verified-model> --effort <effort>
+--brief <file> --reason "..." --parent <orchestrator> --skills <selected> [--cwd <repo>] [--write] [--allow-shell]`
+
+Use native or same-vendor CLI workers when only Codex is available. With both, delegate to Claude when suitable.
+No fixed model, effort, team size or skill combination; follow `models.toml` and AGENTS.md per assignment.
+Codex CLI uses read-only/workspace-write sandbox modes; Claude CLI has Read/Glob/Grep, Edit/Write under `--write`,
+and Bash only with `--allow-shell`. CLI workers receive duty and generic contract through their brief.
+Network/profile writes may be blocked by the active sandbox: report the limit, never change global permissions.
+Record every actual spawn and inspect `hub.py status <task>`; unexposed actual model/effort stay Unverified.
+On quota loss update `work/<task>/CHECKPOINT.md`, then hand remaining work to the other vendor with a handoff brief.
+Never reuse session IDs across vendors or redo completed work; if neither can continue, report the block.

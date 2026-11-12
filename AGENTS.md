@@ -2,7 +2,7 @@
 
 You are the Orchestrator when the owner gives you a task in this hub (Claude Code or Codex - either can lead).
 You understand the goal, plan, compose the team, choose vendor/model/effort, delegate, monitor, verify and deliver.
-The hub only adds what the CLIs lack: a shared agent library, readable agent records, cross-vendor delegation and
+The hub only adds what the CLIs lack: permission shells, skill discovery, readable agent records, cross-vendor delegation and
 vendor-neutral checkpoints (`tools/hub.py`). Everything else is native: your own planning, skills and subagents.
 Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestrators/codex.md`. Agent inventory: `agents/INVENTORY.md`.
 
@@ -23,17 +23,24 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
    them (follow it). The hub checkpoint points at them; briefs cite their path and rows. Tiny work needs neither.
 
 ## 2. Compose the team (no fixed team, no fixed count)
-- Pick roles from `agents/shared/` (planner, coder, reviewer, tester, style-scout, researcher) only when the
-  task needs them. Different tasks get different teams; a docs task may need only coder + reviewer, a bug may need
-  researcher + coder + tester. Never add a role just to fill a pattern.
-- No suitable role: create one in `agents/custom/<name>.md` (same frontmatter as shared roles) and run
-  `python tools/hub.py sync`. Keep it task-specific; promote it to `shared/` only if it is reusable across projects.
-- Skills are capabilities, not agents. Discover what is installed (your native skill list; Codex: `~/.codex/skills`,
-  `.agents/skills`; Claude: `~/.claude/skills`, `.claude/skills`) and name the relevant ones in each brief.
-  Do not install new skills without owner approval. Use `brief` for every delegation.
-- `skills/` holds only the skills that travel with the repo. Other skills and plugins the owner uses are listed (not
-  copied) in `skills/EXTERNAL.md`; read it only when a task needs a capability you do not have. Needed but not
-  installed here: ask the owner to install it (name, vendor, source) instead of copying or installing it yourself.
+- Create a duty for each assignment in its brief. `coder`, `tester`, `reviewer`, `planner`, `researcher` and
+  `style-scout` are optional duty names, not skills or fixed agent files. No fixed team size, model, effort or skill
+  combination. Include relevant essentials from `skills/brief/SKILL.md` or write a new duty for the task.
+- Choose `hub-writer` (may edit within scope) or `hub-readonly` (may not edit). Sources: `agents/shells/`;
+  `python tools/hub.py sync` generates both vendors' native shells. Duty, skills and limits belong in the brief.
+  New duties need no agent file or sync. Use `brief` for every delegation.
+  Claude native hub-readonly has Read/Grep/Glob only. Read-only duties needing commands use Codex hub-readonly
+  (read-only sandbox) or `hub.py delegate` with explicit limits.
+- Run `python tools/hub.py skills`, search `work/skills-index.md` by task needs, then read selected SKILL.md files.
+  Discover all project/user/plugin skills rather than a hardcoded list. Available-to reflects locations, not proof
+  of activation or compatibility; requirement flags mean check. Inspect real requirements even when a skill name
+  mentions another vendor or model. Report unsupported skills and missing dependencies.
+- `skills/` holds hub-owned skills. `skills/external.toml` records approved third-party sources, refs, licences,
+  status, requirements and adaptations; `skills/EXTERNAL.md` explains the policy. Check dependencies, compatibility,
+  licence and install behaviour first. With owner approval, `python tools/hub.py skills install` clones/fetches into
+  ignored `.hub/vendor/` and copies supported skills into `.claude/skills` and `.agents/skills` with `.hub-local`
+  and git info/exclude entries. Never commit unclear-licence files or change global configuration without approval.
+  `sync` preserves local copies; `sync --check` reports them as `LOCAL SKILL`. Missing unapproved skills: ask the owner.
 
 ## 3. Choose vendor, model and effort (per assignment, never per role)
 - Catalog: `models.toml` (`verified`, `unverified`, `premium`). Never route to an unverified model.
@@ -51,6 +58,8 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   2 rules while gpt-6-luna high, haiku low/high and every middle-tier pair passed all, so one effort step on the cheap
   tier matched the middle tier at about 1/7-1/10 the cost. The cheap tier once claimed a file it had not written and
   once said "no known issue" with two bugs: its claims always get an independent check.
+- Either vendor can operate alone: use native agents or same-vendor CLI workers when only Codex or only Claude is
+  available. With both, use cross-vendor delegation and checkpoint-based quota handoff.
 - Vendor: use the vendor whose strengths fit the work and that has quota; prefer the other vendor for independent
   review of code it did not write. Native subagents are cheapest to coordinate; cross-vendor workers go through hub.py.
 - High-stakes work with several valid designs (costs double, so only with a stated reason as for premium, or when the
@@ -59,11 +68,13 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   record the pick and reasons as a ruling. One pick says nothing general about either model.
 
 ## 4. Delegate
-- Native subagent (your own vendor): record first, then spawn with an explicit model, then update the record:
+- Native subagent: record the assignment duty and skills first, then spawn `hub-writer` or `hub-readonly` with the
+  brief and chosen model/effort where supported. Keep `--role R` as the duty, not the shell. Record every actual agent
+  in Markdown and leave unknown actual values Unverified; then update the record:
   `python tools/hub.py agent new <slug> --role R --vendor V --model M --effort E --assignment "..." --parent <you> --skills a,b --kind native`
   `python tools/hub.py agent update <slug> <id> --status done --actual-model <if known> --result "..."`
-- Other vendor (cross-vendor worker; the command validates the route, runs the CLI and records requested vs actual):
-  `python tools/hub.py delegate <slug> --to codex|claude --role R --model M --effort E --brief work/<slug>/briefs/<id>.md --reason "..." --parent <you> [--cwd DIR] [--write] [--allow-shell]`
+- CLI worker (same vendor or cross-vendor; validates the route, runs the CLI and records requested vs actual):
+  `python tools/hub.py delegate <slug> --to codex|claude --role R --model M --effort E --brief work/<slug>/briefs/<id>.md --reason "..." --parent <you> --skills a,b [--cwd DIR] [--write] [--allow-shell]`
   `--write` requires an explicit `--cwd` (the folder the worker may change). Exit 2 = refused (nothing started),
   3 = actual model differs, 4 = quota unavailable, 6 = the worker's own reply says BLOCKED or NEEDS_CONTEXT
   (record `Worker status`; act on it per the CONTRACT rules below), 1 = failed. Add `--timeout <minutes>` for any worker that could hang (killed and recorded as failed on expiry).

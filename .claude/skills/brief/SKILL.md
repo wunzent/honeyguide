@@ -9,8 +9,8 @@ Sources: Multi-Agent Hub v1 `code-pm` MODE: brief; the context-engineering resea
 `skills/context-engineering` (stable context first, active task last); obra/superpowers v7.0.2 (MIT) subagent-driven-development
 prompts (report contract, reviewer and re-review shape). Adapted, not copied.
 
-A worker sees only its brief, its native role definition and the repo. Give it exactly what it needs, nothing it can
-read itself, and no rules its role already has.
+A worker sees its brief, a generic permission shell and the repo. Define its duty and limits for this assignment.
+Give it exactly what it needs, nothing it can read itself, and no rules the shell already has.
 
 ## Rules
 - Never send the conversation, a transcript or accumulated history. Codex native spawns: `fork_turns: "none"` (see
@@ -30,6 +30,10 @@ read itself, and no rules its role already has.
 - Browser or live-service checks stay with the orchestrator unless the brief assigns them.
 
 ## CONTRACT (paste verbatim into every brief)
+For a read-only shell, replace the file-writing sentence with "Return the full report as text; the orchestrator
+captures it into REPORT FILE." Do not grant file writes merely to save a review. For CLI workers the CLI's output
+artifact is written by the orchestrator process, not the worker's file tools.
+
 ```
 CONTRACT: Write the full report to REPORT FILE: what you did (or tried), files changed, each check with command and
 result, self-review findings, concerns. Then reply in at most 15 lines:
@@ -40,7 +44,7 @@ Do not dispatch subagents (no helper, no reviewer of your own work). Ask instead
 
 ## Work brief (`work/<task>/briefs/<agent-id>.md`)
 ```
-ROLE: <shared role>
+ROLE: <assignment duty, free text slug; include relevant duty notes below>
 CONTRACT: <verbatim block above>
 TASK: <slug>    CWD: <absolute dir>    VENDOR/MODEL/EFFORT: <choice>
 GOAL: <outcome in 1-2 sentences, not the method>
@@ -54,6 +58,29 @@ KNOWN FAILURES: <tried and failed - do not repeat; or none>
 DONE WHEN: <observable acceptance>
 REPORT FILE: work/<task>/reports/<agent-id>.md
 ```
+
+## Duty notes
+These are optional duty names, not agent types, skills, a fixed team or a complete list. Compose a duty in the brief
+and choose `hub-writer` or `hub-readonly` for permissions. Add these essentials when that duty fits:
+- coder: implement only the assigned slice with the smallest correct diff; follow existing layers; self-review scope
+  and error paths, run assigned checks; after findings, append fix evidence to the same report.
+- planner: write only assigned plans/specs; cite sources, map requirements to files and checks, order dependencies,
+  give at most eight bounded prompts; mark inferred dependencies and blocking product questions.
+- reviewer: read-only, independent fresh context; state the goal, check for a simpler route, then spec compliance
+  (Missing/Extra/Misunderstood), scope, correctness and errors. Read outside the diff only for a named risk. Treat
+  claims as unverified. Report PASS/FAIL, Goal, Spec, Traced, Cannot verify, and at most ten issues with severity,
+  file:line, problem and fix. Critical/Important blocks PASS; Minor does not. Re-review only named findings and the
+  fix diff, with ADDRESSED/NOT ADDRESSED per finding. Do not rerun a suite without a specific doubt.
+- tester: run exact assigned/documented checks; never edit code/tests or guess commands. Report command, result and
+  relevant failure lines; distinguish real services from fixtures and PASS/FAIL/NOT AVAILABLE/NOT RUN.
+- researcher: read-only, answer the bounded question with source paths/lines; for failures rank hypotheses by evidence
+  and identify a confirming check; mark unverified facts. Do not fix code.
+- style-scout: write only assigned architecture/style/layer drafts, with source evidence and a traced feature;
+  mark DRAFT and uncertainties, never rely on an unconfirmed draft as owner approval.
+
+Discover skills with `python tools/hub.py skills`, search `work/skills-index.md`, and read the selected SKILL.md files.
+Requirements flags mean check, never verified availability. Inspect real requirements regardless of vendor/model names.
+Use native skill availability to confirm plugin activation; report missing dependencies or unsupported adaptations.
 
 ## Review brief (the reviewer gets requirements, claims and the diff - nothing else)
 Write the diff to a file first: `git diff <base>..<head> > work/<task>/reviews/<id>.diff` (uncommitted work: `git diff`
