@@ -63,3 +63,6 @@ Trendshift picks (2026-11-12, read-only clones in `C:\Users\Natthawut.j\src\tren
   and audit log.
 - lijiaqi-AI-Product-Manager/dsh-agent-compare (MIT, a041837): a DeepSeek Harness plugin only; not applicable to Claude/Codex.
   Idea: record why a candidate was picked.
+- kenryu42/cc-safety-net 2.7.12 (MIT): INSTALLED globally on owner request in Claude and Codex (PreToolUse hook that blocks
+  destructive commands and secret-file reads). Codex hook trusted by the owner; live block verified in both CLIs' hook paths.
+  Details, tests and undo: `docs/DEEP-DIVE-2026-11-12.md#cc-safety-net`.

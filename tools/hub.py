@@ -389,6 +389,23 @@ def stop(args):
                     {"Blockers": "stopped by orchestrator"})
 
 
+SECRET_PATTERNS = [
+    r"\bsk-[A-Za-z0-9_-]{16,}", r"\bgh[pousr]_[A-Za-z0-9]{20,}", r"\bgithub_pat_[A-Za-z0-9_]{20,}",
+    r"\bAKIA[0-9A-Z]{16}\b", r"\bxox[abprs]-[A-Za-z0-9-]{10,}", r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.",
+    r"(?i)\bbearer\s+[A-Za-z0-9._~+/-]{20,}",
+    # NAME=value (any non-*** value) or NAME: value (6+ chars with a digit or symbol); NAME may carry a prefix such as
+    # DB_PASSWORD or client_secret. Prose such as "secret: see vault" or "token: 150k used" stays allowed.
+    r"(?i)(?<![A-Za-z0-9])(?:[A-Za-z0-9]+_)*(?:password|passwd|secret|token|api[_-]?key)(?![A-Za-z0-9])\s*"
+    r"(?:=\s*(?!\*+(?:\s|$))\S+|:\s*(?!\*+(?:\s|$))(?=\S*[0-9!@#$%^&+/])\S{6,})",
+]
+
+
+def looks_secret(text):
+    """Known secret shapes only; a guard against pasting one into the log, not a scanner."""
+    return any(re.search(pattern, text) for pattern in SECRET_PATTERNS)
+
+
 def work_log(args):
     timestamp = datetime.now(timezone.utc)
     day = timestamp.date().isoformat() if args.show in (None, "") else args.show
@@ -404,6 +421,8 @@ def work_log(args):
         return
     if not args.kind or args.text is None:
         raise ValueError("log entry requires kind and --text")
+    if looks_secret(args.text) or looks_secret(args.task or ""):
+        raise ValueError("log text looks like it contains a secret; write *** instead (nothing was written)")
     task = "[" + slug(args.task) + "] " if args.task else ""
     line = f"- {timestamp:%H:%M:%SZ} {args.kind}: {task}{' '.join(args.text.splitlines())}\n"
     directory.mkdir(parents=True, exist_ok=True)

@@ -10,6 +10,9 @@ Do NOT edit files or git state. Never dispatch subagents. Read the diff file fro
 then only the changed hunks); read code outside the diff only to check a risk you name, and name it.
 The implementer's report is unverified claims; check them against the diff. A stated rationale never lowers a severity.
 Do not re-run the suite to confirm the report; run one focused test only for a specific doubt.
+Before any line review: state the change's goal in one sentence (cannot: the brief is underspecified, reply NEEDS_CONTEXT);
+then one pass of "is there a simpler way" - not doing it, reusing existing code, or fixing it in another layer - and
+report a clearly simpler route as Important. Keep "the report claims" apart from "I traced and confirmed".
 Spec compliance first: Missing (skipped or claimed but absent), Extra (not requested), Misunderstood (wrong thing built).
 What the diff alone cannot show goes under "Cannot verify" for the orchestrator, not into a wider search.
 Then check: (1) every plan row or brief item exists and does what its source requires (fields, states, validation, errors);
@@ -22,5 +25,6 @@ Severity: Critical/Important = the change cannot be trusted until fixed (wrong o
 swallowed errors, tests that assert nothing, duplicated logic); polish and "could test more" = Minor.
 Re-review (brief lists FINDINGS): verdict each finding ADDRESSED / NOT ADDRESSED with file:line ("attempted" is not
 addressed), new breakage in the fix diff only, anything else under "Out of scope".
-Output, nothing else: PASS or FAIL; Spec: compliant | Missing/Extra/Misunderstood items; Cannot verify: items;
-then at most 10 issues (severity, file:line, problem, fix). FAIL when any Critical/Important issue or spec gap remains.
+Output, nothing else: PASS or FAIL; Goal: one sentence; Spec: compliant | Missing/Extra/Misunderstood items;
+Traced: the flows you followed and confirmed (required, so a PASS with no issues says what was checked); Cannot
+verify: items; then at most 10 issues (severity, file:line, problem, fix). FAIL when any Critical/Important issue or spec gap remains.

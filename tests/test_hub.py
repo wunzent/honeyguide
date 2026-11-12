@@ -187,7 +187,7 @@ def test_invalid_inputs(hub):
 
 
 @pytest.mark.parametrize("vendor,model,effort,reason,extra", [
-    ("codex", "gpt-6-astra", "low", "A valid route reason", ("--premium", "Owner authorized this")),
+    ("codex", "gpt-5.6-sol", "low", "A valid route reason", ("--premium", "Owner authorized this")),
     ("claude", "fable", "low", "A valid route reason", ()),
     ("claude", "opus", "low", "A valid route reason", ()),
     ("codex", "gpt-6.1-sol", "xhigh", "A valid route reason", ()),
@@ -628,6 +628,30 @@ def test_log_append_show_and_validation(hub):
     call("log", "outcome", expected=1)
     call("log", "outcome", "--text", "x", "--show", expected=1)
     call("log", "other", "--text", "x", expected=2)
+
+
+@pytest.mark.parametrize("text", [
+    "key sk-ant-api03-abcdefghijklmnop0123", "token ghp_abcdefghijklmnopqrstuvwxyz0123", "AKIAABCDEFGHIJKLMNOP leaked",
+    "-----BEGIN OPENSSH PRIVATE KEY-----", "password=hunter2", "API_KEY: abc123", "Token = abc",
+    "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig", "DB_PASSWORD=abc", "client_secret=abc",
+    "password: hunter2", "Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345",
+])
+def test_log_rejects_secret_shapes(hub, text):
+    root, _, call = hub
+    out = call("log", "context", "--text", text, expected=1)
+    assert out.startswith("ERROR:") and text not in out
+    assert not (root / "work/log").exists() or not any((root / "work/log").glob("*.md"))
+
+
+@pytest.mark.parametrize("text", [
+    "password=*** rotated by the owner", "token: ***", "Discussed token budgets and the secret of fast reviews",
+    "sk-short", "Use the ask-mode", "api key handling reviewed", "secret: see vault", "token: 150k used",
+    "token budget: 150k", "token_count=5 tokens", "password: ***",
+])
+def test_log_allows_redacted_and_prose(hub, text):
+    _, _, call = hub
+    call("log", "context", "--text", text)
+    assert text in call("log", "--show")
 
 
 def test_concurrent_log_appends(hub):

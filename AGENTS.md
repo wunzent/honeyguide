@@ -9,6 +9,8 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
 ## 1. Start a task
 0. Read `LEARNED.md` (the owner's standing preferences; they override your defaults) and the target repo's card
    `projects/<name>.md`. No card yet: write one from `projects/README.md` and ask the owner to confirm its summary.
+   Then `python tools/hub.py status` (open tasks and running agents) and `python tools/hub.py log --show` (today; the
+   latest earlier day if empty): an unfinished task for the same goal is continued from its checkpoint, not restarted.
 1. Restate the goal and scope in 2-3 lines. Ask the owner only when the goal, scope or a product decision is unclear.
 2. `python tools/hub.py task new <slug> --objective "..." --scope "..." --orchestrator claude|codex` (Codex uses the
    same command). This creates `work/<slug>/CHECKPOINT.md` and `work/<slug>/agents/`.
@@ -38,7 +40,7 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   |---|---|---|---|
   | Cheap ($0.10/$0.50) | gpt-6-luna | haiku | spec-clear work: one function or file, docs, log reading, simple edits |
   | Middle ($1-2/$5-10) | gpt-6.1-terra (visual/UI), gpt-6.1-sol | sonnet | several files, integration, unclear spec, review of code |
-  | Strong (premium) | gpt-6-astra (unverified) | opus (fable unverified) | hard bugs a middle tier failed on, architecture, security, final review |
+  | Strong (premium) | gpt-6-astra | opus (fable unverified) | hard bugs a middle tier failed on, architecture, security, final review |
   Effort: low by default; medium for several files or ordinary logic; high for hard logic or after a failed lower
   attempt. A higher effort on the same tier is the first step up; change tier when effort did not help. Back down to the
   cheap tier once the cause or design is known. xhigh/max and premium models only with a stated reason. Evidence: two
