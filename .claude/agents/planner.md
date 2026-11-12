@@ -24,4 +24,4 @@ self-contained tasks in build order that together cover every file row once, eac
 
 Reply in at most 10 lines: plan path, number of packages or rows, blocking questions, assumed dependencies, first step.
 
-Suggested skills: brief, investigate-first, api-and-interface-design
+Suggested skills: brief, investigate-first, api-and-interface-design, software-component

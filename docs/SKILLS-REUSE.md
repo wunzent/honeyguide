@@ -78,3 +78,5 @@ Trendshift picks (2026-11-12, read-only clones in `C:\Users\Natthawut.j\src\tren
   (project SWC folder comes from the project card, default `docs/swc/FE|BE`; work log template in `references/templates/`).
 - 2026-11-12 (owner): skill `swc` renamed `software-component` (folder `skills/software-component/`). Document names
   stay "SWC" (SWC-Overview.md, SWC/ folders, `docs/swc/`): SWC is the document type, the skill is its standard.
+- 2026-11-12 (owner): role `doc-keeper` removed (no value as a separate role). Docs work goes to a coder with the
+  `software-component` skill named in its brief; planner lists the skill for specs and plans.

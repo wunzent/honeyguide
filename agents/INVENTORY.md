@@ -16,7 +16,6 @@ One list of every reusable agent the orchestrators can use. Vendor, model and ef
 | coder | implements one bounded slice or brief | code in the working dir | brief, surgical-patch, lean-build, safe-refactor | v1 `codex/agents/coder.toml` |
 | reviewer | independent read-only review, PASS/FAIL + max 10 issues | nothing | security-and-hardening, backend-api-safety, verify-and-stop | v1 `codex/agents/reviewer.toml` + `~/.claude/agents/reviewer.md` |
 | tester | runs lint/typecheck/tests, reports exactly | nothing in code | verify-and-stop | v1 `codex/agents/tester.toml` (TEAM MODE dropped) |
-| doc-keeper | updates specs/docs to match the code | docs only | software-component | v1 `codex/agents/doc-keeper.toml` |
 | style-scout | writes ARCHITECTURE / PROJECT_STYLE / layers draft | `.agents/` files only | graphify | v1 `codex/agents/style-scout.toml` |
 | researcher | read-only investigation, evidence-ranked answer | nothing | investigate-first, graphify | new (covers v1 investigate-first usage as an agent) |
 

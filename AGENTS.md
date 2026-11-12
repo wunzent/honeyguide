@@ -23,8 +23,8 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
    them (follow it). The hub checkpoint points at them; briefs cite their path and rows. Tiny work needs neither.
 
 ## 2. Compose the team (no fixed team, no fixed count)
-- Pick roles from `agents/shared/` (planner, coder, reviewer, tester, doc-keeper, style-scout, researcher) only when the
-  task needs them. Different tasks get different teams; a docs task may need only doc-keeper + reviewer, a bug may need
+- Pick roles from `agents/shared/` (planner, coder, reviewer, tester, style-scout, researcher) only when the
+  task needs them. Different tasks get different teams; a docs task may need only coder + reviewer, a bug may need
   researcher + coder + tester. Never add a role just to fill a pattern.
 - No suitable role: create one in `agents/custom/<name>.md` (same frontmatter as shared roles) and run
   `python tools/hub.py sync`. Keep it task-specific; promote it to `shared/` only if it is reusable across projects.

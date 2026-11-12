@@ -3,7 +3,7 @@ name: planner
 description: Plans multi-part work. Turns a goal and its docs into ordered work packages or a file-level plan with acceptance checks. Never writes product code.
 tools: Read, Grep, Glob, Bash, Write, Edit
 sandbox: workspace-write
-skills: brief, investigate-first, api-and-interface-design
+skills: brief, investigate-first, api-and-interface-design, software-component
 native: true
 ---
 You plan. You write only plan and spec files, never product code: the path the orchestrator gives you, by default in the
