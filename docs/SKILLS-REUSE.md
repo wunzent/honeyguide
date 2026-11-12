@@ -24,3 +24,42 @@ mattpocock/skills (several are installed as the `mattpocock-skills` plugin), ant
 (installed as `anthropic-skills:doc-coauthoring`), thananon/9arm-skills, neondatabase/agent-skills, antfu/skills,
 ui-ux-pro-max (installed in Codex skills), material-design-icons, globalmpc/backendskills, addyosmani web-quality-skills.
 No third-party skill was installed; evaluating the uncovered repositories is a separate, optional task.
+
+2026-11-12 (owner request): `skills/context-engineering/` vendored verbatim from addyosmani/agent-skills commit aeac41d
+(MIT, `LICENSE` copied alongside) and synced to `.claude/skills` and `.agents/skills` (project scope, both vendors).
+EGM (google/elephant-goldfish-model v0.1.1, Apache-2.0, reviewed clone at commit 8414530) installed GLOBALLY in both
+CLIs on the owner's explicit decision ("ติดตั้ง global ทั้งคู่"): `claude plugin marketplace add` + `install egm@egm`
+(user scope, enabled) and `codex plugin marketplace add` + `add egm@egm` (enabled). Installed skill files equal the
+reviewed clone (Claude's copy omits only TEST.md/test_scenarios.yaml); no hooks. Global config changes: `~/.claude/settings.json`
+(enabledPlugins + extraKnownMarketplaces entries) and `~/.codex/config.toml` (`[plugins."egm@egm"]`, `[marketplaces.egm]`).
+Pre-install copies: `ALI\multi-agent-hub-v2-backups\egm-install-20261112\`. Codex config hash was already
+`5c8a65ea04eaf9c4` before the install (not the earlier `259cbae720916dc3`); after: `53a610a347ce0492`.
+Use EGM selectively (heavy, one-question gates, design-only scope): comprehension goldfish on big briefs/PLANs/handoff
+checkpoints, implementation-readiness before coding, `egm-drift-report` after a build. In Claude, invoke `/egm:egm-review`
+etc. (the Skill tool refuses EGM skills by design).
+
+obra/superpowers v7.0.2 (MIT, read-only clone at commit 22f0b46; NOT installed: its SessionStart hook injects mandatory
+skill rules into every session). Borrowed and adapted (not copied): worker report contract with 4 statuses and a report
+file (`skills/brief` CONTRACT), implementer rules (`coder.md`), reviewer brief = requirements + claims + diff file with
+spec compliance first and severity calibration (`reviewer.md`, `skills/brief`), scoped re-review, fix rounds that resume
+the same implementer and escalate on no progress (no round cap: AGENTS.md section 5), plan preflight, rulings ledger and
+final review (AGENTS.md sections 4, 6, 7), Codex `fork_turns: "none"` (codex.md; not yet verified here), owner-chosen
+branch/worktree before changes and plan/spec files in the target repo (owner decisions 2026-11-12, AGENTS.md section 1).
+Not used: session-start hook, bash scripts and `.superpowers/` workspace, 5-round cap, visual brainstorming server.
+
+Trendshift picks (2026-11-12, read-only clones in `C:\Users\Natthawut.j\src\trendshift\`):
+- shadcn/improve 1.0.0 (MIT, cac56e1): INSTALLED globally on owner request - Claude plugin `improve@improve` (user scope;
+  cache equals the reviewed clone) and Codex user skill `~/.codex/skills/improve` (copy + LICENSE; Codex config unchanged,
+  hash 53a610a347ce0492). Pure Markdown, no hooks/scripts. Writes plans to `plans/` (its own convention), `--issues`
+  publishes to GitHub only with the flag, `execute` needs Claude worktree isolation. Backups: `...-backups\improve-install-20261112\`.
+- stevenmichaelthomas/numbrone (MIT, 0632b01): not installable here (needs herdr: macOS/Linux, `curl | sh`). Ideas:
+  status only on change (working/blocked/review/done), reports written to make sense a month later, one-line
+  `decision:` log (= our rulings), managers never edit the main checkout.
+- ABLingss/awesome-agent-loops (MIT, 0eef240): a curated list; its installer pulls 30 unreviewed skills via `npx skills add`
+  from about 20 repositories - not run. Notable entries: mattpocock `handoff`, `to-spec`, `to-tickets`.
+- chenhg5/myco (MIT, f8a1bdd): installable (Windows preview exe, unsigned) but not installed: a hub server plus remote
+  shell nodes that run commands as the user - outside this hub's scope and Security Gate NOT PASS. Ideas: message types
+  task / reply / steer (correct a running task) / note, `fail --reason`, threads, self-contained task bodies, sender allow-list
+  and audit log.
+- lijiaqi-AI-Product-Manager/dsh-agent-compare (MIT, a041837): a DeepSeek Harness plugin only; not applicable to Claude/Codex.
+  Idea: record why a candidate was picked.

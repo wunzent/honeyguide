@@ -9,6 +9,12 @@ The hub folder must be a trusted project in Codex so the project `.codex/` folde
 - Spawn a native subagent with the role name as the agent type. Codex does not expose a per-spawn model choice in all
   versions: the subagent then uses the session model. When the assignment needs a specific model or effort, use a
   Codex CLI worker instead: `hub.py delegate --to codex` (exact `-m` and effort, verified from the session file).
+- Spawn with a clean context: `spawn_agent` with `fork_turns: "none"` (the default `"all"` copies your whole transcript
+  into the child, which defeats the brief and costs tokens). The child gets the brief path, not the conversation.
+- Fix rounds: resume the same child with `followup_task` and the findings verbatim instead of spawning a new one.
+  Do not poll `wait_agent` with short timeouts; a finished child's answer arrives on your next turn.
+  (Tool names from the superpowers v7.0.2 Codex notes for multi-agent V2; not yet verified on this machine. If your
+  tool list differs, trust the tool list and still give the child no history.)
 - Record each native spawn with `hub.py agent new ... --vendor codex --kind native` and update it when it finishes.
 
 ## Cross-vendor: Codex -> Claude

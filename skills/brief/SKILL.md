@@ -1,36 +1,80 @@
 ---
 name: brief
-description: Write a compact, self-contained BRIEF before delegating work to any agent (native subagent or the other vendor's CLI). Use whenever an orchestrator hands a task, plan slice or fix to another agent, or when a checkpoint is handed to the other vendor.
+description: Write a compact, self-contained BRIEF before delegating work to any agent (native subagent or the other vendor's CLI). Use whenever an orchestrator hands a task, plan slice, review, fix or checkpoint handoff to another agent.
 ---
 # BRIEF - context engineering for delegation
 
-Source: adapted from the Multi-Agent Hub v1 `code-pm` MODE: brief (`codex/agents/code-pm.toml`) and the context-engineering
-findings in v1 `research/agent-skills-2026-10-27.md` ("compress into a BRIEF of only the assigned rows/sources; do not resend rules").
+Sources: Multi-Agent Hub v1 `code-pm` MODE: brief; the context-engineering research in v1 `research/agent-skills-2026-10-27.md`;
+`skills/context-engineering` (stable context first, active task last); obra/superpowers v7.0.2 (MIT) subagent-driven-development
+prompts (report contract, reviewer and re-review shape). Adapted, not copied.
 
-A worker sees only its brief (plus its native role definition and the repo). Give it exactly what it needs, nothing it can
-read itself, and no rules it already has.
-
-## Write the brief as a file (`work/<task>/briefs/<agent-id>.md` or next to the plan)
-
-```
-ROLE: <shared role name>           VENDOR/MODEL/EFFORT: <chosen by the orchestrator>
-TASK: <task slug>                   CWD: <absolute working directory>
-GOAL: <one or two sentences: the outcome, not the method>
-SCOPE: files/areas it may change: <list>. Must NOT change: <list>.
-INPUTS: <plan path + row numbers / doc path#section / diff range> (paths, not pasted content)
-STEPS: <at most 8 concrete steps, in the project's layer order; omit if the plan's Prompt sequence covers it>
-CHECKS: <at most 4 exact commands it must run: lint / typecheck / unit; never guessed>
-SKILLS: <installed skills relevant to this assignment, by name>
-DONE WHEN: <observable acceptance: tests pass, file exists, endpoint returns X>
-KNOWN FAILURES: <approaches already tried that failed, from the checkpoint - do not repeat them>
-REPORT: files changed, items done/not done, checks with results, blockers. Say "blocked" instead of guessing.
-```
+A worker sees only its brief, its native role definition and the repo. Give it exactly what it needs, nothing it can
+read itself, and no rules its role already has.
 
 ## Rules
-- Paths and line ranges instead of pasted files; the worker reads them. Never paste secrets, `.env` content or customer data.
-- One brief = one bounded deliverable. Split work that touches unrelated areas; never split one file across two workers.
-- Effort follows the work, not the role: copy/config/one-file -> low; several files or ordinary logic -> medium;
-  hard logic, security-sensitive work or a failed cheaper attempt -> high. Premium models/efforts only with a stated reason.
-- Put browser or live-service checks in the orchestrator's own checklist unless the brief explicitly assigns them.
-- Include KNOWN FAILURES whenever the checkpoint lists earlier attempts; this is what prevents blind repetition.
-- Keep it short: a good brief is usually 10-25 lines.
+- Never send the conversation, a transcript or accumulated history. Codex native spawns: `fork_turns: "none"` (see
+  `agents/orchestrators/codex.md`). Decisions from earlier work go in as one line each under DECISIONS.
+- Paths and line ranges, not pasted files. The worker never reads the whole plan: point at its rows or task section.
+- Order: stable part first (ROLE, CONTRACT - identical across briefs), task-specific part after it, the deliverable
+  (DONE WHEN, REPORT FILE) last, where the worker reads it right before acting.
+- Size: at most about 300 words; extra rules for one assignment at most 100-250 tokens. Longer means split the work.
+- One brief = one bounded deliverable. Never split one file across two workers.
+- Effort follows the work: copy/config/one file -> low; several files or ordinary logic -> medium; hard logic,
+  security-sensitive work or a failed cheaper attempt -> high. Premium only with a stated reason.
+- Include KNOWN FAILURES whenever the checkpoint lists earlier attempts. Never paste secrets, `.env` or customer data.
+- Browser or live-service checks stay with the orchestrator unless the brief assigns them.
+
+## CONTRACT (paste verbatim into every brief)
+```
+CONTRACT: Write the full report to REPORT FILE: what you did (or tried), files changed, each check with command and
+result, self-review findings, concerns. Then reply in at most 15 lines:
+STATUS: DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOCKED - files changed - one-line check summary - concerns - report path.
+NEEDS_CONTEXT / BLOCKED: put exactly what is missing or blocking in the reply. Unsure about correctness: DONE_WITH_CONCERNS.
+Do not dispatch subagents (no helper, no reviewer of your own work). Ask instead of guessing.
+```
+
+## Work brief (`work/<task>/briefs/<agent-id>.md`)
+```
+ROLE: <shared role>
+CONTRACT: <verbatim block above>
+TASK: <slug>    CWD: <absolute dir>    VENDOR/MODEL/EFFORT: <choice>
+GOAL: <outcome in 1-2 sentences, not the method>
+SCOPE: may change <list>; must NOT change <list>
+INPUTS: <plan path + rows / doc#section / diff range>
+DECISIONS: <interfaces and rulings from earlier tasks, one line each; or none>
+STEPS: <at most 8, only if the plan does not cover them>
+CHECKS: <at most 4 exact commands>
+SKILLS: <installed skills by name>
+KNOWN FAILURES: <tried and failed - do not repeat; or none>
+DONE WHEN: <observable acceptance>
+REPORT FILE: work/<task>/reports/<agent-id>.md
+```
+
+## Review brief (the reviewer gets requirements, claims and the diff - nothing else)
+Write the diff to a file first: `git diff <base>..<head> > work/<task>/reviews/<id>.diff` (uncommitted work: `git diff`
+plus `git diff --stat`; add new files with `git diff --no-index /dev/null <file>`).
+```
+ROLE: reviewer
+CONTRACT: <verbatim block>
+REQUESTED: <the work brief path> + GLOBAL CONSTRAINTS: <exact values/formats from the spec, or none>
+CLAIMS: <implementer's report path> - unverified until checked against the diff
+DIFF: <diff file path> (base <sha or "working tree">, head <sha>) - read it once; outside it only for a named risk
+STANDARDS: <project style/architecture docs, checklists by skill name>
+DONE WHEN: verdicts written as the reviewer role's output format
+REPORT FILE: work/<task>/reports/<id>.md
+```
+
+## Re-review brief (after a fix)
+```
+ROLE: reviewer    CONTRACT: <verbatim>
+REQUESTED: <work brief path>    CLAIMS: <same report file; fix report appended>
+FINDINGS: <the open Critical/Important findings, verbatim, one per line>
+DIFF: <diff file of the fix only: previous reviewed head..now>
+SCOPE: verdict each finding ADDRESSED / NOT ADDRESSED with file:line; new breakage in the fix diff only;
+       anything else under "Out of scope" (does not block)
+REPORT FILE: <path>
+```
+
+## Handoff brief (other vendor continues a task)
+Work brief whose INPUTS is the absolute path of `work/<task>/CHECKPOINT.md` and whose GOAL is "the items in Remaining
+work"; DECISIONS repeats the checkpoint's `Ruling:` lines. Completed work is never redone.

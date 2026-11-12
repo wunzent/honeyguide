@@ -11,6 +11,12 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
 2. `python tools/hub.py task new <slug> --objective "..." --scope "..." --orchestrator claude|codex` (Codex uses the
    same command). This creates `work/<slug>/CHECKPOINT.md` and `work/<slug>/agents/`.
 3. Decide the work type and size. Tiny work (a typo, one obvious edit, a status check): do it yourself, no team.
+4. Branch: before the first change in the target repo, ask the owner where the work goes - the current branch, a new
+   branch (name it), or a new git worktree on a new branch - unless the task already says. Never change `main`/`master`
+   without that answer. Record the answer in the checkpoint ("Approved scope"); every brief's CWD/SCOPE uses it.
+5. Plans and specs live in the target repo, committed with the work: `docs/specs/YYYY-MM-DD-<slug>-design.md` (what and
+   why) and `docs/plans/YYYY-MM-DD-<slug>.md` (tasks, files, checks), unless the repo already has its own place for
+   them (follow it). The hub checkpoint points at them; briefs cite their path and rows. Tiny work needs neither.
 
 ## 2. Compose the team (no fixed team, no fixed count)
 - Pick roles from `agents/shared/` (planner, coder, reviewer, tester, doc-keeper, style-scout, researcher) only when the
@@ -39,6 +45,11 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   `--write` requires an explicit `--cwd` (the folder the worker may change). Exit 2 = refused (nothing started),
   3 = actual model differs, 4 = quota unavailable, 1 = failed.
 - Write `Unknown`/`Unverified` when the CLI does not expose a value. Never invent actual model, skill use or state.
+- Plans with several tasks: before the first dispatch, scan once for tasks that share a file or interface or contradict
+  each other or the spec; rule on each conflict (spec wins) and record the ruling (section 6).
+- Act on the worker's STATUS (brief CONTRACT): DONE -> review; DONE_WITH_CONCERNS -> read the concerns, fix correctness or
+  scope doubts before review; NEEDS_CONTEXT -> add the missing context and re-dispatch; BLOCKED -> more context, a more
+  capable model, a smaller task, or a plan correction (recorded as a ruling). Never resend the same brief unchanged.
 - Do not run two writers on the same files at the same time. Independent read-only work may run in parallel.
 
 ## 5. Monitor, failures and loops (progress-based; no retry budget, no fixed retry count)
@@ -46,6 +57,11 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   `python tools/hub.py attempt <slug> --action "what was tried" --outcome "what happened"`.
   Exit 5 / `NO PROGRESS` means the same action produced the same outcome before: do not repeat it. Change the approach
   (different hypothesis, smaller step, `investigate-first` / researcher, different model or vendor) or escalate.
+- Review findings (Critical/Important or a spec gap): send them verbatim to the same implementer (resume it; else a fresh
+  one with the brief and report file), then a scoped re-review of the fix diff only (`brief` re-review). Minor findings
+  and out-of-scope notes are recorded for the final review and never extend the loop. When the same implementer makes
+  no progress (`attempt` exit 5), dispatch a fresh implementer on a more capable model with the report file. Do not fix
+  reviewed findings yourself in the orchestrator context: an unreviewed fix skips the gate. No round count.
 - Escalate to the owner only when no in-scope approach remains, a decision is the owner's, or scope would be exceeded.
 - Scope exceeded (files, repos or actions outside the approved scope): stop that action and ask the owner.
 
@@ -58,11 +74,17 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   continue, and delegate the remaining work to it with a brief that points at the checkpoint. Continue from the
   checkpoint; never redo completed work. Never reuse one vendor's session id for the other. If neither vendor can
   continue, pause and report.
+- Rulings: every decision you take on the owner's behalf (plan conflict, parked finding, plan correction) goes in the
+  checkpoint as `checkpoint <slug> --section "Completed work" --text "Ruling: <what> - <why> - cost if wrong: <...>"`.
+  Handoff briefs repeat them under DECISIONS.
 
 ## 7. Verify and deliver
 - Run the project's checks yourself (or via tester) and get an independent review for code changes.
   Never claim a check passed that did not run; simulated events (e.g. simulated quota) are reported as simulated.
-- Deliver: what changed, evidence, agent table (`python tools/hub.py status <slug>`), open issues.
+- Multi-task work: one final review of the whole change on the most capable suitable model, pointed at the recorded
+  minor findings; send all its findings to ONE fixer, then one scoped re-review. Residual issues go to the owner.
+- Deliver: what changed, evidence, agent table (`python tools/hub.py status <slug>`), open issues, and every `Ruling:`
+  line from the checkpoint under "Rulings I made" (the owner reviews those decisions).
 
 ## Boundaries (always)
 - Work only in the target repository/working directory the owner named. No push, merge, deploy or destructive

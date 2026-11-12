@@ -11,6 +11,9 @@ Entry: open Claude Code (Desktop Code tab or `claude`) in this hub folder and gi
   The actual model of a native subagent is not reported back reliably; leave `Actual model` as `Unverified` unless you
   read it from the subagent transcript.
 - Parallel spawns only for independent read-only work or disjoint files.
+- Agent tool subagents start without your conversation; the prompt is the brief path plus one line of context.
+  Fix rounds: resume the same subagent with SendMessage (its id from the spawn result) and the findings verbatim.
+  Cross-vendor workers cannot be resumed: re-delegate with the brief, the report file and the findings.
 
 ## Cross-vendor: Claude -> Codex
 - `python tools/hub.py delegate <task> --to codex --role <role> --model gpt-6.1-sol --effort low|medium|high --brief <file> --reason "..." --parent claude-orchestrator [--cwd <repo>] [--write]`
