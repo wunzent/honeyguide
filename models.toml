@@ -1,13 +1,18 @@
+# Routing catalog. verified = a live hub.py run returned this model; never route to unverified.
+# Trial 2026-11-12 (one spec-clear coding task, same brief, 15 hidden tests): every pair below passed 18/18;
+# gpt-6-luna low / haiku low cost about 1/15-1/20 of gpt-6.1-sol low / sonnet low. See AGENTS.md section 3.
+# Not run yet: gpt-6-astra, fable, opus effort above low, any xhigh/max.
+
 [codex]
-verified = ["gpt-6.1-sol"]
-unverified = ["gpt-6-luna"]
+verified = ["gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol"]
+unverified = ["gpt-6-astra"]
 premium = []
 efforts = ["low", "medium", "high"]
 premium_efforts = ["xhigh", "max"]
 
 [claude]
-verified = ["sonnet", "opus"]
-unverified = ["haiku"]
+verified = ["haiku", "sonnet", "opus"]
+unverified = ["fable"]
 premium = ["opus"]
 efforts = ["low", "medium", "high"]
 premium_efforts = ["xhigh", "max"]

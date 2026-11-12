@@ -187,8 +187,8 @@ def test_invalid_inputs(hub):
 
 
 @pytest.mark.parametrize("vendor,model,effort,reason,extra", [
-    ("codex", "gpt-6-luna", "low", "A valid route reason", ("--premium", "Owner authorized this")),
-    ("claude", "haiku", "low", "A valid route reason", ()),
+    ("codex", "gpt-6-astra", "low", "A valid route reason", ("--premium", "Owner authorized this")),
+    ("claude", "fable", "low", "A valid route reason", ()),
     ("claude", "opus", "low", "A valid route reason", ()),
     ("codex", "gpt-6.1-sol", "xhigh", "A valid route reason", ()),
     ("codex", "gpt-6.1-sol", "low", "short", ()),
@@ -362,6 +362,10 @@ def test_codex_distinct_contexts(hub):
     ("Status: blocked on lint, fixed", "Unknown", "done", 0),
     ("Status: blocked on lint", "Unknown", "done", 0),
     ("STATUS BLOCKED", "Unknown", "done", 0),
+    ("STATUS: DONE - files changed: split.py - checks pass - report: R.md", "DONE", "done", 0),
+    ("STATUS: BLOCKED - pytest missing - report: R.md", "BLOCKED", "blocked", 6),
+    ("**STATUS:** NEEDS_CONTEXT | which branch?", "NEEDS_CONTEXT", "blocked", 6),
+    ("Status: blocked-ish, fixed later", "Unknown", "done", 0),
     ("STATUS: BLOCKED\n**STATUS: DONE**\nStatus: blocked on lint", "DONE", "done", 0),
 ])
 def test_worker_status_mapping(hub, vendor, reply, worker_status, status, code):

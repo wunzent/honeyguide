@@ -32,9 +32,18 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
 
 ## 3. Choose vendor, model and effort (per assignment, never per role)
 - Catalog: `models.toml` (`verified`, `unverified`, `premium`). Never route to an unverified model.
-- Cheapest suitable: routine (docs, log reading, simple edits) -> low effort; ordinary coding/debugging -> low or
-  medium; architecture, hard debugging, security-sensitive work and its review -> high. Premium models (opus) or
-  efforts (xhigh/max) only with a stated reason (failed cheaper attempt, review evidence, or the owner asked).
+- Model and effort substitute for each other; the brief carries the context. Start at the cheapest tier at low effort
+  and move up one step only with a stated reason (failed or BLOCKED cheaper attempt, review evidence, the owner asked):
+  | Tier (API $/1M in/out) | Codex | Claude | Use for |
+  |---|---|---|---|
+  | Cheap ($0.10/$0.50) | gpt-6-luna | haiku | spec-clear work: one function or file, docs, log reading, simple edits |
+  | Middle ($1-2/$5-10) | gpt-6.1-terra (visual/UI), gpt-6.1-sol | sonnet | several files, integration, unclear spec, review of code |
+  | Strong (premium) | gpt-6-astra (unverified) | opus (fable unverified) | hard bugs a middle tier failed on, architecture, security, final review |
+  Effort: low by default; medium for several files or ordinary logic; high for hard logic or after a failed lower
+  attempt. A higher effort on the same tier is the first step up; change tier when effort did not help. Back down to the
+  cheap tier once the cause or design is known. xhigh/max and premium models only with a stated reason. Evidence: one
+  trial task (2026-11-12) where every pair passed, so cheap-tier quality on hard work is unproven; the cheap tier also
+  misreported a written file, so its claims always get an independent check.
 - Vendor: use the vendor whose strengths fit the work and that has quota; prefer the other vendor for independent
   review of code it did not write. Native subagents are cheapest to coordinate; cross-vendor workers go through hub.py.
 - High-stakes work with several valid designs (costs double, so only with a stated reason as for premium, or when the
