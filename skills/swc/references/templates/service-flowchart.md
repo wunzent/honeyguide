@@ -1,0 +1,89 @@
+# {service-name} — Flowcharts
+
+| Version | Date | Spec |
+|---|---|---|
+| {X.Y.Z} | YYYY-MM-DD | [{service}-spec.md](../{service}-spec/{service}-spec.md) |
+
+Path: `<service>/<service>-flowchart/<service>-flowchart.md`. One section per spec section that has logic; same
+version and date as the spec. Mermaid syntax follows the renderer the team uses.
+
+## 1. Startup
+
+```mermaid
+flowchart TD
+    A["Start"] --> B["Load config"]
+    B --> C{"Dependencies ready?"}
+    C -- No --> D["Exit with error"]
+    C -- Yes --> E["Start {consumer / poll loop}"]
+```
+
+## 2. Main Loop (spec §5)
+
+```mermaid
+flowchart TD
+    A["Receive {message}"] --> B{"Valid schema?"}
+    B -- No --> P["Send to DLQ and commit"]
+    B -- Yes --> C{"Already processed?"}
+    C -- Yes --> K["Commit (skip)"]
+    C -- No --> D["{main work}"]
+    D --> E{"Success?"}
+    E -- Yes --> F["Update status {TO}"] --> K
+    E -- No --> R["Retry decision (§3)"]
+```
+
+## 3. Retry / DLQ Decision (spec §7)
+
+```mermaid
+flowchart TD
+    A["Failure"] --> B{"attempt < {n}?"}
+    B -- Yes --> C["Wait {backoff}, retry"]
+    B -- No --> D["Send to {dlq-topic}, mark {FAILED}"]
+```
+
+## 4. Status Lifecycle (spec §9)
+
+```mermaid
+stateDiagram-v2
+    state "{PENDING}" as S1
+    state "{PROCESSING}" as S2
+    state "{DONE}" as S3
+    state "{FAILED}" as S4
+    [*] --> S1
+    S1 --> S2: {trigger}
+    S2 --> S3: {trigger}
+    S2 --> S4: {trigger}
+```
+
+## 5. Scheduled Jobs (spec §10)
+
+```mermaid
+flowchart TD
+    A["Every {interval}"] --> B["Select {records}"]
+    B --> C{"Any?"}
+    C -- No --> Z["No-op"]
+    C -- Yes --> D["{action} (batch ≤ {n})"]
+```
+
+## 6. Graceful Shutdown (spec §14)
+
+```mermaid
+flowchart TD
+    A["Signal"] --> B["Stop intake"] --> C["Finish in-flight ≤ {timeout}"] --> D["Commit, close"]
+```
+
+## 7. Service Interaction
+
+```mermaid
+sequenceDiagram
+    participant P as {Producer}
+    participant B as {Broker}
+    participant S as {this service}
+    participant DB as {Database}
+    participant X as {External provider}
+    P->>B: {message}
+    B->>S: deliver
+    S->>DB: idempotency check / status update
+    S->>X: {call}
+    X-->>S: {result}
+    S->>B: commit
+```

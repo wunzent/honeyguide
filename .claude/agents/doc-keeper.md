@@ -13,4 +13,4 @@ Unclear conflict between code and spec: add an Open Question; do not decide. No 
 Never write secrets, tokens or real customer data into docs; use `***`.
 Reply in under 10 lines: files changed, rows added, open questions.
 
-Suggested skills: swc, swc-central, doc-coauthoring
+Suggested skills: swc

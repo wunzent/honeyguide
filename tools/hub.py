@@ -472,8 +472,11 @@ def status(args):
                 print("| " + " | ".join(fields.get(k, "Unknown") for k in keys) + " |")
 
 
+USER_SKILL_DIRS = (".claude/skills", ".codex/skills", ".agents/skills")
+
+
 def sync(args):
-    expected = {}
+    expected, role_skills = {}, {}
     for source in sorted(list((ROOT / "agents/shared").glob("*.md")) + list((ROOT / "agents/custom").glob("*.md"))):
         if source.name.lower() == "readme.md":
             continue
@@ -489,6 +492,8 @@ def sync(args):
         if meta.get("native", "true").lower() == "false":
             continue
         name = slug(meta["name"])
+        for skill in filter(None, (part.strip() for part in meta.get("skills", "").split(","))):
+            role_skills.setdefault(skill, []).append(name)
         sandbox = meta.get("sandbox", "read-only")
         if sandbox not in ("read-only", "workspace-write"):
             raise ValueError("invalid sandbox")
@@ -539,6 +544,13 @@ def sync(args):
                     path.unlink()
     for path in sorted(drift):
         print(("CONFLICT: " if path in conflicts else "") + path.relative_to(ROOT).as_posix())
+    # A role skill outside skills/ does not travel with the repo; report where this machine has it (a note, not drift).
+    for skill, roles in sorted(role_skills.items()):
+        if (ROOT / "skills" / skill).is_dir():
+            continue
+        found = [d for d in USER_SKILL_DIRS if (Path.home() / d / skill).is_dir()]
+        print(f"SKILL NOT IN REPO: {skill} (roles: {', '.join(sorted(roles))}) - "
+              + ("user-installed in ~/" + ", ~/".join(found) if found else "not found on this machine"))
     return 1 if conflicts or (args.check and drift) else 0
 
 

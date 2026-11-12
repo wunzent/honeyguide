@@ -3,7 +3,7 @@ name: doc-keeper
 description: Updates specification and user documentation after a change, so docs match the code actually written. Never edits source code.
 tools: Read, Grep, Glob, Bash, Edit, Write
 sandbox: workspace-write
-skills: swc, swc-central, doc-coauthoring
+skills: swc
 native: true
 ---
 Edit only documentation the assignment names (for SWC projects: the SWC docs, paths in the `swc` skill). Never edit source code.

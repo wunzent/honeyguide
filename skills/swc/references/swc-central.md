@@ -1,0 +1,212 @@
+# SWC Central Document — เอกสารกลางของระบบ
+
+**Version**: 1.0
+**Status**: Active
+**Last Updated**: 2026-10-14
+
+> SWC ไม่ใช่แค่เอกสารสำหรับ implement แต่เป็น **แหล่งข้อมูลกลาง (single source of truth)** ที่เขียนครั้งเดียวแล้วใช้ต่อได้ทั้งการคิด solution, การปรับทิศทางโปรเจกต์, การทำคู่มือ, การเขียน unit test / integration test และการทำ time sheet รายวัน
+> มาตรฐานนี้ **ต่อยอด** จาก [Frontend SWC Standard](frontend-standard.md) และ [Backend API and Flow Standard](backend-standard.md) ไม่แทนที่ ไฟล์เดิมไม่ต้องย้ายหรือเปลี่ยนชื่อ
+
+---
+
+## 1. หลักการ
+
+1. **เขียนครั้งเดียว ใช้หลายงาน** ข้อเท็จจริงหนึ่งข้ออยู่ที่เดียว (`shared.md`, `*-spec.md`, API spec) เอกสารอื่นอ้างลิงก์ ไม่คัดลอก
+2. **ทุกข้อตรวจสอบได้** ระบุระดับหลักฐานเสมอ (ดูข้อ 3) ห้ามเขียนสิ่งที่ยังไม่ตรวจเหมือนเป็นข้อเท็จจริง
+3. **ทุกข้อมีรหัสอ้างอิง** (REQ / BR / AC / UT / IT / MAN / DEC) เพื่อให้ตามย้อนได้ว่าความต้องการไหน แก้ที่ไหน ทดสอบด้วยอะไร อธิบายในคู่มือตรงไหน
+4. **ไม่เดา** ถ้าไม่มีหลักฐานให้ลงใน `Open Questions` ห้ามกำหนดพฤติกรรมเอง
+5. **เปลี่ยนแล้วต้องอัปเดตในงานเดียวกัน** โค้ดหรือข้อกำหนดเปลี่ยน ต้องอัปเดต spec, traceability และ change log พร้อมกัน
+6. **เอกสารบอกเจตนา โค้ดบอกความจริงปัจจุบัน** ถ้าสองอย่างขัดกันให้บันทึกเป็น Open Question หรือ Decision ไม่เลือกด้านใดด้านหนึ่งเงียบๆ
+
+---
+
+## 2. ชั้นของเอกสาร
+
+```text
+Request
+  → Requirements (REQ / BR / AC)        solution-overview.md
+  → Shared rules + API contract         shared.md, api-consumption-summary.md
+  → Spec + Diagram (Frontend / Backend) *-spec.md, *-diagram.md, api-spec/, api-flow-chart/
+  → Test Cases (UT / IT)                อยู่ในแต่ละ spec + สรุปใน traceability.md
+  → Manual Notes (MAN)                  อยู่ในแต่ละ spec
+  → Change Log / Decision Log           อยู่ในแต่ละ spec + shared.md
+  → Work Log (timesheet)                ../worklog/
+```
+
+| ไฟล์ | หน้าที่ | ต้องมีเมื่อ |
+|---|---|---|
+| `solution-overview.md` | เป้าหมาย, Current/Proposed/POC, ตาราง REQ, flow รวม, acceptance, open questions | ทุก module ที่ไม่ใช่ tiny task ([template](templates/solution-overview.md)) |
+| `shared.md` | กฎร่วมของ module: state, business rules, permission, error, decisions | ทุก module ([Frontend Standard 1.2](frontend-standard.md)) |
+| `*-spec.md` / `api-spec/*.md` | รายละเอียดต่อหน้า / ต่อ endpoint รวม AC, test cases, manual notes, change log | ทุกหน้า / endpoint |
+| `*-diagram.md` / `api-flow-chart/*.md` | flow และ sequence | ตามมาตรฐานเดิม |
+| `traceability.md` | ตาราง REQ → AC → spec → test → manual ของทั้ง module | ทุก module ที่มี REQ ([template](templates/traceability.md)) |
+| `../worklog/YYYY-MM-DD.md` | บันทึกงานรายวันสำหรับ time sheet | ทุกวันที่ทำงาน  |
+
+---
+
+## 3. ระดับหลักฐาน (Evidence Level)
+
+เมื่อโปรเจกต์ติดตาม REQ/AC ทุกไฟล์ SWC ต้องระบุ `Evidence` ใน header และทุกข้อสำคัญที่ต่างจากระดับของไฟล์ต้องระบุกำกับ
+
+| ระดับ | ความหมาย | ใช้เป็นคู่มือ / เป็นฐาน test ได้หรือไม่ |
+|---|---|---|
+| `Current` | ตรวจจาก source / tests / contract ที่มีอยู่จริง ระบุ repo + branch + วันที่ตรวจ | ใช้เป็นฐาน test ได้ ใช้เป็นคู่มือได้ถ้าเป็นฟีเจอร์ที่ใช้งานจริง |
+| `Proposed` | ออกแบบแล้วตามข้อกำหนดที่อนุมัติ แต่ยังไม่มีในระบบ | ใช้เป็นฐาน test ได้ (เขียนก่อน implement) ห้ามใช้เป็นคู่มือ |
+| `POC` | มี prototype ที่จำลองพฤติกรรม ไม่พิสูจน์ระบบจริง | ห้ามใช้เป็นหลักฐานว่าทำงานจริง |
+| `Verified` | รัน test / ตรวจกับระบบจริงแล้ว ระบุวัน วิธี และผล | ใช้เป็นคู่มือได้ |
+
+กติกา: ห้ามอ้าง `Verified` โดยไม่ได้รันจริง แยก mock test ออกจากการทดสอบกับฐานข้อมูล/ระบบจริงเสมอ
+
+---
+
+## 4. Header มาตรฐานของไฟล์ SWC
+
+ทุกไฟล์มี `Last Updated` เสมอ; รายการ Status / Evidence / REQ Refs / Owner ด้านล่างใช้เมื่อโปรเจกต์ติดตาม REQ/AC (project card ระบุ หรือมีรหัส REQ/AC อยู่แล้ว) ดู `document-set.md`
+
+ใช้รูปแบบ `**Key**: value` เหมือนเดิม เพิ่มรายการที่ขาดตามนี้
+
+```markdown
+**Module**: {ชื่อ module}
+**Status**: Draft | In Review | Approved | Implemented
+**Evidence**: Current | Proposed | POC | Verified   (ระบุ repo/branch/วันที่ ถ้า Current หรือ Verified)
+**REQ Refs**: REQ-01, REQ-05
+**Owner**: @name หรือ —
+**Last Updated**: YYYY-MM-DD
+```
+
+---
+
+## 5. รหัสอ้างอิง (ID Scheme)
+
+| รหัส | ความหมาย | ตัวอย่าง | อยู่ที่ |
+|---|---|---|---|
+| `REQ-nn` | Functional Requirement | `REQ-03` | solution-overview.md |
+| `BR-nn` | Business Rule | `BR-03` | shared.md |
+| `AC-nn-mm` | Acceptance Criterion ของ REQ-nn | `AC-03-02` | spec ของหน้า/endpoint |
+| `UT-nn-mm` | Unit test case ของ REQ-nn | `UT-03-01` | spec ของหน้า/endpoint |
+| `IT-nn-mm` | Integration test case ของ REQ-nn | `IT-03-01` | spec ของหน้า/endpoint |
+| `MAN-nn` | หัวข้อคู่มือผู้ใช้ | `MAN-02` | spec ของหน้า |
+| `DEC-nn` | Decision (การตัดสินใจ/เปลี่ยนทิศทาง) | `DEC-04` | shared.md |
+
+`UT-` และ `IT-` เป็นชนิดย่อยของ `TEST-` ใน `requirements/README.md` ของ Hub (ถ้ามี) ใช้ร่วมกันได้ ให้ใช้รหัสต่อเนื่องในแต่ละ module ห้ามนำรหัสที่เลิกใช้กลับมาใช้ใหม่
+
+---
+
+## 6. ใช้เอกสารนี้ต่องานอะไร (Consumer Matrix)
+
+| งานที่จะทำ | อ่านส่วนไหน | ได้อะไรออกมา |
+|---|---|---|
+| **คิด solution / ประเมินงาน** | solution-overview (Goal, Current/Proposed, REQ), Business Rules, Data and Side Effects, Open Questions | ขอบเขต, ส่วนที่ต้องแก้, ความเสี่ยง, คำถามที่ต้องถามก่อนเริ่ม |
+| **ปรับทิศทางโปรเจกต์** | Decision Log (DEC), Change Log, traceability (REQ ที่กระทบ), ตาราง status | รายการ REQ/หน้า/endpoint/test/คู่มือที่ต้องแก้เมื่อเปลี่ยนข้อกำหนด |
+| **ทำคู่มือผู้ใช้** | Manual Notes (MAN), Click Flow, UI Conditions, Copy & i18n | ขั้นตอนใช้งาน, ข้อความที่ผู้ใช้เห็น, วิธีแก้เมื่อเกิดปัญหา |
+| **เขียน Unit Test** | Acceptance Criteria, Business Rules, Validation Rules, Composable methods, Error Codes | Test Cases ชนิด UT ที่ไม่ต้องใช้ network/DB |
+| **เขียน Integration Test** | API Spec (request/response), Conditions Step-by-Step, Data and Side Effects, Error Cases, Sequence Diagram | Test Cases ชนิด IT ที่ตรวจ API จริง, สิทธิ์, tenant boundary, side effects |
+| **ทำ Time Sheet** | Work Log รายวัน + `Ref` ที่ชี้กลับมา REQ/AC | สรุปชั่วโมงรายวันแยกตามโปรเจกต์/งาน |
+
+---
+
+## 7. Acceptance Criteria (AC)
+
+เขียนในหัวข้อ `Acceptance Criteria` ของ spec ทุกหน้า/endpoint ในรูปแบบตรวจได้ชัดว่า ผ่านหรือไม่ผ่าน
+
+```markdown
+| AC | REQ | เงื่อนไข (Given / When / Then) | Evidence |
+|---|---|---|---|
+| AC-03-01 | REQ-03 | Given การแจ้งเตือนเปิดแต่ยังไม่บันทึกการเชื่อมต่อ / When เปิดหน้า Settings / Then ปุ่มส่งและ template ถูก disable แต่ปุ่มเชื่อมต่อยังกดได้ | Proposed |
+```
+
+กฎ: หนึ่ง AC ตรวจหนึ่งพฤติกรรม ห้ามใช้คำคลุมเครือ ("เร็ว", "ถูกต้อง") ระบุค่าหรือผลที่เห็นได้ชัด
+
+---
+
+## 8. Test Cases (Unit / Integration)
+
+เขียนในหัวข้อ `Test Cases` ของ spec โดยแตกจาก AC ไม่ใช่จากโค้ด
+
+```markdown
+| ID | Level | Ref | Scenario | Input / Setup | Expected | Real or Mock | Status |
+|---|---|---|---|---|---|---|---|
+| UT-03-01 | Unit | AC-03-01 | การแจ้งเตือนเปิดแต่ยังไม่เชื่อมต่อ | state: enabled=true, connected=false | readiness = not ready | Mock | Not written |
+| IT-03-01 | Integration | AC-03-01 | อ่าน settings จาก API | user role owner, บริษัท A | 200 และ connection_ready=false | Real DB | Not written |
+```
+
+| | Unit (UT) | Integration (IT) |
+|---|---|---|
+| ตรวจอะไร | logic ล้วน: validation, business rule, state, composable, component | API จริง + auth/RBAC + tenant/branch boundary + ข้อมูล + side effects |
+| แหล่งข้อมูลใน spec | Business Rules, Validation Rules, Error Codes, Composable | API Spec, Conditions Step-by-Step, Data and Side Effects, Sequence Diagram |
+| พึ่งระบบภายนอก | ไม่ (mock ได้) | ใช่ (ระบุชัดว่า mock หรือจริงในคอลัมน์ `Real or Mock`) |
+
+**Status**: `Not written` → `Written` → `Passing` / `Failing` / `Skipped (เหตุผล)`
+ข้อบังคับขั้นต่ำต่อ endpoint/หน้า: success, validation fail, สิทธิ์ไม่ผ่าน, ข้อมูลนอก scope/tenant, error จากระบบภายนอก (ถ้ามี) ถ้าข้ามกรณีใด ให้ระบุเหตุผลในตาราง
+
+---
+
+## 9. Manual Notes (ข้อมูลสำหรับคู่มือ)
+
+เขียนในหัวข้อ `Manual Notes` ของ spec ฝั่ง Frontend (ฝั่ง Backend ใช้หัวข้อ `Usage Notes` สำหรับผู้เรียก API) เพื่อให้ผู้เขียนคู่มือนำไปใช้ต่อได้โดยไม่ต้องอ่านโค้ด
+
+```markdown
+### MAN-02 {ชื่อหัวข้อคู่มือ}
+
+- ผู้ใช้เป้าหมาย: {role}
+- ก่อนเริ่ม: {เงื่อนไขที่ต้องมี เช่น ต้องเชื่อมต่อบริการแจ้งเตือนแล้ว}
+- ขั้นตอน:
+  1. {ขั้นตอนด้วยภาษาผู้ใช้ ไม่ใช้ชื่อ API/ตัวแปร}
+  2. ...
+- ผลที่เห็น: {ผลลัพธ์บนหน้าจอ}
+- ข้อความที่อาจเจอ: `{ข้อความ}` → {วิธีแก้}
+- ข้อจำกัด / ข้อควรระวัง: {เช่น ส่งได้ครั้งละ 1 เบอร์}
+- Ref: Click Flow ข้อ {n}, AC-03-01
+```
+
+กฎ: ห้ามใส่รายละเอียดภายใน (API path, token, ชื่อตาราง) เผยแพร่เป็นคู่มือได้เฉพาะหัวข้อที่ `Evidence` เป็น `Current` ของฟีเจอร์ที่ใช้งานจริง หรือ `Verified`
+
+---
+
+## 10. Decision Log และ Change Log (สำหรับปรับทิศทาง)
+
+**Decision Log** อยู่ใน `shared.md` ของ module (หนึ่ง DEC ต่อหนึ่งการตัดสินใจ)
+
+```markdown
+| DEC | วันที่ | บริบท | ตัวเลือกที่พิจารณา | ตัดสินใจ | ผลกระทบ (REQ / ไฟล์) | สถานะ |
+|---|---|---|---|---|---|---|
+| DEC-04 | 2026-10-12 | ... | A, B | B | REQ-18, REQ-19 | Active |
+```
+
+สถานะ: `Active`, `Superseded by DEC-nn`, `Dropped`
+
+**Change Log** อยู่ท้ายทุก spec
+
+```markdown
+| วันที่ | รหัส | สิ่งที่เปลี่ยน | เหตุผล | ผลกระทบ | โดย |
+|---|---|---|---|---|---|
+| 2026-10-14 | DEC-04 | เปลี่ยน ... | ... | AC-03-02, UT-03-02 | @name |
+```
+
+**เมื่อทิศทางโปรเจกต์เปลี่ยน ให้ทำตามลำดับ**
+
+1. เพิ่ม `DEC-nn` ใน `shared.md` (ไม่แก้หรือลบ DEC เดิม ให้ตั้งสถานะเป็น Superseded)
+2. ค้นหา REQ ที่กระทบ แล้วตั้งสถานะใน solution-overview เป็น `Changed` หรือ `Dropped`
+3. ใช้ `traceability.md` ไล่หา AC, test, คู่มือที่ต้องแก้ แล้วอัปเดตพร้อมกัน
+4. บันทึก Change Log ของทุก spec ที่แก้
+5. ถ้า Evidence ของส่วนที่แก้เปลี่ยน ให้ปรับ `Evidence` ใน header ด้วย
+
+---
+
+## 11. Work Log (Time Sheet)
+
+บันทึกงานรายวันที่ `worklog/YYYY-MM-DD.md` ทุกรายการอ้าง `Ref` กลับมาที่ REQ/AC/DEC หรือ ticket เพื่อให้ time sheet อธิบายได้ว่าเวลาหมดไปกับงานอะไร รูปแบบไฟล์ใช้ `templates/worklog.md` และกติกาใน `rules.md` หัวข้อ Work Log
+
+---
+
+## 12. Checklist เอกสารกลาง (ก่อนถือว่าเสร็จ)
+
+- [ ] header ครบ: Last Updated; และ Status, Evidence, REQ Refs, Owner เมื่อโปรเจกต์ติดตาม REQ/AC
+- [ ] ทุก REQ ของ module มีแถวใน `traceability.md`
+- [ ] ทุกหน้า/endpoint มี Acceptance Criteria ที่อ้าง REQ
+- [ ] มี Test Cases ทั้ง UT และ IT (หรือระบุเหตุผลที่ข้าม) และแยก Mock/Real ชัดเจน
+- [ ] มี Manual Notes (Frontend) หรือ Usage Notes (Backend) หรือระบุ `ไม่จำเป็น` พร้อมเหตุผล
+- [ ] Change Log อัปเดตถ้ามีการเปลี่ยนในงานนี้ และ DEC ถูกบันทึกถ้าเป็นการเปลี่ยนทิศทาง
+- [ ] ข้อที่ยังไม่แน่ใจอยู่ใน Open Questions ไม่ได้เขียนเป็นข้อเท็จจริง
+- [ ] เพิ่มรายการใน Work Log ของวันนั้นแล้ว
+- [ ] ไม่มี secret, token, ข้อมูลลูกค้าจริงในเอกสาร

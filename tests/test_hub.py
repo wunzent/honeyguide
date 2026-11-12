@@ -286,7 +286,9 @@ def test_sync_and_drift(hub):
     skill = root / "skills/review/SKILL.md"
     skill.parent.mkdir(parents=True)
     skill.write_text("# Review\nRead the changes.\n")
-    assert "reviewer" in call("sync", "--check", expected=1)
+    first = call("sync", "--check", expected=1)
+    assert "reviewer" in first
+    assert "SKILL NOT IN REPO: python (roles: reviewer)" in first and "SKILL NOT IN REPO: review" not in first
     assert not (root / ".claude").exists()
     call("sync")
     claude = root / ".claude/agents/reviewer.md"

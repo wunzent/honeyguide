@@ -77,6 +77,16 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   scope doubts before review; NEEDS_CONTEXT -> add the missing context and re-dispatch; BLOCKED -> more context, a more
   capable model, a smaller task, or a plan correction (recorded as a ruling). Never resend the same brief unchanged.
 - Do not run two writers on the same files at the same time. Independent read-only work may run in parallel.
+- Isolation, adopt and undo (git target repos). A cross-vendor writer, writers running in parallel, and each side of a
+  blind build work in their own worktree, never in the approved branch itself:
+  `git worktree add ../<repo>-<agent-id> -b hub/<slug>/<agent-id> <approved branch>`, with `--cwd` set to that folder.
+  A single native subagent may write in the approved branch when the owner's branch answer allows it.
+  Workers do not commit; review their working-tree diff in that worktree. Adopt only after the reviewer's PASS and the
+  owner's OK: commit the reviewed files there, then `git merge --no-ff hub/<slug>/<agent-id>` into the approved
+  branch, then checkpoint `Adopted: hub/<slug>/<agent-id> @ <branch sha> -> <approved branch> @ <merge sha>` and
+  `git worktree remove` that folder. Undo an adopted change with `git revert -m 1 <merge sha>` (never reset or force-push)
+  and checkpoint `Undone: <merge sha> by <revert sha> - <why>`. A branch that is not adopted stays until the owner says
+  to delete it; list it under open issues at delivery.
 
 ## 5. Monitor, failures and loops (progress-based; no retry budget, no fixed retry count)
 - After every failed check or failed worker: read the evidence, name the likely root cause, then record the attempt:
@@ -112,7 +122,7 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
   Never claim a check passed that did not run; simulated events (e.g. simulated quota) are reported as simulated.
 - Multi-task work: one final review of the whole change on the most capable suitable model, pointed at the recorded
   minor findings; send all its findings to ONE fixer, then one scoped re-review. Residual issues go to the owner.
-- Deliver: what changed, evidence, agent table (`python tools/hub.py status <slug>`), open issues, and every `Ruling:`
+- Deliver: what changed, evidence, agent table (`python tools/hub.py status <slug>`), open issues, every `Adopted:`/`Undone:` line and unadopted branch, and every `Ruling:`
   line from the checkpoint under "Rulings I made" (the owner reviews those decisions).
 - Work log (`work/log/<date>.md`, read for "what got done" and retros): after delivery
   `python tools/hub.py log outcome --task <slug> --text "<delivered>. <rework/blocks>. Lesson: <one line or none>"`;

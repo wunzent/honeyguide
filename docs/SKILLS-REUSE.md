@@ -66,3 +66,13 @@ Trendshift picks (2026-11-12, read-only clones in `C:\Users\Natthawut.j\src\tren
 - kenryu42/cc-safety-net 2.7.12 (MIT): INSTALLED globally on owner request in Claude and Codex (PreToolUse hook that blocks
   destructive commands and secret-file reads). Codex hook trusted by the owner; live block verified in both CLIs' hook paths.
   Details, tests and undo: `docs/DEEP-DIVE-2026-11-12.md#cc-safety-net`.
+- Hub skills moved into the repo (2026-11-12, owner request): `skills/` now holds every skill a role names except
+  `graphify` (third-party, needs its own CLI; install per machine). Owner's own skills copied from v1 `skills/`
+  (investigate-first, lean-build, safe-refactor, surgical-patch, swc, verify-and-stop) and from the user
+  folder (backend-api-safety); api-and-interface-design and security-and-hardening keep their MIT LICENSE
+  (addyosmani/agent-skills aeac41d). `hub.py sync` copies them to `.claude/skills` and `.agents/skills`, so both vendors
+  get the same set on any clone; it also prints `SKILL NOT IN REPO` for role skills that do not travel with the repo.
+  doc-keeper no longer names `doc-coauthoring` (a Claude-only plugin skill). The user-global copies are left in place.
+- swc (owner, 2026-11-12): one SWC skill only, kept as a template standard. `swc-central` (read-only pointer to the
+  owner's real spec folders) removed from the repo; `swc` no longer names real paths, projects or project examples
+  (project SWC folder comes from the project card, default `docs/swc/FE|BE`; work log template in `references/templates/`).
