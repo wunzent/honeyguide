@@ -1,6 +1,6 @@
 # Security Review — {service} ({YYYY-MM-DD})
 
-File name: `security-review-YYYYMMDD.md` in the release folder it reviewed.
+ชื่อไฟล์: `security-review-YYYYMMDD.md` ในโฟลเดอร์ release ที่ตรวจ
 
 | Field | Value |
 |---|---|
@@ -10,11 +10,11 @@ File name: `security-review-YYYYMMDD.md` in the release folder it reviewed.
 | Reviewer | {name / agent + model} |
 | Commit | `{sha}` |
 | Frameworks | {stack} |
-| Method | {manual review / tools used / scope of files} |
+| Method | {manual review / เครื่องมือที่ใช้ / ขอบเขตไฟล์} |
 
 ## Executive Summary
 
-{two or three sentences: overall risk, what must be fixed before release}
+{สองถึงสามประโยค: ความเสี่ยงโดยรวม และสิ่งที่ต้องแก้ก่อน release}
 
 | Severity | Count | Fixed |
 |---|---|---|
@@ -43,12 +43,12 @@ File name: `security-review-YYYYMMDD.md` in the release folder it reviewed.
 ### 🟠 F-{nn} — {title}
 
 - **Where**: `{file}:{line}` (relative path)
-- **Issue**: {what is wrong}
-- **Impact**: {what an attacker could do}
-- **Fix**: {recommended change}
+- **Issue**: {ปัญหาคืออะไร}
+- **Impact**: {ผู้โจมตีทำอะไรได้}
+- **Fix**: {วิธีแก้ที่แนะนำ}
 - **Status**: {open / ✅ FIXED YYYY-MM-DD in `{sha}`}
 
-Never paste secrets, tokens or personal data into a finding; write `***`.
+ห้ามวาง secret, token หรือข้อมูลส่วนบุคคลใน finding; ให้เขียน `***`
 
 ## Controls Done Well
 
@@ -61,6 +61,6 @@ Never paste secrets, tokens or personal data into a finding; write `***`.
 
 ## Scope and Limitations / Deferred Checks
 
-- {what was not reviewed and why}
+- {สิ่งที่ไม่ได้ตรวจและเหตุผล}
 
-Web front-ends use `W-{nn}` instead of `F-{nn}`.
+web front-end ใช้ `W-{nn}` แทน `F-{nn}`

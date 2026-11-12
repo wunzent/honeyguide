@@ -1,6 +1,6 @@
 # Manifest — {service} v{X.Y.Z}
 
-What this release consists of, so the deploy can be repeated and traced.
+release นี้ประกอบด้วยอะไร เพื่อให้ deploy ซ้ำและตามรอยได้
 
 ## 1. Version
 
@@ -26,11 +26,11 @@ What this release consists of, so the deploy can be repeated and traced.
 
 | Variable | Change (new / changed / removed) | Value source | Required before deploy? |
 |---|---|---|---|
-| `{ENV_VAR}` | {new} | {secret store key name, never the value} | Yes / No |
+| `{ENV_VAR}` | {new} | {ชื่อ key ใน secret store ห้ามใส่ค่า} | Yes / No |
 
 ## 5. Infrastructure Prerequisites
 
-- {queue / bucket / DNS / certificate / scaling change}
+- {queue / bucket / DNS / certificate / การเปลี่ยน scaling}
 
 ## 6. Config and Dependency Changes
 
@@ -39,8 +39,8 @@ What this release consists of, so the deploy can be repeated and traced.
 
 ## 7. Ops Runbooks
 
-- {link to runbook for a new job, alert or manual step}
+- {ลิงก์ runbook ของ job, alert หรือขั้นตอน manual ใหม่}
 
 ## 8. Pending (not in this release)
 
-- {item, planned version}
+- {รายการ, version ที่วางแผนไว้}

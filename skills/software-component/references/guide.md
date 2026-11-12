@@ -11,6 +11,7 @@
 | Frontend page, module, component, composable, UI flow หรือ wireframe | [Frontend SWC Standard](frontend-standard.md) |
 | Backend endpoint, validation, access control, data effect หรือ API flow | [Backend API and Flow Standard](backend-standard.md) |
 | Full-stack หรือ cross-system flow | ใช้ทั้ง Frontend และ Backend Standard แล้วเชื่อมด้วย REQ/AC และ API contract เดียวกัน |
+| แอปมือถือ / โปรเจกต์ที่ไม่มี backend | [Mobile mapping](mobile-standard.md) |
 | ติดตามสถานะเอกสารและ implementation ของ frontend | [SWC Overview template](templates/swc-overview.md) |
 | ติดตามการทดสอบของ frontend (ภาพรวม + รายหน้า) | [Testing Overview](templates/testing-overview.md), [Page testing](templates/page-testing.md) |
 | รายการ endpoint และสิทธิ์ของ role ฝั่ง backend | [API Endpoints](templates/api-endpoints.md), [User Matrix](templates/user-matrix.md) |
@@ -62,8 +63,7 @@ Request
 
 ## Diagram Rules
 
-- Frontend SWC ที่ใช้ Mermaid v8.8.0 ต้องทำตาม compatibility rules ใน Frontend Standard
-- Backend diagram ต้องทำตาม renderer/version ของเอกสารปลายทาง
+- กฎ Mermaid ข้อเดียวอยู่ที่ `document-set.md` (Rules): ใช้ Mermaid ปัจจุบัน (11.x) กับทุก diagram
 - เอกสาร full-stack ต้องใช้ syntax ที่ renderer ของปลายทางรองรับ ห้ามผสม syntax โดยไม่ตรวจ render
 - Flowchart อธิบาย decision/state flow; sequence diagram อธิบาย interaction ระหว่าง actors, layers และ services
 - Diagram ต้องตรงกับ spec และ actual/approved flow เสมอ

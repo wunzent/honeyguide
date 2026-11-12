@@ -61,7 +61,7 @@ Request
 
 ## 4. Header มาตรฐานของไฟล์ SWC
 
-ทุกไฟล์มี `Last Updated` เสมอ; รายการ Status / Evidence / REQ Refs / Owner ด้านล่างใช้เมื่อโปรเจกต์ติดตาม REQ/AC (project card ระบุ หรือมีรหัส REQ/AC อยู่แล้ว) ดู `document-set.md`
+นโยบาย header ของเอกสารแต่ละชนิดอยู่ที่ `document-set.md` (Headers) ที่เดียว; ด้านล่างคือรูปแบบของรายการ Status / Evidence / REQ Refs / Owner เมื่อใช้
 
 ใช้รูปแบบ `**Key**: value` เหมือนเดิม เพิ่มรายการที่ขาดตามนี้
 
@@ -159,7 +159,7 @@ Request
 - Ref: Click Flow ข้อ {n}, AC-03-01
 ```
 
-กฎ: ห้ามใส่รายละเอียดภายใน (API path, token, ชื่อตาราง) เผยแพร่เป็นคู่มือได้เฉพาะหัวข้อที่ `Evidence` เป็น `Current` ของฟีเจอร์ที่ใช้งานจริง หรือ `Verified`
+กฎ: งาน planning-only (Evidence `Proposed`) เขียนทุก MAN เป็น "not publishable" ไม่ข้าม section. ห้ามใส่รายละเอียดภายใน (API path, token, ชื่อตาราง) เผยแพร่เป็นคู่มือได้เฉพาะหัวข้อที่ `Evidence` เป็น `Current` ของฟีเจอร์ที่ใช้งานจริง หรือ `Verified`
 
 ---
 
@@ -173,7 +173,7 @@ Request
 | DEC-04 | 2026-10-12 | ... | A, B | B | REQ-18, REQ-19 | Active |
 ```
 
-สถานะ: `Active`, `Superseded by DEC-nn`, `Dropped`
+สถานะ: `Proposed` (ยังไม่อนุมัติ), `Active`, `Superseded by DEC-nn`, `Dropped`
 
 **Change Log** อยู่ท้ายทุก spec
 
@@ -201,12 +201,12 @@ Request
 
 ## 12. Checklist เอกสารกลาง (ก่อนถือว่าเสร็จ)
 
-- [ ] header ครบ: Last Updated; และ Status, Evidence, REQ Refs, Owner เมื่อโปรเจกต์ติดตาม REQ/AC
+- [ ] header ครบตามชนิดเอกสาร (ดู `document-set.md` Headers)
 - [ ] ทุก REQ ของ module มีแถวใน `traceability.md`
 - [ ] ทุกหน้า/endpoint มี Acceptance Criteria ที่อ้าง REQ
 - [ ] มี Test Cases ทั้ง UT และ IT (หรือระบุเหตุผลที่ข้าม) และแยก Mock/Real ชัดเจน
 - [ ] มี Manual Notes (Frontend) หรือ Usage Notes (Backend) หรือระบุ `ไม่จำเป็น` พร้อมเหตุผล
 - [ ] Change Log อัปเดตถ้ามีการเปลี่ยนในงานนี้ และ DEC ถูกบันทึกถ้าเป็นการเปลี่ยนทิศทาง
 - [ ] ข้อที่ยังไม่แน่ใจอยู่ใน Open Questions ไม่ได้เขียนเป็นข้อเท็จจริง
-- [ ] เพิ่มรายการใน Work Log ของวันนั้นแล้ว
+- [ ] เพิ่มรายการใน Work Log ของวันนั้นแล้ว (ข้ามได้เมื่อไม่มีนาฬิกาจริง เช่น agent / งานเอกสารล้วน และต้องบอกในรายงาน)
 - [ ] ไม่มี secret, token, ข้อมูลลูกค้าจริงในเอกสาร

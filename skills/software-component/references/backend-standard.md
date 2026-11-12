@@ -501,14 +501,22 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-...
+    A["{start}"] --> B{"{decision}?"}
+    B -- Yes --> C["{step}"]
+    B -- No --> D["{other step}"]
 ```
 
 ## Sequence Diagram
 
 ```mermaid
 sequenceDiagram
-...
+    participant Client
+    participant Service
+    participant Repository
+    Client->>Service: "{request}"
+    Service->>Repository: "{operation}"
+    Repository-->>Service: "{result}"
+    Service-->>Client: "{response}"
 ```
 
 ## Flow Notes

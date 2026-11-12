@@ -3,8 +3,8 @@
 
 **Version**: {X.Y}  **Last Updated**: YYYY-MM-DD  **Source**: {Figma file / prototype / production code}
 
-Optional. Path: `UI_SPEC.md` at the frontend docs root (one file; mark superseded versions instead of keeping two).
-Page wireframes cite tokens from here instead of repeating them.
+ไม่บังคับ path: `UI_SPEC.md` ที่ frontend docs root (ไฟล์เดียว; ระบุ version ที่ถูกแทนที่ ไม่เก็บสองไฟล์)
+wireframe ของ page อ้าง token จากที่นี่ ไม่เขียนซ้ำ
 
 ## 1. Overview
 ## 2. Layout

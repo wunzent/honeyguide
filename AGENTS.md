@@ -31,6 +31,9 @@ Vendor-specific how-to: `agents/orchestrators/claude-code.md`, `agents/orchestra
 - Skills are capabilities, not agents. Discover what is installed (your native skill list; Codex: `~/.codex/skills`,
   `.agents/skills`; Claude: `~/.claude/skills`, `.claude/skills`) and name the relevant ones in each brief.
   Do not install new skills without owner approval. Use `brief` for every delegation.
+- `skills/` holds only the skills that travel with the repo. Other skills and plugins the owner uses are listed (not
+  copied) in `skills/EXTERNAL.md`; read it only when a task needs a capability you do not have. Needed but not
+  installed here: ask the owner to install it (name, vendor, source) instead of copying or installing it yourself.
 
 ## 3. Choose vendor, model and effort (per assignment, never per role)
 - Catalog: `models.toml` (`verified`, `unverified`, `premium`). Never route to an unverified model.

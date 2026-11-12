@@ -3,16 +3,16 @@
 
 **Project**: {project}
 **Last Updated**: YYYY-MM-DD
-**Scope**: {per organization / per user / system-wide}
+**Scope**: {ต่อ organization / ต่อ user / ทั้งระบบ}
 **Level**: {business / technical}
-**Tables**: [`{table}`]({relative link to data dictionary section})
+**Tables**: [`{table}`]({relative link ไป section ใน data dictionary})
 
-Path: `Workflow/{Process}.md`. One file per cross-cutting business process (one source; no copies elsewhere). Pages,
-endpoints and services link here instead of re-explaining the process.
+Path: `Workflow/{Process}.md` หนึ่งไฟล์ต่อ business process ที่ข้ามส่วนงาน (แหล่งเดียว ไม่มีสำเนาที่อื่น) page,
+endpoint และ service ลิงก์มาที่นี่ ไม่อธิบาย process ซ้ำ
 
 ## 1. Overview
 
-{one paragraph}
+{หนึ่งย่อหน้า}
 
 ```mermaid
 flowchart TD
@@ -44,7 +44,7 @@ flowchart LR
 ## 5. Paths (step by step)
 
 ### Path A — {name}
-1. {actor} {action} → {system effect}
+1. {actor} {action} → {ผลที่ระบบทำ}
 
 ### Path B — {name}
 
@@ -62,10 +62,10 @@ flowchart LR
 
 | Case | Input | Result |
 |---|---|---|
-| {case} | {placeholder values} | {...} |
+| {case} | {ค่า placeholder} | {...} |
 
 ## 9. Constraints
 
-- {limits, quotas, timing rules}
+- {ขีดจำกัด, quota, กฎเรื่องเวลา}
 
-Diagrams use Mermaid (renderable), not ASCII art, unless the target renderer cannot show Mermaid.
+Diagram ใช้ Mermaid (syntax: `document-set.md` Rules) ไม่ใช้ ASCII art เว้นแต่ renderer ปลายทางแสดง Mermaid ไม่ได้

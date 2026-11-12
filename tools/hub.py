@@ -347,7 +347,7 @@ def delegate(args):
         write(last, result or "Unknown\n")
     actual_model, actual_effort = ", ".join(models) or "Unverified", ", ".join(efforts) or "Unverified"
     # Whole value is a status word, optionally followed by " - ..." / " | ..." (the brief CONTRACT's one-line reply).
-    reported = re.findall(r"^\**STATUS:\**[ \t]*(DONE_WITH_CONCERNS|NEEDS_CONTEXT|BLOCKED|DONE)\**(?:[ \t]+[-|][ \t].*)?[ \t]*\r?$", result, re.M | re.I)
+    reported = re.findall(r"^\**STATUS:\**[ \t]*(DONE_WITH_CONCERNS|NEEDS_CONTEXT|BLOCKED|DONE)\**(?:[ \t]+[-|–—][ \t].*)?[ \t]*\r?$", result, re.M | re.I)
     worker_status = reported[-1].upper() if reported else "Unknown"
     if status == "done" and worker_status in ("BLOCKED", "NEEDS_CONTEXT"):
         status, code, blocker = "blocked", 6, "worker reported " + worker_status

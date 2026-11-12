@@ -4,8 +4,8 @@
 |---|---|---|
 | {X.Y.Z} | YYYY-MM-DD | [{service}-spec.md](../{service}-spec/{service}-spec.md) |
 
-Path: `<service>/<service>-flowchart/<service>-flowchart.md`. One section per spec section that has logic; same
-version and date as the spec. Mermaid syntax follows the renderer the team uses.
+Path: `<service>/<service>-flowchart/<service>-flowchart.md` หนึ่ง section ต่อหนึ่ง section ของ spec ที่มี logic;
+version และวันที่เดียวกับ spec syntax Mermaid ดู `document-set.md` (Rules)
 
 ## 1. Startup
 

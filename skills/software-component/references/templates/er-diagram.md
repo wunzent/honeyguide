@@ -6,9 +6,9 @@
 **Date**: YYYY-MM-DD
 **Source**: [Data Dictionary {NN}_{Module}](../Data%20Dictionary/{NN}_{Module}.md)
 
-> {one paragraph: entities in this module and their main relationships}
+> {หนึ่งย่อหน้า: entity ใน module นี้และความสัมพันธ์หลัก}
 
-Path: `DB/ER Diagrams/{NN}_{Module}.md`. Mirrors the data dictionary file with the same `{NN}`.
+Path: `DB/ER Diagrams/{NN}_{Module}.md` สะท้อนไฟล์ data dictionary ที่มี `{NN}` เดียวกัน
 
 ## Diagram
 
@@ -31,11 +31,11 @@ erDiagram
     TABLE_A |o--o{ TABLE_B : "table_a_id"
 ```
 
-Rules (replace `TABLE_A`, `parent_id` and the other sample names with the real ones):
-- Types tokenised (`VARCHAR_255`, `NUMERIC_12_2`); keys marked `PK` / `FK`; constraint notes in quotes.
-- `||--o{` when the FK is NOT NULL, `|o--o{` when nullable; the edge label is the FK column.
-- Parents from other modules appear as PK-only stub entities.
-- FKs to lookup / master tables are annotations (`"-> table"`), not edges.
+กฎ (แทน `TABLE_A`, `parent_id` และชื่อตัวอย่างอื่นด้วยชื่อจริง):
+- type เขียนเป็น token (`VARCHAR_255`, `NUMERIC_12_2`); key ระบุ `PK` / `FK`; หมายเหตุ constraint อยู่ในเครื่องหมายคำพูด
+- `||--o{` เมื่อ FK เป็น NOT NULL, `|o--o{` เมื่อเป็น nullable; label ของเส้นคือชื่อ column FK
+- parent จาก module อื่นแสดงเป็น entity stub ที่มีเฉพาะ PK
+- FK ไป lookup / master table เป็น annotation (`"-> table"`) ไม่ใช่เส้น
 
 ## Cross-module FKs
 

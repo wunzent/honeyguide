@@ -31,4 +31,4 @@
 | Issue | Impact | Ticket |
 |---|---|---|
 
-Numbers come from a real run only; a suite not run is listed with "not run" and the reason.
+ตัวเลขมาจากการรันจริงเท่านั้น; suite ที่ไม่ได้รันให้ระบุ "not run" พร้อมเหตุผล

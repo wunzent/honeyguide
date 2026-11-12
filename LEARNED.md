@@ -13,6 +13,9 @@ delivered task that needed rework with one short question about what to do diffe
 - In review or migration phases fix only confirmed blockers; no cosmetic refactoring unless asked.
 - Report simulated, unverified and not-run results as exactly that; keep gate statuses explicit.
 - Third-party skills and plugins: clone and read first; the owner decides on installing and on global vs project scope.
-- Reply to the owner in Thai; code, records and committed docs stay in English.
+- Reply to the owner in Thai; code, hub records and the hub's own docs stay in English.
+- Project documentation (skill `software-component`) is Thai prose; headings, column names, statuses, technical terms,
+  identifiers and paths stay in English, as in the owner's reference set. Mermaid: current version (11.x) syntax for
+  every diagram (flowchart, sequenceDiagram, stateDiagram-v2, erDiagram); the old v8.8.0 limit is dropped.
 - In this hub the project rules win over the older v1 workflow in the owner's global `~/.claude/CLAUDE.md` (roles.json,
   task cards, 3-round/60-minute limits): roles are routed per assignment and there is no round or time budget.

@@ -2,12 +2,12 @@
 
 **Status**: {Draft / Approved}  **Version**: {X.Y}  **Related to**: [{NN} {Other module}]({relative})
 
-Optional. Path: `docs/business/{NN}_{MODULE}.md` with an index `README.md` (module, key entities, UC range).
-Use when the project keeps business requirements in Markdown; SWC REQ/AC refer to these FR/UC ids.
+ไม่บังคับ path: `docs/business/{NN}_{MODULE}.md` พร้อม index `README.md` (module, key entities, ช่วง UC)
+ใช้เมื่อโปรเจกต์เก็บ business requirement เป็น Markdown; REQ/AC ของ SWC อ้างรหัส FR/UC เหล่านี้
 
 ## 1. Overview
 
-{what the module is for, who uses it}
+{module นี้มีไว้ทำอะไร ใครใช้}
 
 ## 2. Entities
 
@@ -20,17 +20,17 @@ Use when the project keeps business requirements in Markdown; SWC REQ/AC refer t
 ### FR-{AREA}-{nn}: {title}
 
 - **Actor**: {role}
-- **Description**: {what the system must do}
+- **Description**: {ระบบต้องทำอะไร}
 - **Rules**: {...}
-- **Acceptance**: {observable result}
+- **Acceptance**: {ผลที่ตรวจได้}
 
 ## 4. Protection Rules
 
-- {what must never happen, e.g. deleting X while Y exists}
+- {สิ่งที่ห้ามเกิดขึ้น เช่น ลบ X ขณะที่ Y ยังอยู่}
 
 ## 5. Status Flow
 
-{link to the workflow or a short table}
+{ลิงก์ไป workflow หรือตารางสั้นๆ}
 
 ## 6. Related Use Cases
 

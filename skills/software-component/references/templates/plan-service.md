@@ -2,18 +2,18 @@
 
 **Repo**: `{repo}`
 **Dev**: {name}
-**Version**: {X.Y}  **Date**: YYYY-MM-DD (ISO dates only)
+**Version**: {X.Y}  **Date**: YYYY-MM-DD (วันที่แบบ ISO เท่านั้น)
 **Master plan**: [Plan.md]({relative}) · siblings: [PLAN_{OTHER}.md]({relative})
 **References**: [{business / workflow doc}]({relative})
 
-> **v{X.Y} change**: {what changed in this plan version}
+> **v{X.Y} change**: {สิ่งที่เปลี่ยนใน plan version นี้}
 
-Path: `PLAN_{SERVICE}.md` (upper-case, one spelling for every plan). Keep plan, status and as-built apart: tasks and
-checkboxes here; what was built goes in the specs; release state goes in Deployments/.
+Path: `PLAN_{SERVICE}.md` (ตัวพิมพ์ใหญ่ สะกดแบบเดียวกันทุก plan) แยก plan, status และ as-built ออกจากกัน: task และ
+checkbox อยู่ที่นี่; สิ่งที่สร้างแล้วอยู่ใน spec; สถานะ release อยู่ใน Deployments/
 
 ## 1. Responsibility
 
-{what this service owns; what it does not do and who does}
+{service นี้เป็นเจ้าของอะไร; อะไรที่ไม่ทำและใครทำ}
 
 ## 2. Tech Stack
 
@@ -22,7 +22,7 @@ checkboxes here; what was built goes in the specs; release state goes in Deploym
 
 ## 3. Coding Rules
 
-- {rules enforced on every change}
+- {กฎที่บังคับใช้กับทุกการเปลี่ยนแปลง}
 
 ## 4. Folder Structure
 
@@ -35,7 +35,7 @@ checkboxes here; what was built goes in the specs; release state goes in Deploym
 
 ### Phase {N} — {name}
 
-**Endpoints / jobs**: {list with links to specs}
+**Endpoints / jobs**: {รายการพร้อมลิงก์ไป spec}
 **Business rules**: {...}
 **Adapters / integrations**: {...}
 
@@ -53,7 +53,7 @@ checkboxes here; what was built goes in the specs; release state goes in Deploym
 
 ## 8. Checklist
 
-- [ ] {item} (link to spec / test when done)
+- [ ] {item} (ลิงก์ไป spec / test เมื่อเสร็จ)
 
 ## 9. Priorities
 
@@ -76,6 +76,6 @@ checkboxes here; what was built goes in the specs; release state goes in Deploym
 
 ### Variant: feature plan (one feature across repos)
 
-Header: **Feature**, **Status** (Draft / Approved / Done), **Last Updated**, **Refs**. Sections: Scope, Current state,
-Decisions (locked), Phases (BE-0..n, FE, QA; each done phase gets ✅ + date + test count), Impact / Risk per repo,
-Open questions, Recommended order.
+Header: ตาม `document-set.md` (Headers) แถว Plans (feature plan). Sections: Scope, Current state,
+Decisions (locked), Phases (BE-0..n, FE, QA; phase ที่เสร็จใส่ ✅ + วันที่ + จำนวน test), Impact / Risk ต่อ repo,
+Open questions, Recommended order

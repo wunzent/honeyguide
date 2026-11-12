@@ -4,15 +4,17 @@
 **Version**: {X.Y}  **Date**: YYYY-MM-DD  **Owner**: {name}
 Service plans: [PLAN_{SERVICE_A}.md](./PLAN_{SERVICE_A}.md) · [PLAN_{SERVICE_B}.md](./PLAN_{SERVICE_B}.md)
 
-Path: `Plan.md` at the docs root. The cross-repo view by phase; detail lives in the service plans. Status here is
-copied from the service plans, not tracked twice.
+Path: `Plan.md` ที่ docs root เป็นมุมมองข้าม repo แยกตาม phase; รายละเอียดอยู่ใน plan ของแต่ละ service
+สถานะที่นี่คัดลอกจาก plan ของ service ไม่ติดตามซ้ำสองที่
+
+> **No backend** (mobile app, desktop tool): ตัด API contract rule และ "Backend work" ออก ใช้กลุ่มงาน "Data / On-device components / UI work" และใช้ data-access contract แทน API
 
 > **API contract rule**
 >
 > | Role | Duty |
 > |---|---|
-> | Backend | {publishes the contract first (e.g. OpenAPI) before frontend wiring} |
-> | Frontend | {builds against the published contract; mocks until it exists} |
+> | Backend | {เผยแพร่ contract (เช่น OpenAPI) ก่อนที่ frontend จะเชื่อมต่อ} |
+> | Frontend | {สร้างตาม contract ที่เผยแพร่แล้ว; ใช้ mock จนกว่า contract จะมี} |
 
 ## Architecture Overview
 
@@ -37,7 +39,7 @@ copied from the service plans, not tracked twice.
 **Frontend work**
 - [ ] {task}
 
-**Done when**: {observable acceptance}
+**Done when**: {เงื่อนไขตรวจรับที่สังเกตได้}
 
 ## Phase {N+1} — Infrastructure / DevOps
 ## Phase {N+2} — Testing

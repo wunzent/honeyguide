@@ -5,12 +5,12 @@
 |---|---|---|---|
 | {schema version} | YYYY-MM-DD | {service} | {service}, {service} |
 
-The single place for an async interface between services. Worker specs link here instead of repeating it.
-Path: `docs/contracts/{topic}.md` (or the folder the project card names).
+ที่เดียวสำหรับ async interface ระหว่าง service; worker spec ลิงก์มาที่นี่ ไม่เขียนซ้ำ
+Path: `docs/contracts/{topic}.md` (หรือโฟลเดอร์ที่ project card ระบุ)
 
 ## 1. Purpose
 
-{one paragraph: what event or command this carries and why}
+{หนึ่งย่อหน้า: message นี้ส่ง event หรือ command อะไร และเพราะอะไร}
 
 ## 2. Transport
 
@@ -18,7 +18,7 @@ Path: `docs/contracts/{topic}.md` (or the folder the project card names).
 |---|---|
 | Broker | {Kafka / queue / ...} |
 | Topic / queue | `{name}` |
-| Partition / ordering key | `{key}`: {what ordering this guarantees} |
+| Partition / ordering key | `{key}`: {รับประกันลำดับแบบไหน} |
 | Retention | {duration} |
 | DLQ | `{dlq name}` |
 
@@ -27,7 +27,7 @@ Path: `docs/contracts/{topic}.md` (or the folder the project card names).
 | Header | Type | Required | Meaning |
 |---|---|---|---|
 | `schema-version` | string | Yes | {...} |
-| `{idempotency-key}` | string | Yes | {unique per logical message} |
+| `{idempotency-key}` | string | Yes | {ไม่ซ้ำต่อหนึ่ง message เชิงตรรกะ} |
 
 ## 4. Payload
 
@@ -41,9 +41,9 @@ Path: `docs/contracts/{topic}.md` (or the folder the project card names).
 
 ## 5. Guarantees
 
-- Delivery: {at-least-once / ...}; consumers must be idempotent on `{key}`.
-- Ordering: {per key / none}.
-- Size limit: {bytes}.
+- Delivery: {at-least-once / ...}; consumer ต้อง idempotent ตาม `{key}`
+- Ordering: {per key / none}
+- Size limit: {bytes}
 
 ## 6. Versioning
 
@@ -51,7 +51,7 @@ Path: `docs/contracts/{topic}.md` (or the folder the project card names).
 |---|---|---|---|
 | {v} | {change} | Yes / No | {list} |
 
-A breaking change needs a new version value and every consumer updated before producers switch.
+breaking change ต้องใช้ค่า version ใหม่ และ consumer ทุกตัวต้องอัปเดตก่อน producer สลับไปใช้
 
 ## 7. Error and Poison Messages
 

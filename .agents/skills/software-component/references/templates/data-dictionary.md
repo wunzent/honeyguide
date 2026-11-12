@@ -5,13 +5,17 @@
 **Owner**: {service that owns this schema}
 **Version**: {X.Y}
 **Date**: YYYY-MM-DD
-**Source**: {how it was produced, e.g. generated from the schema dump of {environment} on YYYY-MM-DD}
+**Source**: {วิธีที่ได้มา เช่น generate จาก schema dump ของ {environment} เมื่อ YYYY-MM-DD}
 
-> {one paragraph: what this module stores and who writes it}
+> {หนึ่งย่อหน้า: module นี้เก็บอะไร และใครเป็นผู้เขียน}
 
-Path: `DB/Data Dictionary/{NN}_{Module}.md`, same `{NN}` as the ER diagram file. Regenerate together with the ER
-diagram and both indexes; counts in the indexes must match. Old versions move to `_deprecated_v{n}/`.
-Example values are placeholders, never production data.
+Path: `DB/Data Dictionary/{NN}_{Module}.md` ใช้ `{NN}` เดียวกับไฟล์ ER diagram regenerate พร้อมกับ ER
+diagram และ index ทั้งสอง; จำนวนใน index ต้องตรงกัน version เก่าย้ายไป `_deprecated_v{n}/`
+ค่าตัวอย่างเป็น placeholder ห้ามใช้ข้อมูล production
+
+**Embedded database** (SQLite / Room-style): ใช้ storage type ของมัน (INTEGER, TEXT, REAL, BLOB; boolean เป็น INTEGER 0/1,
+enum เป็น TEXT + CHECK, เวลาเป็น epoch milliseconds); เพิ่ม `Schema version` และตาราง `Migrations`
+(`from` -> `to`, change, data loss Y/N) ใน header ของ module; แทน "~n rows (environment)" ด้วย "per-device"; ระบุ flag เรื่อง encryption และ backup
 
 ## Tables ({n})
 
@@ -23,7 +27,7 @@ Example values are placeholders, never production data.
 
 ## {NN}.1 {table}
 
-> **Meaning**: {what one row is}
+> **Meaning**: {หนึ่งแถวคืออะไร}
 > `PK {column}` · `Unique {columns}` · ~{n} rows ({environment})
 
 | Field | Type | Constraints | Description | Example |
@@ -32,7 +36,7 @@ Example values are placeholders, never production data.
 | `{fk_id}` | {type} | FK → `{other_table}.{id}`, NOT NULL | {...} | `{placeholder}` |
 | `{status}` | {varchar(32)} | NOT NULL, DEFAULT `'{VALUE}'`, CHECK in ({values}) | {...} | `{VALUE}` |
 
-Constraint order in the cell: PK → FK → UNIQUE → NOT NULL → DEFAULT → CHECK.
+ลำดับ constraint ในเซลล์: PK → FK → UNIQUE → NOT NULL → DEFAULT → CHECK
 
 ### 🔄 Life Cycle (only for state-machine columns)
 

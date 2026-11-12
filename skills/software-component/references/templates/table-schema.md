@@ -1,11 +1,11 @@
 # Schema — {group / feature}
 
 **Last Updated**: YYYY-MM-DD
-**Migration(s)**: `{migration file name}` (ran on: {dev / staging / prod, or "not yet"})
-**Data Dictionary**: [{NN}_{Module}](../../../../DB/Data%20Dictionary/{NN}_{Module}.md) (relative link from `app/{api}/api-spec/{group}/SCHEMA.md`)
+**Migration(s)**: `{migration file name}` (รันแล้วที่: {dev / staging / prod หรือ "ยัง"})
+**Data Dictionary**: [{NN}_{Module}](../../../../DB/Data%20Dictionary/{NN}_{Module}.md) (relative link จาก `app/{api}/api-spec/{group}/SCHEMA.md`)
 
-Use beside the endpoint specs of a feature that adds or changes tables (`<api>/api-spec/<group>/SCHEMA.md`),
-before the data dictionary is regenerated. Once the dictionary covers it, keep only the rationale here.
+วางข้างๆ endpoint spec ของ feature ที่เพิ่มหรือแก้ table (`<api>/api-spec/<group>/SCHEMA.md`)
+ก่อน regenerate data dictionary เมื่อ dictionary ครอบคลุมแล้ว ให้เก็บเฉพาะเหตุผลของการออกแบบไว้ที่นี่
 
 ## Tables Overview
 
@@ -13,7 +13,7 @@ before the data dictionary is regenerated. Once the dictionary covers it, keep o
 |---|---|---|
 | `{table}` | {...} | {...} |
 
-> **Why this design**: {rationale: alternatives considered, why rejected}
+> **Why this design**: {เหตุผล: ทางเลือกที่พิจารณา และเหตุที่ไม่เลือก}
 
 ## `{table}`
 
@@ -29,4 +29,4 @@ CREATE INDEX {idx_name} ON {table} ({columns});
 
 | Index | Columns | Serves query |
 |---|---|---|
-| `{idx_name}` | `{columns}` | {endpoint / job that needs it} |
+| `{idx_name}` | `{columns}` | {endpoint / job ที่ต้องใช้} |

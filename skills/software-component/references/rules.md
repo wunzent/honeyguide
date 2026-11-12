@@ -44,13 +44,13 @@ Planning-only work may stop after the solution/spec/diagram stage when assumptio
 
 ## Diagram Compatibility
 
-Follow the Mermaid version rules of the destination documentation. Frontend SWC currently requires Mermaid v8.8.0 compatibility. Do not mix frontend and backend diagram syntax without verifying the target renderer.
+Diagram syntax: the one rule in `document-set.md` (Rules).
 
 ## Central Document
 
 `docs/SWC-CENTRAL.md` defines how SWC is reused for solution design, direction changes, user manuals, unit tests, integration tests and time sheets.
 
-- SWC files declare `Status`, `Evidence` (Current / Proposed / POC / Verified), `REQ Refs` and `Owner` in the header when the project tracks REQ/AC (its project card says so, or REQ/AC ids already exist); otherwise only `Last Updated` (see `document-set.md`).
+- Headers by document type: see `document-set.md` (Headers).
 - Never claim `Verified` unless the check was actually run; keep mock tests separate from tests against a real database or provider.
 - A manual may be written only from sections whose Evidence is Current (for a live feature) or Verified. Never publish Proposed or POC content as a manual.
 - When direction changes, add a new DEC, mark affected REQs as Changed or Dropped, follow `traceability.md` to update AC, tests and manuals, and keep the old DEC as Superseded. Do not delete history.

@@ -5,16 +5,16 @@
 |---|---|---|
 | {X.Y.Z} | YYYY-MM-DD | [PLAN_{SERVICE}.md]({relative}) |
 
-> **v{X.Y} changed**: {what changed; mark "per actual code" when rewritten from the code}
+> **v{X.Y} changed**: {สิ่งที่เปลี่ยน; ระบุ "per actual code" เมื่อเขียนใหม่จากโค้ดจริง}
 
-Use for a small HTTP service (few endpoints, e.g. an external API or a webhook receiver) documented as one file
-instead of per-endpoint files. Path: `<service>/api-spec/{SERVICE}.md`; per-endpoint sequence diagrams go in
-`<service>/api-flow-chart/{METHOD}-{NAME}.md`. If it grows past about 8 endpoints, switch to per-endpoint specs
-(`references/backend-standard.md`) and add the service to API-ENDPOINTS.md and USER-MATRIX.md.
+ใช้กับ HTTP service ขนาดเล็ก (endpoint น้อย เช่น external API หรือ webhook receiver) ที่เขียนเป็นไฟล์เดียว
+แทนไฟล์ต่อ endpoint path: `<service>/api-spec/{SERVICE}.md`; sequence diagram ต่อ endpoint อยู่ใน
+`<service>/api-flow-chart/{METHOD}-{NAME}.md` ถ้าเกินประมาณ 8 endpoint ให้เปลี่ยนไปใช้ spec ต่อ endpoint
+(`references/backend-standard.md`) และเพิ่ม service ใน API-ENDPOINTS.md และ USER-MATRIX.md
 
 ## 1. Scope
 
-**Does**: {...}  **Does not do**: {...} (where it is done)
+**Does**: {...}  **Does not do**: {...} (และทำที่ไหน)
 
 ## 2. Folder Structure
 
@@ -39,7 +39,7 @@ Middleware order: {request id → logging → auth → rate limit → validation
 
 ## 5. Authentication
 
-{scheme, e.g. API key or request signature: how the signature is built, clock skew, replay window}
+{รูปแบบ เช่น API key หรือ request signature: วิธีสร้าง signature, clock skew, replay window}
 
 | Code | HTTP | Scenario |
 |---|---|---|
@@ -58,17 +58,17 @@ Middleware order: {request id → logging → auth → rate limit → validation
 
 **Response**: `{status}` + {fields}
 
-(repeat section 6 per endpoint)
+(ทำซ้ำ section 6 ต่อ endpoint)
 
-## 7. Webhook / Callback Receiver (if this service receives callbacks)
+## 7. Webhook / Callback Receiver (เมื่อ service นี้รับ callback)
 
 | Item | Rule |
 |---|---|
-| Signature check | {header, algorithm, secret name (never the value)} |
-| Replay protection | {timestamp window, nonce store} |
-| Idempotency | {event id stored; duplicate → 200 without re-processing} |
-| Response contract | {2xx fast; heavy work queued} |
-| Sender retries | {sender's retry schedule and what we do on each} |
+| Signature check | {header, algorithm, ชื่อ secret (ห้ามใส่ค่า)} |
+| Replay protection | {timestamp window, ที่เก็บ nonce} |
+| Idempotency | {เก็บ event id; ซ้ำ → 200 โดยไม่ประมวลผลซ้ำ} |
+| Response contract | {ตอบ 2xx เร็ว; งานหนักใส่ queue} |
+| Sender retries | {ตาราง retry ของผู้ส่ง และสิ่งที่เราทำในแต่ละครั้ง} |
 
 ## 8. Data Used
 
@@ -92,11 +92,11 @@ Middleware order: {request id → logging → auth → rate limit → validation
 
 ## 11. Logging
 
-Log: {request id, endpoint, status, latency}. Never log: {personal data, secrets, full bodies}.
+Log: {request id, endpoint, status, latency} ห้าม log: {ข้อมูลส่วนบุคคล, secret, body เต็ม}
 
 ## 12. Security Constraints
 
-- {input limits, allowed origins, TLS, secret handling}
+- {ขีดจำกัด input, allowed origins, TLS, การจัดการ secret}
 
 ## 13. Known Gaps
 

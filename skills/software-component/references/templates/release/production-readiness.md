@@ -1,7 +1,7 @@
 # Production Readiness — {service}
 
-Path: `Deployments/{service}/PRODUCTION_DEPLOYMENT.md` (service level, not per version). Update when a blocking item
-closes or a new dependency appears.
+Path: `Deployments/{service}/PRODUCTION_DEPLOYMENT.md` (ระดับ service ไม่ใช่ต่อ version) อัปเดตเมื่อรายการที่ blocking
+ปิด หรือมี dependency ใหม่
 
 **Last Updated**: YYYY-MM-DD
 
@@ -15,27 +15,27 @@ closes or a new dependency appears.
 
 | # | Item | Status | Ref |
 |---|---|---|---|
-| 1 | {must-fix} | ⬜ | {ticket / finding} |
+| 1 | {ต้องแก้} | ⬜ | {ticket / finding} |
 
 ## 3. Non-blocking Recommendations
 
-- {improvement, suggested timing}
+- {สิ่งที่ควรปรับ, เวลาที่แนะนำ}
 
 ## 4. Environment Variables (by group)
 
 | Group | Variable | Required | Source |
 |---|---|---|---|
 | Runtime | `{ENV_VAR}` | Yes | {config} |
-| Secrets | `{SECRET_NAME}` | Yes | {secret store key; never the value} |
+| Secrets | `{SECRET_NAME}` | Yes | {key ใน secret store ห้ามใส่ค่า} |
 | Database | `{ENV_VAR}` | Yes | |
 | Cache | `{ENV_VAR}` | | |
 | Storage | `{ENV_VAR}` | | |
 
-## 5. Cross-layer Checklists (one per concern, e.g. client IP propagation)
+## 5. Cross-layer Checklists (หนึ่งรายการต่อหนึ่งประเด็น เช่น การส่งต่อ client IP)
 
 | # | Layer | To do | Where | Status |
 |---|---|---|---|---|
-| 1 | {load balancer} | {...} | {config location} | ✅ / ⬜ |
+| 1 | {load balancer} | {...} | {ตำแหน่ง config} | ✅ / ⬜ |
 
-**Verify**: {how to confirm end to end}
-**Security principle**: {why this matters}
+**Verify**: {วิธีตรวจแบบ end to end}
+**Security principle**: {เหตุผลที่ต้องทำ}

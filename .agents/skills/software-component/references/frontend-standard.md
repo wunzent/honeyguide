@@ -109,7 +109,7 @@
 ### 3.3 กฎ Diagram
 
 #### Overall Flow Diagram
-- ใช้ `graph TD` เสมอ (ไม่ใช้ `flowchart`)
+- ใช้ `flowchart TD`
 - แสดง user journey ข้าม pages ทั้งหมดของ module
 - แสดง branch ของ API response (success / error / redirect)
 - 1 diagram ต่อ module
@@ -120,83 +120,36 @@
 - ใช้ `alt`/`else`/`end` สำหรับ conditional flow
 - ใช้ `Note over` สำหรับ context note
 
-### 3.4 Mermaid v8.8.0 — กฎ Compatibility (บังคับ)
+### 3.4 Mermaid — syntax (ใช้ Mermaid ปัจจุบัน 11.x)
 
-> ระบบใช้ Mermaid v8.8.0 ต้องปฏิบัติตามกฎต่อไปนี้ทุกข้อ
+- ใช้ `flowchart TD` / `flowchart LR`, `sequenceDiagram` (ใช้ `participant` หรือ `actor` ได้), `stateDiagram-v2`, `erDiagram`
+- ชื่อที่มี underscore ใช้ได้ (เช่น `TABLE_A`, `VARCHAR_255`)
+- ข้อความ label ที่มีอักขระพิเศษ (`/`, `:`, `=`, `>`, `{}`, `()`, `→`) ให้ครอบด้วยเครื่องหมายคำพูด `"..."`
+- ไม่ใส่ `
+` ใน label; ถ้าต้องการหลายบรรทัดให้ใช้ `<br/>` หรือเขียนให้สั้นลง
+- เปิด render ตรวจทุกครั้งก่อนอ้างว่า diagram ใช้ได้
 
-#### graph (flowchart)
-
-| ห้ามใช้ | ใช้แทน | เหตุผล |
-|---|---|---|
-| `flowchart TD` | `graph TD` | v8 ไม่รู้จัก `flowchart` |
-| `A([text])` | `A((text))` หรือ `A[text]` | stadium shape ไม่มีใน v8 |
-| `\n` ใน node label | ตัดออก หรือเขียนสั้นลง | v8 ไม่รองรับ newline ใน label |
-| `→` ใน edge label | ลบออก หรือใช้ `-` | อักขระพิเศษทำให้ parse error |
-| `>text` ใน edge label | `more than N` หรือ `multiple` | `>` ขึ้นต้น edge label ทำให้ error |
-| `/path/` ใน node label | `page - path` หรือ `page name` | slash ขึ้นต้น/ลงท้าย `[...]` สร้าง parallelogram shape |
-| `{text: value}` ใน diamond | `{text - value}` | `:` ใน `{...}` ถูกตีความเป็น link separator ทำให้ parse error |
-| `{a = b}` ใน diamond | `{a equals b}` หรือ `{a b}` | `=` ใน `{...}` อาจทำให้ parse error |
-| `/:param` ใน edge label | `id` หรือ `resource id` | `:` หลัง `/` ใน edge label `\|...\|` ทำให้ parse error |
-
-```markdown
-ตัวอย่างที่ถูกต้อง:
-    graph TD
-        A((Start)) --> B[Page - login]
-        B --> C{Login Mode}
-        C -->|email and password| D[POST /api/auth/login]
-        C -->|no 2FA - 1 org| E[Dashboard]
-        C -->|multiple orgs| F[Page - select-org]
-        F -->|200 OK| G{org selected}
-        G -->|redirect| E
+```mermaid
+flowchart TD
+    A(("Start")) --> B["Page - login"]
+    B --> C{"Login mode"}
+    C -->|"email and password"| D["POST /api/auth/login"]
+    C -->|"multiple orgs"| F["Page - select-org"]
 ```
 
-#### sequenceDiagram
-
-| ห้ามใช้ | ใช้แทน | เหตุผล |
-|---|---|---|
-| `actor User` | `participant User` | v8 ไม่มี `actor` keyword |
-| `\n` ใน message | ตัดออก หรือแยกบรรทัดใหม่ | v8 ไม่รองรับ newline ใน message |
-| `→` ใน alt/else/message | ลบออก หรือใช้ `-` | อักขระพิเศษ |
-| `>1 org` ใน alt/else | `multiple orgs` | `>` ทำให้ parse error |
-| `{...}` ใน participant alias | `"text with (parens)"` | ใส่ quotes ครอบ alias |
-| `?param=value` ใน message | `with param query` | `?` อาจทำให้ parse error |
-| nested `alt` ลึกกว่า 2 ระดับ | แยกเป็น diagram ใหม่ | v8 อาจ render ผิดพลาด |
-
-```markdown
-ตัวอย่างที่ถูกต้อง:
-    sequenceDiagram
-        participant User
-        participant FE as Frontend
-        participant API as Backend API
-
-        User->>FE: กรอก email + password
-        FE->>API: POST /api/auth/login
-
-        alt 2FA Enabled
-            API-->>FE: 200 requires2fa=true
-            FE->>FE: redirect /login/2fa
-        else 1 org auto-select
-            API-->>FE: 200 accessToken
-            FE->>FE: redirect /dashboard
-        else multiple orgs
-            API-->>FE: 200 organizations list
-            FE->>FE: redirect /select-org
-        end
+```mermaid
+sequenceDiagram
+    participant User
+    participant FE as Frontend
+    participant API as "Backend API"
+    User->>FE: กรอก email + password
+    FE->>API: POST /api/auth/login
+    alt 2FA Enabled
+        API-->>FE: 200 requires2fa=true
+    else Success
+        API-->>FE: 200 accessToken
+    end
 ```
-
-#### สรุปอักขระที่ต้องระวัง
-
-| อักขระ | ปลอดภัยในตำแหน่ง | ไม่ปลอดภัยในตำแหน่ง |
-|---|---|---|
-| `/` | edge label `\|...\|`, message text | node label ขึ้นต้น/ลงท้าย `[...]` |
-| `/` + `:` ติดกัน เช่น `/:id` | — | edge label `\|...\|` ทุกตำแหน่ง |
-| `:` | node label `[...]`, edge label กลางประโยค | diamond `{...}`, ขึ้นต้น edge label |
-| `=` | node label `[...]`, message text | diamond `{...}` |
-| `>` | message text (หลัง `:`) | edge label `\|...\|`, alt/else condition |
-| `{` `}` | message text (หลัง `:`) | node label, participant alias |
-| `→` | ไม่ปลอดภัยทุกตำแหน่ง | ทุกตำแหน่ง |
-| `\n` | ไม่ปลอดภัยทุกตำแหน่ง | ทุกตำแหน่ง |
-| `(` `)` ใน alias | ครอบด้วย `"..."` | นอก quotes |
 
 ---
 
@@ -560,16 +513,7 @@ SWC/{module}/
 - [ ] ทุก `page-{name}-spec.md` มี `**Ref Shared**: <!-- validate-skills: example --> [shared.md](./shared.md)` ใน header
 
 ### `xxx-diagram.md` / `page-{name}-diagram.md`
-- [ ] ทุก `graph` ใช้ `graph TD` (ไม่ใช่ `flowchart`)
-- [ ] ไม่มี `actor` ใน sequenceDiagram (ใช้ `participant` แทน)
-- [ ] ไม่มี `\n` ใน node label หรือ message
-- [ ] ไม่มี `→` ใน Mermaid block (ใช้ plain text แทน)
-- [ ] ไม่มี `>` ขึ้นต้น edge label หรือ alt/else condition
-- [ ] ไม่มี `:` ใน diamond `{...}` (ใช้ `-` แทน)
-- [ ] ไม่มี `=` ใน diamond `{...}` (เขียนเป็นคำแทน)
-- [ ] ไม่มี `/:param` ใน edge label `|...|` (ตัด `:` ออก เช่น ใช้ `id` แทน)
-- [ ] node label ที่มี `/` ขึ้นต้น/ลงท้าย ใช้ `-` แทน หรือตัด slash ออก
-- [ ] participant alias ที่มี `()` ครอบด้วย `"..."`
+- [ ] diagram ใช้ syntax Mermaid ปัจจุบัน และ render ได้
 - [ ] Overall flow diagram ครอบคลุมทุก page ของ module
 - [ ] Sequence diagram ครบทุก feature หลัก
 
@@ -587,7 +531,7 @@ SWC/{module}/
 - [ ] มี Error Handling Summary
 
 ### `page-{name}-wireframe.md`
-- [ ] Header มี **Status** (Draft / In Review / Approved / Implemented) + **Version** + **Designer** + **Reviewed by** + **Figma** link
+- [ ] Header ครบตาม `document-set.md` (Headers) แถว Wireframe
 - [ ] Header link ไป `page-{name}-spec.md` + `page-{name}-diagram.md`
 - [ ] Section 2 (Visual Layout) ครอบคลุม **Desktop + Mobile** อย่างน้อย
 - [ ] ASCII art อ่านได้ — ใช้ box `┌─┐` + `│` + `└─┘` (ไม่ใช้ Mermaid)
@@ -612,160 +556,10 @@ SWC/{module}/
 
 ## 8. ตัวอย่าง Template สำหรับสร้างไฟล์ใหม่
 
-### Template: `shared.md` (Per-page modules)
+(เทมเพลต shared.md, page-spec, page-diagram, page-wireframe อยู่ในไฟล์แยก: `templates/shared.md`, `templates/page-spec.md`,
+`templates/page-diagram.md`, `templates/page-wireframe.md`. เทมเพลต component ที่ไม่มี URL อยู่ด้านล่าง)
 
-```markdown
-# {Module} — Shared Reference
-
-**Module**: {Module Name} (Phase {N})
-**Last Updated**: YYYY-MM-DD
-
----
-
-## 1. Composable: `useXxx.ts`
-
-### Methods
-| Method | Calls | Returns |
-|---|---|---|
-| `method(params)` | POST /endpoint | `Type` |
-
-### State (Pinia: `useXxxStore`)
-\`\`\`typescript
-interface XxxStore {
-  field: type
-}
-\`\`\`
-
----
-
-## 2. Business Rules
-
-### Rule Group
-- รายละเอียด rule
-
----
-
-## 3. Components
-
-| Component | ใช้ใน Page | ความรับผิดชอบ |
-|---|---|---|
-| `Component.vue` | `/path` | ความรับผิดชอบ |
-
----
-
-## 4. Error Handling Summary
-
-| Scenario | HTTP | Frontend Action |
-|---|---|---|
-| Network error / 5xx | — | toast "เกิดข้อผิดพลาด กรุณาลองใหม่" |
-| 401 (any protected route) | 401 | refresh → retry → redirect /login |
-
----
-
-## 5. Pages Overview
-
-| Page | Path | Layout | Auth Required |
-|---|---|---|---|
-| Page Name | `/path` | `layout.vue` | Full Token |
-```
-
----
-
-### Template: `page-{name}-spec.md` (Per-page modules)
-
-```markdown
-# Page Spec: `/{path}`
-
-**Module**: {Module Name} (Phase {N})
-**Path**: `/{path}`
-**Layout**: `layout.vue`
-**Auth Required**: Full Token
-<!-- validate-skills: example -->
-**Ref Diagram**: [page-{name}-diagram.md](./page-{name}-diagram.md)
-**Ref Shared**: [shared.md](./shared.md)
-**Last Updated**: YYYY-MM-DD
-
----
-
-## 1. UI Conditions
-
-| Condition | แสดง/ซ่อน |
-|---|---|
-| กำลัง submit | ปุ่ม disabled + spinner |
-| Error `ERROR_CODE` | แสดง inline error |
-
----
-
-## 2. Click Flow
-
-\`\`\`
-1. User กระทำอะไร
-2. FE: Zod validate
-   → ถ้า error: แสดง inline validation
-3. FE: METHOD /api/path {body}
-4. Response:
-   a. Success → ทำอะไร
-   b. ERROR_CODE → แสดงอะไร
-\`\`\`
-
----
-
-## 3. API
-
-| Action | Method | Endpoint | Request Body |
-|---|---|---|---|
-| Action name | POST | `/api/path` | `{field}` |
-
-**Error Codes:**
-| Code | HTTP | UI Action |
-|---|---|---|
-| `ERROR_CODE` | 4xx | UI action |
-
----
-
-## 4. Screen Workflow
-
-\`\`\`
-┌─────────────────────────────────────────────┐
-│  [Screen: /path]  เข้าหน้า                  │
-│  → GET /api/resource                        │
-│                                              │
-│  ⏳ Loading                                  │
-│     └─ แสดง Skeleton Loader                 │
-└─────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────┐
-│  Response                                   │
-│  ├─ 200 + มีข้อมูล  → แสดง content         │
-│  └─ 401             → [/login]              │
-└─────────────────────────────────────────────┘
-\`\`\`
-
----
-
-## 5. i18n Keys (ถ้าหน้ามีข้อความที่แปล)
-
-| Key | TH | EN | Used in |
-|---|---|---|---|
-| `{module.page.key}` | {ข้อความไทย} | {English text} | {component / section} |
-
----
-
-## 6. Implementation Status (YYYY-MM-DD)
-
-| Feature | Status | Note |
-|---|---|---|
-| {feature} | ✅ / ⚠️ / ❌ | {ส่วนที่ยังไม่ตรง spec, ไฟล์ที่เกี่ยวข้อง} |
-
----
-
-## 7. Open Items
-
-1. {งานค้าง / คำถามที่ยังไม่ปิด, เจ้าของ, เงื่อนไขที่ทำให้ปิดได้}
-```
-
-กฎของ section 5-7: section 5 ใส่เมื่อหน้ามีข้อความแปล (ถ้ามี wireframe ให้ตรงกับ Copy & i18n Keys ใน wireframe);
+กฎของ section 5-7 ของ page spec: section 5 ใส่เมื่อหน้ามีข้อความแปล (ถ้ามี wireframe ให้ตรงกับ Copy & i18n Keys ใน wireframe);
 section 6 อัปเดตทุกครั้งที่ implement หรือเปลี่ยน ห้ามเดา (สถานะต้องมาจาก code ที่มีจริง); section 7 ลบรายการที่ปิดแล้ว
 ไปไว้ใน Change Log ไม่ปล่อยค้าง. ประวัติการเปลี่ยนเขียนใน Change Log ไม่ซ้อนบรรทัด "Previous:" ใน header.
 
@@ -818,187 +612,11 @@ diagram คู่กันชื่อ `{component}-diagram.md`. ใน SWC-Over
 ## 7. i18n Keys
 ## 8. Error Handling
 ## 9. Open Items
+## 10-13. Acceptance Criteria, Test Cases, Manual Notes, Change Log (เหมือน `templates/page-spec.md` section 8-11)
 ```
 
 Module กลาง (เช่น layout): `shared.md` เพิ่ม **Composition Pattern** (component ไหนครอบอะไร), **Component Hierarchy**
 (tree), และรายการหน้าที่ไม่ใช้ shell นี้. Component เล็กที่ไม่มี logic ของตัวเองอธิบายใน `shared.md` ได้ ไม่ต้องมี spec แยก.
-
----
-
-### Template: `page-{name}-diagram.md` (Per-page modules)
-
-```markdown
-# Diagrams: `/{path}`
-
-**Module**: {Module Name} (Phase {N})
-<!-- validate-skills: example -->
-**Ref Spec**: [page-{name}-spec.md](./page-{name}-spec.md)
-**Last Updated**: YYYY-MM-DD
-
----
-
-## 1. {Feature} Flow — Sequence Diagram
-
-\`\`\`mermaid
-sequenceDiagram
-    participant User
-    participant FE as Frontend
-    participant API as Backend API
-
-    User->>FE: กระทำอะไร
-    FE->>API: METHOD /endpoint
-
-    alt Success
-        API-->>FE: 200 response
-        FE->>FE: ทำต่อ
-    else Error
-        API-->>FE: 4xx error code
-        FE->>FE: แสดง error
-    end
-\`\`\`
-```
-
----
-
-### Template: `page-{name}-wireframe.md` (Per-page modules)
-
-```markdown
-# Wireframe: `/{path}`
-
-**Module**: {Module Name}
-**Path**: `/{path}`
-**Layout**: `layout.vue`
-<!-- validate-skills: example -->
-**Ref Spec**: [page-{name}-spec.md](./page-{name}-spec.md)
-**Ref Diagram**: [page-{name}-diagram.md](./page-{name}-diagram.md)
-**Status**: Draft
-**Version**: 1.0
-**Designer**: —
-**Reviewed by**: —
-**Figma**: —
-**Last Updated**: YYYY-MM-DD
-
----
-
-## 1. Overview
-
-{1-2 ประโยคอธิบายว่าหน้านี้ใช้ทำอะไร + flow ออก/เข้า}
-
----
-
-## 2. Visual Layout
-
-### Desktop (≥1024px)
-**Figma**: {link หรือ —}
-**Image**: `./images/page-{name}-desktop.png`
-
-\`\`\`
-┌─────────────────────────────────────────────────┐
-│  [ASCII art ของ layout — header / sidebar /     │
-│   content / footer ตามแต่ละหน้า]                │
-│                                                  │
-│   อธิบาย element สำคัญด้วย ← arrow              │
-└─────────────────────────────────────────────────┘
-\`\`\`
-
-### Mobile (<1024px)
-**Figma**: {link หรือ —}
-**Image**: `./images/page-{name}-mobile.png`
-
-\`\`\`
-┌──────────────────────────────┐
-│  [ASCII art ของ mobile        │
-│   layout]                     │
-└──────────────────────────────┘
-\`\`\`
-
----
-
-## 3. Interaction States
-
-### Inputs / Buttons / Links
-
-| Element | Default | Hover | Focus | Active | Disabled | Loading | Error |
-|---|---|---|---|---|---|---|---|
-| Input | - | — | - | — | - | — | - |
-| Button | - | — | - | — | - | — | - |
-| Link | - | — | - | — | - | — | - |
-
-**Note**: Style ของแต่ละ state ให้ยึดตาม Design System, Theme และ UI Component ของแต่ละ Project เป็นหลัก หลีกเลี่ยงการ hardcode color, border, ring หรือ state style หากมี existing token/component รองรับอยู่แล้ว
-
-### Form-level States
-
-| State | Trigger | Visual |
-|---|---|---|
-| **Idle** | initial | ฟอร์มปกติ ไม่มี banner |
-| **Validation Error** | Zod fail แดง | input border แดง |
-| **Loading** | submit pressed | ปุ่ม spinner + disabled |
-| **API Error** | error code | toast สีแดง + error message|
-| **Success** | API ok | toast + navigate |
-
----
-
-## 4. Copy & i18n Keys
-
-| Element | TH | EN | i18n Key | Status |
-|---|---|---|---|---|
-| Heading | ... | ... | `module.section.title` | ❌ hardcoded / ✅ migrated |
-| Subtitle | ... | ... | `module.section.subtitle` | ❌ |
-| Submit | ... | ... | `module.section.submit` | ❌ |
-
-> ระบุ Status: `❌ hardcoded` ถ้ายังไม่ migrate · `✅` ถ้ามี key ใน `i18n/th.ts` + `i18n/en.ts` แล้ว
-
----
-
-## 5. Design Tokens
-**note**: Design Tokens ในเอกสารนี้ใช้เป็น reference สำหรับ UI เท่านั้น
-ให้ยึด Design System, Theme และ UI Components ที่มีอยู่ในระบบเป็นหลัก หลีกเลี่ยงการ hardcode style และควร reuse existing token/component ก่อนสร้างใหม่
-
-### Colors
-| Token | ใช้ที่ |
-|---|---|
-| `text-gray-900` / `dark:text-white` | heading |
-| `text-primary-600` | links |
-| `bg-red-50 border-red-200 text-red-700` | error banner |
-
-### Typography
-| Element | Spec |
-|---|---|
-| Heading | `text-[20px] font-bold leading-[1.15] tracking-[-0.02em]` |
-| Field label | `text-[13px] font-medium` |
-| Submit button | `text-[15px] font-semibold tracking-wide` |
-
-### Spacing & Radius
-| Property | Value |
-|---|---|
-| Card max-width | `max-w-95` |
-| Form gap | `flex flex-col gap-5` |
-| Input radius | `rounded-[10px]` |
-
-### Breakpoint
-| BP | Behavior |
-|---|---|
-| `<lg` (<1024px) | single column |
-| `lg` (≥1024px) | 2-column grid `minmax(0, 1.15fr) minmax(0, 1fr)` |
-
----
-
-## 6. Accessibility Notes (optional)
-
-### Focus Order (Tab key)
-1. {first focusable element}
-2. ...
-
-### ARIA / Semantic
-- {ARIA labels ที่ไม่ obvious — เช่น password show/hide button}
-- Form ใช้ semantic `<form>` หรือใช้ UI Component / Design System ของ Project แทน native element หากมีรองรับ
-
-### Color Contrast
-- {text/bg pairs ที่ต้องระวัง WCAG AA 4.5:1}
-
-### Other
-
-```
 
 ---
 

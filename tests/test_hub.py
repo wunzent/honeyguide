@@ -69,7 +69,7 @@ if argv[0] == 'exec':
     if mode != 'no-evidence':
         with (directory / 'rollout-test-thread123.jsonl').open('a', encoding='utf-8') as stream:
             stream.write('\n'.join(json.dumps(e) for e in events) + '\n')
-    pathlib.Path(argv[argv.index('-o') + 1]).write_text(os.environ.get('FAKE_RESULT', 'Codex finished with evidence'))
+    pathlib.Path(argv[argv.index('-o') + 1]).write_text(os.environ.get('FAKE_RESULT', 'Codex finished with evidence'), encoding='utf-8')
     if mode != 'no-id':
         print(json.dumps({'type': 'thread.started', 'thread_id': 'thread123'}))
 else:
@@ -366,6 +366,8 @@ def test_codex_distinct_contexts(hub):
     ("STATUS BLOCKED", "Unknown", "done", 0),
     ("STATUS: DONE - files changed: split.py - checks pass - report: R.md", "DONE", "done", 0),
     ("STATUS: BLOCKED - pytest missing - report: R.md", "BLOCKED", "blocked", 6),
+    ("STATUS: DONE_WITH_CONCERNS — PASS (0 findings)", "DONE_WITH_CONCERNS", "done", 0),
+    ("STATUS: DONE – checks pass", "DONE", "done", 0),
     ("**STATUS:** NEEDS_CONTEXT | which branch?", "NEEDS_CONTEXT", "blocked", 6),
     ("Status: blocked-ish, fixed later", "Unknown", "done", 0),
     ("STATUS: BLOCKED\n**STATUS: DONE**\nStatus: blocked on lint", "DONE", "done", 0),
