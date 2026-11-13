@@ -230,6 +230,13 @@ def events(path, offset=0, session=False):
             yield value
 
 
+def object_payload(event, label):
+    payload = event.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError(f"Codex {label} payload must be an object")
+    return payload
+
+
 def distinct(values):
     return list(dict.fromkeys(v for v in values if isinstance(v, str) and v))
 
@@ -248,18 +255,35 @@ def verify(vendor, event_path, rollout_offsets=None):
     if vendor == "codex":
         thread = next((e.get("thread_id") for e in data if e.get("type") == "thread.started"), None)
         resume_id = thread if isinstance(thread, str) and thread else "Unknown"
-        directory = codex_session_dir()
+        directory = codex_session_dir().resolve()
         matches = sorted(p for p in directory.rglob("rollout-*.jsonl")
-                         if isinstance(thread, str) and thread and p.name.endswith(thread + ".jsonl")) if thread else []
+                         if isinstance(thread, str) and thread and p.stem.endswith("-" + thread)) if thread else []
         if matches:
-            session = matches[-1].name
-            for event in events(matches[-1], (rollout_offsets or {}).get(matches[-1], 0), session=True):
-                payload = event.get("payload") or {}
+            path = session_path(matches[-1]).resolve()
+            metadata = next((e for e in events(path, session=True) if e.get("type") == "session_meta"), None)
+            if metadata is None:
+                raise ValueError("Codex session metadata is missing")
+            payload = object_payload(metadata, "session metadata")
+            if payload.get("id") != thread:
+                raise ValueError("Codex session metadata id does not match child thread id")
+            session = path.name
+            for event in events(path, (rollout_offsets or {}).get(path, 0), session=True):
                 if event.get("type") == "turn_context":
+                    payload = object_payload(event, "turn context")
                     models.append(payload.get("model"))
                     efforts.append(payload.get("effort"))
+                payload = event.get("payload")
+                if payload is not None and not isinstance(payload, dict):
+                    raise ValueError("Codex event payload must be an object")
+                payload = payload or {}
                 if payload.get("type") == "token_count":
-                    tokens = ((payload.get("info") or {}).get("total_token_usage") or {}).get("total_tokens", "Unknown")
+                    info = payload.get("info")
+                    if info is not None and not isinstance(info, dict):
+                        raise ValueError("Codex token info must be an object")
+                    usage = (info or {}).get("total_token_usage")
+                    if usage is not None and not isinstance(usage, dict):
+                        raise ValueError("Codex token usage must be an object")
+                    tokens = (usage or {}).get("total_tokens", "Unknown")
     else:
         for event in data:
             if event.get("type") == "system" and event.get("subtype") == "init":
@@ -325,6 +349,7 @@ def delegate(args):
     event_path = directory / (agent_id + ".events.jsonl")
     models, efforts, session, observed_resume = [], [], "Unknown", "Unknown"
     blocker, result, tokens = "", "", "Unknown"
+    verification_error = ""
     process = None
     simulated = os.environ.get("HUB_SIMULATE_QUOTA") == args.to
     exe = shutil.which(args.to)
@@ -352,7 +377,8 @@ def delegate(args):
         try:
             timed_out = False
             kill_failure = ""
-            rollout_offsets = {path: path.stat().st_size for path in codex_session_dir().rglob("rollout-*.jsonl")} if args.to == "codex" else {}
+            session_root = codex_session_dir().resolve() if args.to == "codex" else None
+            rollout_offsets = {path.resolve(): path.stat().st_size for path in session_root.rglob("rollout-*.jsonl")} if session_root else {}
             child_env = os.environ.copy()
             for key in ("HUB_PORTABLE", "HUB_PROJECT_ROOT", "HUB_WORK_ROOT", "HUB_RECORDS_ROOT", "HUB_MODEL_CATALOG"):
                 child_env.pop(key, None)
@@ -384,7 +410,10 @@ def delegate(args):
                 else:
                     stdout, stderr = process.communicate()
             write(event_path, stdout)
-            models, efforts, session, tokens, result, observed_resume = verify(args.to, event_path, rollout_offsets)
+            try:
+                models, efforts, session, tokens, result, observed_resume = verify(args.to, event_path, rollout_offsets)
+            except (OSError, ValueError) as exc:
+                verification_error = "evidence verification failed: " + str(exc)
             last = record_path(last)
             if args.to == "codex" and last.is_file():
                 result = read_record(last, encoding="utf-8")
@@ -397,6 +426,8 @@ def delegate(args):
                 status, code, blocker = "quota-unavailable", 4, quota
             elif process.returncode:
                 status, code, blocker = "failed", 1, f"process exited {process.returncode}: {stderr[:300]}"
+            elif verification_error:
+                status, code, blocker = "failed", 1, verification_error
             elif not match:
                 status, code, blocker = "failed", 3, "route mismatch or missing verification evidence"
             else:

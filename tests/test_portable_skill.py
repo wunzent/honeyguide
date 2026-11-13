@@ -59,6 +59,66 @@ def test_installed_wrapper_discovers_foreign_project_without_source_runtime(tmp_
     assert "project-only" in index
 
 
+@pytest.mark.parametrize("mode,expected,diagnostic", [
+    ("valid", 0, ""),
+    ("bad-header", 1, "session metadata id does not match"),
+    ("bad-turn", 1, "turn context payload must be an object"),
+])
+def test_installed_wrapper_codex_lifecycle_uses_external_session_root(tmp_path, mode, expected, diagnostic):
+    _, wrapper = installed_wrapper(tmp_path)
+    project = tmp_path / "documents/Codex/lifecycle"
+    project.mkdir(parents=True)
+    user = tmp_path / "isolated-user"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = tmp_path / "fake-codex.py"
+    fake.write_text(r'''import json, os, pathlib, sys
+args = sys.argv[1:]
+thread = "thread-portable-123"
+model = args[args.index("-m") + 1]
+effort = args[args.index("-c") + 1].split("=", 1)[1]
+mode = os.environ["FAKE_MODE"]
+payload = [] if mode == "bad-meta" else {"id": "wrong-thread" if mode == "bad-header" else thread}
+turn = [] if mode == "bad-turn" else {"model": model, "effort": effort}
+events = [{"type":"session_meta","payload":payload},{"type":"turn_context","payload":turn}]
+session = pathlib.Path.home() / ".codex/sessions/2026/11/13"
+session.mkdir(parents=True, exist_ok=True)
+(session / ("rollout-2026-11-13T10-43-21-" + thread + ".jsonl")).write_text("\n".join(json.dumps(e) for e in events)+"\n", encoding="utf-8")
+pathlib.Path(args[args.index("-o") + 1]).write_text("retained worker output", encoding="utf-8")
+print(json.dumps({"type":"thread.started","thread_id":thread}))
+''', encoding="utf-8")
+    executable = bin_dir / ("codex.cmd" if os.name == "nt" else "codex")
+    if os.name == "nt":
+        executable.write_text(f'@echo off\n"{sys.executable}" "{fake}" %*\n', encoding="utf-8")
+    else:
+        executable.write_text(f'#!/bin/sh\n"{sys.executable}" "{fake}" "$@"\n', encoding="utf-8")
+        executable.chmod(0o755)
+    env = isolated_env(user)
+    env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
+    env["FAKE_MODE"] = mode
+    create = subprocess.run([PYTHON, str(wrapper), "task", "new", "sample", "--objective", "portable",
+                             "--scope", "delegation", "--orchestrator", "codex"], cwd=project,
+                            env=env, text=True, capture_output=True)
+    assert create.returncode == 0, create.stdout + create.stderr
+    brief = project / "brief.md"
+    brief.write_text("Self-contained portable lifecycle fixture.", encoding="utf-8")
+    delegated = subprocess.run([PYTHON, str(wrapper), "delegate", "sample", "--to", "codex", "--role", "coder",
+                                "--model", "gpt-6.1-sol", "--effort", "low", "--brief", str(brief),
+                                "--reason", "Verify portable rollout", "--parent", "owner"], cwd=project,
+                               env=env, text=True, capture_output=True)
+    assert delegated.returncode == expected, delegated.stdout + delegated.stderr
+    summary = json.loads(delegated.stdout)
+    agent = project / ".multi-agent-hub/sample/agents" / f"{summary['id']}.md"
+    record = agent.read_text(encoding="utf-8")
+    assert "| Status | " + ("done" if expected == 0 else "failed") + " |" in record
+    assert "| PID | Unknown |" in record
+    if diagnostic:
+        assert "evidence verification failed: Codex " + diagnostic in record
+    assert (agent.parent / f"{summary['id']}.last.md").read_text(encoding="utf-8") == "retained worker output"
+    if expected == 0:
+        assert summary["session"].startswith("rollout-2026-11-13T10-43-21-")
+
+
 def test_installer_repeated_updates_keep_managed_backups_and_refuse_changes(tmp_path):
     installer = load_installer()
     target = tmp_path / "home/.codex/skills/multi-agent-hub"
