@@ -308,68 +308,6 @@ def run_task_new(tmp_path, project, name="sample"):
                           text=True, capture_output=True)
 
 
-def test_portable_task_adds_local_git_exclude_once(tmp_path):
-    project = tmp_path / "repo"
-    (project / ".git/info").mkdir(parents=True)
-    (project / ".git/info/exclude").write_text("# keep\n*.log", encoding="utf-8")
-    assert run_task_new(tmp_path, project).returncode == 0
-    lines = (project / ".git/info/exclude").read_text(encoding="utf-8").splitlines()
-    assert lines == ["# keep", "*.log", ".multi-agent-hub/"]
-    assert run_task_new(tmp_path, project, "other").returncode == 0
-    assert (project / ".git/info/exclude").read_text(encoding="utf-8").count(".multi-agent-hub/") == 1
-
-
-def test_portable_exclude_follows_worktree_git_file_and_tolerates_failures(tmp_path):
-    common = tmp_path / "main.git"
-    (common / "worktrees/w1").mkdir(parents=True)
-    (common / "worktrees/w1/commondir").write_text("../..", encoding="utf-8")
-    (common / "worktrees/w1/HEAD").write_text("ref: refs/heads/x", encoding="utf-8")
-    (common / "HEAD").write_text("ref: refs/heads/main", encoding="utf-8")
-    (common / "objects").mkdir()
-    project = tmp_path / "wt"
-    project.mkdir()
-    (project / ".git").write_text("gitdir: " + str(common / "worktrees/w1"), encoding="utf-8")
-    assert run_task_new(tmp_path, project).returncode == 0
-    assert ".multi-agent-hub/" in (common / "info/exclude").read_text(encoding="utf-8")
-    broken = tmp_path / "broken"
-    (broken / ".git").mkdir(parents=True)
-    (broken / ".git/info").write_text("not a directory", encoding="utf-8")  # exclude path cannot be written
-    result = run_task_new(tmp_path, broken)
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert (broken / ".multi-agent-hub/sample/CHECKPOINT.md").is_file()
-    plain = tmp_path / "plain"
-    plain.mkdir()
-    assert run_task_new(tmp_path, plain).returncode == 0
-    assert not (plain / ".git").exists()
-
-
-def test_portable_exclude_ignores_hostile_gitdir_and_symlinked_exclude(tmp_path):
-    victim = tmp_path / "victim"
-    victim.mkdir()
-    for index, setup in enumerate(("no-head", "bad-commondir")):
-        project = tmp_path / ("hostile" + str(index))
-        project.mkdir()
-        gitdir = tmp_path / ("gitdir" + str(index))
-        gitdir.mkdir()
-        (project / ".git").write_text("gitdir: " + str(gitdir), encoding="utf-8")
-        if setup == "bad-commondir":
-            (gitdir / "HEAD").write_text("ref: refs/heads/x", encoding="utf-8")
-            (gitdir / "commondir").write_text(str(victim), encoding="utf-8")
-        result = run_task_new(tmp_path, project)
-        assert result.returncode == 0, result.stdout + result.stderr
-        assert not (gitdir / "info").exists() and not (victim / "info").exists()
-    repo = tmp_path / "linked"
-    (repo / ".git/info").mkdir(parents=True)
-    target = tmp_path / "elsewhere.txt"
-    target.write_text("keep", encoding="utf-8")
-    try:
-        (repo / ".git/info/exclude").symlink_to(target)
-    except OSError:
-        pytest.skip("symlink creation unavailable")
-    assert run_task_new(tmp_path, repo).returncode == 0
-    assert target.read_text(encoding="utf-8") == "keep"
-
-
 def test_claude_install_midway_failure_never_strands_unmanaged_files(tmp_path, monkeypatch):
     installer = load_installer()
     home = tmp_path / "claude"
@@ -426,3 +364,55 @@ def test_codex_agents_opt_in_matches_sync_and_refuses_unowned_files(tmp_path, mo
         installer.main(["--codex-home", str(other)])
     with pytest.raises(SystemExit):
         installer.main(["--codex-agents", "--dest", str(tmp_path / "x")])
+
+
+def test_agent_replacement_is_undone_when_its_hash_cannot_be_recorded(tmp_path, monkeypatch):
+    installer = load_installer()
+    agents = tmp_path / "agents"
+    files = installer.claude_agent_files()
+    real = installer.write_atomic
+
+    def fail_marker(path, data):
+        if path.name == installer.MARKER:
+            raise OSError("injected marker failure")
+        return real(path, data)
+
+    monkeypatch.setattr(installer, "write_atomic", fail_marker)
+    with pytest.raises(OSError, match="marker"):  # first install: the unrecorded file is removed
+        installer.write_agents(agents, files)
+    assert not (agents / "hub-readonly.md").exists()
+    monkeypatch.setattr(installer, "write_atomic", real)
+    installer.write_agents(agents, files)
+    old = (agents / "hub-readonly.md").read_bytes()
+    newer = dict(files, **{"hub-readonly.md": files["hub-readonly.md"] + b"changed\n"})
+    monkeypatch.setattr(installer, "write_atomic", fail_marker)
+    with pytest.raises(OSError, match="marker"):  # update: the previous recorded bytes come back
+        installer.write_agents(agents, newer)
+    assert (agents / "hub-readonly.md").read_bytes() == old
+    monkeypatch.setattr(installer, "write_atomic", real)
+    installer.write_agents(agents, newer)  # next installation is not refused
+    assert (agents / "hub-readonly.md").read_bytes() == newer["hub-readonly.md"]
+
+
+def tree_digest(root):
+    import hashlib
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        digest.update(path.relative_to(root).as_posix().encode())
+        if path.is_file():
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def test_portable_task_new_prints_hint_and_never_touches_git(tmp_path):
+    project = tmp_path / "repo"
+    (project / ".git/info").mkdir(parents=True)
+    (project / ".git/HEAD").write_text("ref: refs/heads/main", encoding="utf-8")
+    (project / ".git/info/exclude").write_text("# keep", encoding="utf-8")
+    before = tree_digest(project / ".git")
+    result = run_task_new(tmp_path, project)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Records are in .multi-agent-hub/; keep them out of commits" in result.stdout
+    assert ".git/info/exclude" in result.stdout
+    assert tree_digest(project / ".git") == before
+    assert (project / ".multi-agent-hub/sample/CHECKPOINT.md").is_file()

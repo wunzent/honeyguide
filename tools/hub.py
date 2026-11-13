@@ -147,41 +147,8 @@ def new_task(args):
     content += "".join(f"## {name}\n{bodies.get(name, 'Unknown')}\n\n" for name in SECTIONS)
     write(path / "CHECKPOINT.md", content)
     (path / "agents").mkdir()
-    exclude_records_locally()
-
-
-def exclude_records_locally():
-    """Portable mode: keep `.multi-agent-hub/` out of `git status` through the local info/exclude when writable."""
-    if os.environ.get("HUB_PORTABLE") != "1" or records_root().name != ".multi-agent-hub":
-        return
-    try:
-        project = records_root().parent
-        git = next((parent / ".git" for parent in (project, *project.parents) if (parent / ".git").exists()), None)
-        if git is None:
-            return
-        if git.is_file():  # worktree or submodule: ".git" holds "gitdir: <path>"
-            line = git.read_text(encoding="utf-8").strip()
-            if not line.startswith("gitdir:"):
-                return
-            git = (git.parent / line[7:].strip()).resolve()
-            if not (git / "HEAD").is_file():  # a hostile gitdir must look like a real git directory
-                return
-            if (git / "commondir").is_file():
-                git = (git / (git / "commondir").read_text(encoding="utf-8").strip()).resolve()
-                if not ((git / "HEAD").is_file() and (git / "objects").is_dir()):
-                    return
-        exclude = git / "info/exclude"
-        if exclude.is_symlink():
-            return
-        current = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
-        if any(entry.strip() in (".multi-agent-hub", ".multi-agent-hub/", "/.multi-agent-hub", "/.multi-agent-hub/")
-               for entry in current.splitlines()):
-            return
-        exclude.parent.mkdir(parents=True, exist_ok=True)
-        separator = "" if not current or current.endswith("\n") else "\n"
-        exclude.write_text(current + separator + ".multi-agent-hub/\n", encoding="utf-8")
-    except (OSError, ValueError):
-        pass  # best effort: a read-only repository is not an error
+    if os.environ.get("HUB_PORTABLE") == "1":
+        print("Records are in .multi-agent-hub/; keep them out of commits (for example add `.multi-agent-hub/` to .git/info/exclude yourself).")
 
 
 def new_agent(args, kind=None):

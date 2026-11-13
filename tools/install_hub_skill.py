@@ -216,10 +216,20 @@ def write_agents(agents_dir, files):
     """Write each file, then record exactly its hash at once, so a mid-way failure never strands an unmanaged file."""
     managed = check_agents(agents_dir, files)  # refuse before touching anything
     for name, data in files.items():
-        write_atomic(agents_dir / name, data)
+        target = agents_dir / name
+        previous = target.read_bytes() if target.is_file() else None
+        write_atomic(target, data)
         managed[name] = digest_bytes(data)
         marker = {"format": 1, "source": "multi-agent-hub", "files": managed}
-        write_atomic(agents_dir / MARKER, (json.dumps(marker, indent=2) + "\n").encode())
+        try:
+            write_atomic(agents_dir / MARKER, (json.dumps(marker, indent=2) + "\n").encode())
+        except BaseException:
+            # The new hash was not recorded: put the old, still-recorded file back (or remove a first-time one).
+            if previous is None:
+                target.unlink(missing_ok=True)
+            else:
+                write_atomic(target, previous)
+            raise
     for name in files:
         print(agents_dir / name)
 
