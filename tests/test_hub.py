@@ -44,7 +44,8 @@ FAKE = r'''
 import json, os, pathlib, subprocess, sys, time
 argv = sys.argv[1:]
 prompt = sys.stdin.read()
-pathlib.Path(os.environ['FAKE_LOG']).write_text(json.dumps({'argv': argv, 'prompt': prompt, 'cwd': os.getcwd()}))
+pathlib.Path(os.environ['FAKE_LOG']).write_text(json.dumps({'argv': argv, 'prompt': prompt, 'cwd': os.getcwd(),
+    'launch_env': {key: os.environ[key] for key in ('CODEX_WINDOWS_REGISTERED_CORE', 'HUB_LAUNCH_PARENT_SENTINEL', 'HUB_SECURITY_SENTINEL') if key in os.environ}}))
 mode = os.environ['FAKE_MODE']
 if mode == 'sleep':
     child = subprocess.Popen([sys.executable, '-c',
@@ -499,6 +500,39 @@ def test_resume_own_session(hub, vendor, resume_id, writable):
         assert "model_reasoning_effort=low" in argv
     else:
         assert argv[argv.index("--resume") + 1] == resume_id
+
+
+@pytest.mark.parametrize("vendor", ["codex", "claude"])
+def test_windows_codex_launch_environment_is_isolated(hub, monkeypatch, vendor):
+    root, env, _ = hub
+    fake(hub, vendor)
+    for key in ("PATH", "HOME", "USERPROFILE", "HUB_CODEX_SESSIONS", "FAKE_LOG", "FAKE_MODE"):
+        monkeypatch.setenv(key, env[key])
+    monkeypatch.setenv("CODEX_WINDOWS_REGISTERED_CORE", "1")
+    monkeypatch.setenv("HUB_LAUNCH_PARENT_SENTINEL", "preserved")
+    monkeypatch.setenv("HUB_SECURITY_SENTINEL", "security-value")
+    spec = importlib.util.spec_from_file_location("hub_launch_env_test", root / "tools/hub.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "is_windows", lambda: True)
+    monkeypatch.chdir(root)
+    assert module.main(["delegate", "sample", "--to", vendor, "--role", "coder", "--model",
+                        "gpt-6.1-sol" if vendor == "codex" else "sonnet", "--effort", "low",
+                        "--brief", str(root / "brief.txt"), "--reason", "Test child environment isolation", "--parent", "owner"]) == 0
+    log = json.loads(Path(env["FAKE_LOG"]).read_text())
+    child_env = log["launch_env"]
+    assert child_env["HUB_LAUNCH_PARENT_SENTINEL"] == "preserved"
+    assert child_env["HUB_SECURITY_SENTINEL"] == "security-value"
+    assert ("CODEX_WINDOWS_REGISTERED_CORE" not in child_env) if vendor == "codex" else child_env["CODEX_WINDOWS_REGISTERED_CORE"] == "1"
+    if vendor == "codex":
+        resume_args = ["delegate", "sample", "--to", "codex", "--role", "coder", "--model", "gpt-6.1-sol",
+                       "--effort", "low", "--brief", str(root / "brief.txt"), "--reason", "Test resumed launch",
+                       "--parent", "owner", "--resume", "coder-1", "--cwd", str(root)]
+        assert module.main(resume_args) == 0
+        resumed_env = json.loads(Path(env["FAKE_LOG"]).read_text())["launch_env"]
+        assert "CODEX_WINDOWS_REGISTERED_CORE" not in resumed_env
+        assert resumed_env["HUB_LAUNCH_PARENT_SENTINEL"] == "preserved"
+        assert resumed_env["HUB_SECURITY_SENTINEL"] == "security-value"
 
 
 @pytest.mark.parametrize("case", ["vendor", "task", "unknown", "invalid", "missing-id", "legacy"])
