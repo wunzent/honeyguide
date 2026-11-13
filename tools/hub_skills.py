@@ -35,6 +35,15 @@ def index_row(values):
     return "| " + " | ".join(cells) + " |"
 
 
+def record_destination(path):
+    path = Path(path)
+    if os.environ.get("HUB_PORTABLE") == "1":
+        root = Path(os.environ["HUB_RECORDS_ROOT"]).resolve()
+        if not path.resolve().is_relative_to(root):
+            raise ValueError("record path escapes working directory")
+    return path
+
+
 def skill_metadata(path):
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     front = re.match(r"\A---\s*\n(.*?)\n---", text, re.S)
@@ -80,7 +89,7 @@ def skill_files(directory):
             yield Path(parent) / "SKILL.md"
 
 
-def index_skills(root):
+def index_skills(root, destination=None):
     entries = {entry["name"]: entry for entry in manifest(root).get("skills", [])}
     roots = [(root / folder, vendor, False) for folder, vendor in SKILL_DIRS]
     home = Path.home()
@@ -141,7 +150,8 @@ def index_skills(root):
                          requirements("", entry), entry.get("licence", "unknown"),
                          entry.get("status", "unknown") + "; " + entry.get("notes", ""))))
     lines += ["", *warnings]
-    destination = root / "work/skills-index.md"
+    destination = Path(destination) if destination is not None else root / "work/skills-index.md"
+    destination = record_destination(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Skills: {sum(counts.values())} (claude: {counts['claude']}, codex: {counts['codex']}, both: {counts['both']})")

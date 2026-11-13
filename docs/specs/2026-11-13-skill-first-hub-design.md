@@ -1,0 +1,25 @@
+# Skill-first Hub design
+
+## Goal and current boundary
+
+Owner directive: open any software project in Codex, invoke $multi-agent-hub and perform work there without opening/registering with the Hub, requiring a dashboard, Claude or Qwen. Preserve single-agent execution and dynamic duties. Current tools/hub.py couples project ROOT, work records and models.toml to its repository. Reuse that implementation, including the verified Windows Codex child-launch fix; do not recreate an engine.
+
+## Smallest viable design
+
+1. skills/multi-agent-hub/SKILL.md is the native entrypoint. Anchor to current project; read its instructions without requiring a Hub project card. Prefer native tools and agents, choose skills from actual runtime catalog and inspect real requirements. Tiny work creates no task files. Nontrivial work uses project-local .multi-agent-hub records, self-contained briefs and existing progress-based history. Only expose actual permission/model/effort evidence; unknown remains Unverified.
+2. Optional scripts/run.py adapts existing tools/hub.py to current project by setting ROOT, WORK_ROOT and MODEL_CATALOG for that process only. Source-development wrapper loads tools/ from the repo; installed wrapper loads its packaged runtime files. Disallow source-maintenance sync and third-party skills install in portable mode (native own-skill installer is separate). Plain native operation remains possible when Python/helper is unavailable.
+3. Existing hub.py gains narrow work_root()/catalog separation hooks with old defaults preserved. Existing skill discovery accepts an optional destination and reads current project/user/plugin locations. Installed catalogue and caches remain unverified readiness, not execution proof.
+4. tools/install_hub_skill.py builds the self-contained owned skill from this repository: entrypoint, brief reference, wrapper, exact reused hub.py/hub_skills.py/models.toml. Default native destination ~/.codex/skills/multi-agent-hub, --dest supports a chosen native skill directory. Install/update do not modify global configs, install dependencies, follow symlinks or run third-party installers. Managed provenance/hashes make updates source-controlled; refuse unmanaged/locally modified targets, preserve old managed version as a backup on update. No whole-repo copy or per-project registration.
+5. Record location .multi-agent-hub inside the current project. Prefer local Git exclude when authorized/writable; never change global Git config or silently edit a project's tracked ignore rules. If ignore is blocked, report it and continue supported work. Reject portable records root escaping the project via symlink. Old repository CLI stays unchanged by default.
+
+## Compatibility, permissions, dependencies
+
+Native execution does not require CLI login, a model catalogue, Claude or optional Python helper. CLI delegation is optional and retains its route verification and sandbox flags. Source model catalogue snapshot is not proof of account availability on another machine. Select actual available models per assignment. No fixed roles/team counts/retry budgets. qwen-agent never required; qwenchance fixed cap overridden by progress-based policy. Do not install/migrate any third-party skill as part of this work.
+
+Existing Hub project-local 9arm copies remain intact. They do not automatically become user-global or appear in unrelated projects; report locations/readiness truthfully. Native API may not expose named permission shells or model/effort; do not invent them. Security Gate NOT PASS.
+
+## Verification and rollback
+
+Focused tests: legacy root defaults; portable records/discovery confined to foreign project; installer install/update/refusal and self-contained bundle; no-progress/history survives vendor record changes. Re-run existing suite once implementation settles. Actual fresh Codex invocation in separate disposable project with Claude absent must observe skill catalog/load, selected compatible skill use, current-project work and tests, native agents when useful, and records. Distinguish PASS/FAIL/BLOCKED/NOT VERIFIED. Preserve existing evidence including main's original verification report and commit 7897d64.
+
+No contraction/deletion. Rollback uses old source CLI or the retained managed skill backup; original Hub/worktrees remain. Do not merge/push. Commit only completed, reviewed migration files per requested final SHA deliverable.

@@ -1,5 +1,8 @@
 # Multi-Agent Hub (minimal native, Claude Code + Codex)
 
+## Portable Codex skill
+Install the owned native-first Codex skill with `python tools/install_hub_skill.py` (or `python tools/install_hub_skill.py --dest <skill-directory>` for a chosen native skill path), then invoke `$multi-agent-hub` from any software project. Re-run the same command to update it; prior managed versions are retained outside the scanned skills directory. It needs no Hub project card or dashboard. The optional helper writes `.multi-agent-hub` task data in the current project and reuses the existing Hub runtime. Native work remains available without Python. Installation does not configure the CLI or install third-party skills.
+
 A small shared workspace in which **Claude Code or Codex** acts as the orchestrator, builds a team with duties defined
 per assignment and two generic permission shells, delegates within and across vendors, and keeps readable records and checkpoints.
 There is no engine, scheduler, dashboard or approval ceremony: planning, skills and subagents are the CLIs' own.
@@ -8,8 +11,10 @@ There is no engine, scheduler, dashboard or approval ceremony: planning, skills 
 **From Claude Code:** open this folder in Claude Code (Desktop Code tab or `claude`) and describe the task.
 **From Codex:** open this folder in Codex (Desktop or `codex`) and describe the task.
 Example: "Task: add input validation to `<repo>/src/x.ts`; working directory `<repo>`; tests must pass."
-The orchestrator follows `AGENTS.md`: it creates `work/<task>/CHECKPOINT.md`, picks roles, models and efforts,
+The orchestrator follows `AGENTS.md`: it creates `work/<task>/CHECKPOINT.md`, picks duties, models and efforts,
 delegates, records every agent and reports the result.
+
+**Legacy repository mode (optional):** open this Hub repository and use the commands below to manage Hub-rooted records and maintenance surfaces.
 
 To continue a task in the other vendor (quota, preference): "Continue task `<slug>` from `work/<slug>/CHECKPOINT.md`."
 
