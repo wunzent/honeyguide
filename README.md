@@ -1,11 +1,13 @@
 # Multi-Agent Hub (minimal native, Claude Code + Codex)
 
 ## Portable Codex skill
-Install the owned native-first Codex skill with `python tools/install_hub_skill.py` (or `python tools/install_hub_skill.py --dest <skill-directory>` for a chosen native skill path), then invoke `$multi-agent-hub` from any software project. Re-run the same command to update it; prior managed versions are retained outside the scanned skills directory. It needs no Hub project card or dashboard. The optional helper writes `.multi-agent-hub` task data in the current project and reuses the existing Hub runtime. Native work remains available without Python. Installation does not configure the CLI or install third-party skills.
+Install the owned native-first skill with `python tools/install_hub_skill.py` for Codex, `--vendor claude` for Claude Code, or `--vendor both` for both native user locations. `--dest <skill-directory>` remains available for a chosen path and cannot be combined with non-default vendor selection. Invoke `$multi-agent-hub` in Codex or `/multi-agent-hub` in Claude Code. Re-run the same command to update managed copies; prior versions are retained outside scanned skill directories. It needs no Hub project card or dashboard. The optional helper writes `.multi-agent-hub` task data in the current project and reuses the existing Hub runtime. Native work remains available without Python. Installation does not configure the CLI or install third-party skills.
 
 A small shared workspace in which **Claude Code or Codex** acts as the orchestrator, builds a team with duties defined
 per assignment and two generic permission shells, delegates within and across vendors, and keeps readable records and checkpoints.
 There is no engine, scheduler, dashboard or approval ceremony: planning, skills and subagents are the CLIs' own.
+
+Native spawning also follows the active runtime and Owner policies. If an Owner policy requires explicit consent, the user can authorize task-level delegation by asking the orchestrator to use Hub and delegate when its risk assessment calls for review; no fixed business roles or team are needed. Otherwise, required review remains BLOCKED. The installer refuses unmanaged, modified, or differently shaped managed packages. Do not blindly overwrite a larger or newer package installed by another worktree; use an isolated destination and preserve that package.
 
 ## Start a task
 **From Claude Code:** open this folder in Claude Code (Desktop Code tab or `claude`) and describe the task.

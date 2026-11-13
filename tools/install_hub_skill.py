@@ -114,10 +114,18 @@ def install(destination):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dest", type=Path, help="native skill directory (default: ~/.codex/skills/multi-agent-hub)")
+    parser.add_argument("--dest", type=Path, help="native skill directory (default: vendor's native user skill directory)")
+    parser.add_argument("--vendor", choices=("codex", "claude", "both"), default="codex",
+                        help="native user skill location(s); default: codex")
     args = parser.parse_args(argv)
     try:
-        install(args.dest or Path.home() / ".codex/skills/multi-agent-hub")
+        if args.dest and args.vendor != "codex":
+            parser.error("--dest cannot be combined with --vendor claude or both")
+        destinations = ([args.dest] if args.dest else
+                        [Path.home() / (".claude/skills/multi-agent-hub" if vendor == "claude" else ".codex/skills/multi-agent-hub")
+                         for vendor in (("codex", "claude") if args.vendor == "both" else (args.vendor,))])
+        for destination in destinations:
+            install(destination)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     return 0

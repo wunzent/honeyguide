@@ -65,7 +65,10 @@ if argv[0] == 'exec':
         model = 'wrong-model'
     directory = pathlib.Path(os.environ['HUB_CODEX_SESSIONS']) / 'nested'
     directory.mkdir(parents=True, exist_ok=True)
-    events = [{'type': 'turn_context', 'payload': {'model': model, 'effort': effort}},
+    metadata_payload = [] if mode == 'bad-meta' else {'id': 'other-thread' if mode == 'bad-header' else 'thread123'}
+    turn_payload = [] if mode == 'bad-turn' else {'model': model, 'effort': effort}
+    events = [{'type': 'session_meta', 'payload': metadata_payload},
+              {'type': 'turn_context', 'payload': turn_payload},
               {'type': 'event_msg', 'payload': {'type': 'token_count', 'info': {'total_token_usage': {'total_tokens': 123}}}}]
     if mode == 'multiple':
         events.append({'type': 'turn_context', 'payload': {'model': 'other-model', 'effort': 'high'}})
@@ -415,7 +418,8 @@ def test_resume_verifies_only_new_turns(hub, earlier_model, mode, expected):
     fake(hub, "codex")
     route(hub)
     rollout = next(Path(hub[1]["HUB_CODEX_SESSIONS"]).rglob("rollout-*.jsonl"))
-    previous = [{"type": "turn_context", "payload": {
+    previous = [{"type": "session_meta", "payload": {"id": "thread123"}},
+                {"type": "turn_context", "payload": {
         "model": earlier_model, "effort": "low" if earlier_model == "gpt-6.1-sol" else "high"}}]
     rollout.write_text("\n".join(json.dumps(event) for event in previous) + "\n", encoding="utf-8")
     hub[1]["FAKE_MODE"] = mode
@@ -424,6 +428,74 @@ def test_resume_verifies_only_new_turns(hub, earlier_model, mode, expected):
                                        "no-evidence": "Unverified"}[mode]
     assert summary["actual_effort"] == ("Unverified" if mode == "no-evidence" else "low")
     assert summary["status"] == ("done" if expected == 0 else "failed")
+
+
+@pytest.mark.parametrize("root_kind", ["absolute", "relative", "symlink"])
+def test_resume_uses_resolved_session_offset_keys(hub, root_kind):
+    root, env, _ = hub
+    session_root = Path(env["HUB_CODEX_SESSIONS"])
+    if root_kind == "relative":
+        relative = os.path.relpath(session_root, root)
+        env["HUB_CODEX_SESSIONS"] = relative
+    elif root_kind == "symlink":
+        session_root.mkdir(parents=True)
+        linked = root / "session-link"
+        try:
+            linked.symlink_to(session_root, target_is_directory=True)
+        except OSError:
+            pytest.skip("directory symlink creation unavailable")
+        env["HUB_CODEX_SESSIONS"] = str(linked)
+    fake(hub, "codex")
+    route(hub)
+    rollout = next(session_root.rglob("rollout-*.jsonl"))
+    rollout.write_text(json.dumps({"type": "session_meta", "payload": {"id": "thread123"}}) + "\n" +
+                       json.dumps({"type": "turn_context", "payload": {"model": "old-model", "effort": "high"}}) + "\n",
+                       encoding="utf-8")
+    hub[1]["FAKE_MODE"] = "success"
+    summary = json.loads(route(hub, extra=("--resume", "coder-1")))
+    assert summary["status"] == "done"
+    assert summary["actual_model"] == "gpt-6.1-sol"
+
+
+def test_codex_verification_rejects_mismatched_session_header(hub, monkeypatch):
+    root, env, _ = hub
+    spec = importlib.util.spec_from_file_location("hub_header_test", root / "tools/hub.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    session_root = Path(env["HUB_CODEX_SESSIONS"])
+    rollout = session_root / "rollout-2026-11-13T10-43-21-thread123.jsonl"
+    rollout.parent.mkdir(parents=True)
+    rollout.write_text(json.dumps({"type": "session_meta", "payload": {"id": "another-thread"}}) + "\n" +
+                       json.dumps({"type": "turn_context", "payload": {"model": "gpt-6.1-sol", "effort": "low"}}),
+                       encoding="utf-8")
+    monkeypatch.setenv("HUB_CODEX_SESSIONS", str(session_root))
+    event_path = root / "worker-events.jsonl"
+    event_path.write_text(json.dumps({"type": "thread.started", "thread_id": "thread123"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="metadata id"):
+        module.verify("codex", event_path)
+    outside = root / "outside.jsonl"
+    outside.write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="escapes configured session"):
+        module.codex_event_path(outside)
+
+
+@pytest.mark.parametrize("mode,diagnostic", [
+    ("bad-header", "session metadata id does not match"),
+    ("bad-meta", "session metadata payload must be an object"),
+    ("bad-turn", "turn context payload must be an object"),
+])
+def test_rejected_codex_evidence_finalizes_exited_worker(hub, mode, diagnostic):
+    fake(hub, "codex")
+    hub[1]["FAKE_MODE"] = mode
+    summary = json.loads(route(hub, expected=1))
+    assert summary["status"] == "failed" and summary["exit"] == 1
+    assert summary["actual_model"] == "Unverified"
+    text = record(hub)
+    assert "| Status | failed |" in text
+    assert "| PID | Unknown |" in text
+    assert "evidence verification failed: Codex " + diagnostic in text
+    artifact = Path(hub[0] / "work/sample/agents/coder-1.last.md")
+    assert artifact.read_text(encoding="utf-8") == "Codex finished with evidence"
 
 
 @pytest.mark.parametrize("still_running", [True, False])
