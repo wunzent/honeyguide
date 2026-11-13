@@ -187,6 +187,10 @@ def codex_session_dir():
     return Path(os.environ.get("HUB_CODEX_SESSIONS", str(Path.home() / ".codex/sessions")))
 
 
+def is_windows():
+    return os.name == "nt"
+
+
 def verify(vendor, event_path, rollout_offsets=None):
     data = list(events(event_path))
     models, efforts, session, tokens, result, resume_id = [], [], "Unknown", "Unknown", "", "Unknown"
@@ -297,12 +301,16 @@ def delegate(args):
             timed_out = False
             kill_failure = ""
             rollout_offsets = {path: path.stat().st_size for path in codex_session_dir().rglob("rollout-*.jsonl")} if args.to == "codex" else {}
+            child_env = None
+            if args.to == "codex" and is_windows():
+                child_env = os.environ.copy()
+                child_env.pop("CODEX_WINDOWS_REGISTERED_CORE", None)
             # Publish the PID while holding the same lock used by stop, so stop
             # cannot race process creation or the final status update.
             with task_lock(directory.parent):
                 process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                            text=True, encoding="utf-8", errors="replace", cwd=cwd,
-                                           start_new_session=os.name != "nt")
+                                           start_new_session=os.name != "nt", **({"env": child_env} if child_env is not None else {}))
                 path = directory / (agent_id + ".md")
                 write_agent(path, path.read_text(encoding="utf-8"), {"PID": process.pid})
             try:
