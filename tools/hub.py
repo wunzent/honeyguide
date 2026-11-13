@@ -147,6 +147,41 @@ def new_task(args):
     content += "".join(f"## {name}\n{bodies.get(name, 'Unknown')}\n\n" for name in SECTIONS)
     write(path / "CHECKPOINT.md", content)
     (path / "agents").mkdir()
+    exclude_records_locally()
+
+
+def exclude_records_locally():
+    """Portable mode: keep `.multi-agent-hub/` out of `git status` through the local info/exclude when writable."""
+    if os.environ.get("HUB_PORTABLE") != "1" or records_root().name != ".multi-agent-hub":
+        return
+    try:
+        project = records_root().parent
+        git = next((parent / ".git" for parent in (project, *project.parents) if (parent / ".git").exists()), None)
+        if git is None:
+            return
+        if git.is_file():  # worktree or submodule: ".git" holds "gitdir: <path>"
+            line = git.read_text(encoding="utf-8").strip()
+            if not line.startswith("gitdir:"):
+                return
+            git = (git.parent / line[7:].strip()).resolve()
+            if not (git / "HEAD").is_file():  # a hostile gitdir must look like a real git directory
+                return
+            if (git / "commondir").is_file():
+                git = (git / (git / "commondir").read_text(encoding="utf-8").strip()).resolve()
+                if not ((git / "HEAD").is_file() and (git / "objects").is_dir()):
+                    return
+        exclude = git / "info/exclude"
+        if exclude.is_symlink():
+            return
+        current = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
+        if any(entry.strip() in (".multi-agent-hub", ".multi-agent-hub/", "/.multi-agent-hub", "/.multi-agent-hub/")
+               for entry in current.splitlines()):
+            return
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        separator = "" if not current or current.endswith("\n") else "\n"
+        exclude.write_text(current + separator + ".multi-agent-hub/\n", encoding="utf-8")
+    except (OSError, ValueError):
+        pass  # best effort: a read-only repository is not an error
 
 
 def new_agent(args, kind=None):
@@ -205,8 +240,17 @@ def write_agent(path, content, fields=None, entries=None):
     write(path, content)
 
 
-def events(path, offset=0):
-    path = record_path(path)
+def session_path(path):
+    """Read-only access to a Codex rollout: allowed only under the Codex session root, never for records."""
+    path = Path(path)
+    root = codex_session_dir().resolve()
+    if not path.resolve().is_relative_to(root):
+        raise ValueError("session path escapes the Codex session root")
+    return path
+
+
+def events(path, offset=0, session=False):
+    path = session_path(path) if session else record_path(path)
     with path.open("rb") as stream:
         stream.seek(offset)
         text = stream.read().decode("utf-8-sig")
@@ -242,7 +286,7 @@ def verify(vendor, event_path, rollout_offsets=None):
                          if isinstance(thread, str) and thread and p.name.endswith(thread + ".jsonl")) if thread else []
         if matches:
             session = matches[-1].name
-            for event in events(matches[-1], (rollout_offsets or {}).get(matches[-1], 0)):
+            for event in events(matches[-1], (rollout_offsets or {}).get(matches[-1], 0), session=True):
                 payload = event.get("payload") or {}
                 if event.get("type") == "turn_context":
                     models.append(payload.get("model"))
@@ -390,7 +434,8 @@ def delegate(args):
                 status, code, blocker = "failed", 3, "route mismatch or missing verification evidence"
             else:
                 status, code = "done", 0
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
+            # Verification problems must end the record as failed, never leave it running.
             status, code, blocker = "failed", 1, str(exc)
     event_path = record_path(event_path)
     last = record_path(last)

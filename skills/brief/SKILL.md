@@ -61,12 +61,15 @@ REPORT FILE: work/<task>/reports/<agent-id>.md
 ## Duty notes
 These are optional duty names, not agent types, skills, a fixed team or a complete list. Compose a duty in the brief
 and choose `hub-writer` or `hub-readonly` for permissions. Add these essentials when that duty fits:
-- coder: implement only the assigned slice with the smallest correct diff; follow existing layers; self-review scope
+- coder: implement only the assigned slice with the smallest correct diff; follow existing layers; when purpose,
+  interface, behaviour, dependencies or operations of a component change, update that component's documentation in
+  the same task (`software-component` when available), none for internal behaviour-preserving work; self-review scope
   and error paths, run assigned checks; after findings, append fix evidence to the same report.
 - planner: write only assigned plans/specs; cite sources, map requirements to files and checks, order dependencies,
   give at most eight bounded prompts; mark inferred dependencies and blocking product questions.
 - reviewer: read-only, independent fresh context; state the goal, check for a simpler route, then spec compliance
-  (Missing/Extra/Misunderstood), scope, correctness and errors. Read outside the diff only for a named risk. Treat
+  (Missing/Extra/Misunderstood), scope, correctness, errors and code-documentation consistency. Read outside the
+  diff only for a named risk. Treat
   claims as unverified. Report PASS/FAIL, Goal, Spec, Traced, Cannot verify, and at most ten issues with severity,
   file:line, problem and fix. Critical/Important blocks PASS; Minor does not. Re-review only named findings and the
   fix diff, with ADDRESSED/NOT ADDRESSED per finding. Do not rerun a suite without a specific doubt.

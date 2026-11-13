@@ -701,3 +701,61 @@ def test_concurrent_log_appends(hub):
     assert len(lines) == len(messages)
     assert {line.split("[sample] ", 1)[1] for line in lines} == set(messages)
     assert not (hub[0] / "work/log/.lock").exists()
+
+
+def load_hub_module(root, name):
+    spec = importlib.util.spec_from_file_location(name, root / "tools/hub.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_portable_codex_worker_finalizes_with_session_root_read(hub):
+    fake(hub, "codex")
+    hub[1]["HUB_PORTABLE"] = "1"  # record paths are confined to work/, the Codex session root is outside it
+    summary = json.loads(route(hub, extra=("--write", "--cwd", str(hub[0]))))
+    assert summary["status"] == "done" and summary["actual_model"] == "gpt-6.1-sol" and summary["actual_effort"] == "low"
+    text = record(hub)
+    assert "| Status | done |" in text and "rollout-test-thread123.jsonl" in text and "Total tokens: 123" in text
+
+
+def test_session_read_is_confined_to_codex_session_root(hub, tmp_path, monkeypatch):
+    root, env, _ = hub
+    module = load_hub_module(root, "hub_session_confinement_test")
+    monkeypatch.setenv("HUB_PORTABLE", "1")
+    monkeypatch.setenv("HUB_CODEX_SESSIONS", env["HUB_CODEX_SESSIONS"])
+    sessions = Path(env["HUB_CODEX_SESSIONS"]) / "nested"
+    sessions.mkdir(parents=True)
+    inside, outside = sessions / "rollout-a.jsonl", tmp_path / "outside.jsonl"
+    inside.write_text('{"type": "turn_context"}\n', encoding="utf-8")
+    outside.write_text('{"type": "turn_context"}\n', encoding="utf-8")
+    assert list(module.events(inside, session=True)) == [{"type": "turn_context"}]
+    with pytest.raises(ValueError, match="session root"):
+        list(module.events(outside, session=True))
+    with pytest.raises(ValueError, match="session root"):
+        list(module.events(sessions / ".." / ".." / "outside.jsonl", session=True))
+    with pytest.raises(ValueError, match="record path escapes"):  # the records guard is unchanged
+        module.record_path(inside)
+    with pytest.raises(ValueError, match="record path escapes"):
+        list(module.events(inside))
+
+
+def test_verification_error_ends_worker_record_as_failed(hub, monkeypatch, capsys):
+    root, env, _ = hub
+    fake(hub, "codex")
+    module = load_hub_module(root, "hub_verify_failure_test")
+    for key in ("PATH", "FAKE_LOG", "FAKE_MODE", "HUB_CODEX_SESSIONS"):
+        monkeypatch.setenv(key, env[key])
+    monkeypatch.delenv("HUB_SIMULATE_QUOTA", raising=False)
+
+    def refuse(*args, **kwargs):
+        raise ValueError("session path escapes the Codex session root")
+
+    monkeypatch.setattr(module, "verify", refuse)
+    args = module.parser().parse_args(["delegate", "sample", "--to", "codex", "--role", "coder", "--model", "gpt-6.1-sol",
+                                       "--effort", "low", "--brief", str(root / "brief.txt"),
+                                       "--reason", "Focused implementation", "--parent", "codex"])
+    assert module.delegate(args) == 1
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"
+    text = record(hub)
+    assert "| Status | failed |" in text and "escapes the Codex session root" in text
