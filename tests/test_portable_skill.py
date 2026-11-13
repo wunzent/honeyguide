@@ -64,7 +64,8 @@ def test_installer_repeated_updates_keep_managed_backups_and_refuse_changes(tmp_
     target = tmp_path / "home/.codex/skills/multi-agent-hub"
     installer.install(target)
     marker = json.loads((target / installer.MARKER).read_text(encoding="utf-8"))
-    expected_files = set(installer.FILES) | {"runtime/" + name for name in installer.RUNTIME}
+    expected_files = set(installer.bundle())
+    assert {"agents/hub-readonly.md", "agents/hub-writer.md", "skills/software-component/SKILL.md"} <= expected_files
     assert set(marker["files"]) == expected_files
     assert all((target / name).is_file() for name in expected_files)
     assert (target / "runtime/hub.py").read_bytes() == (ROOT / "tools/hub.py").read_bytes()
@@ -114,7 +115,7 @@ def test_failed_update_restores_previous_active_skill(tmp_path, monkeypatch):
     real_rename = Path.rename
 
     def fail_new_bundle(self, destination):
-        if self.parent.name.startswith(".multi-agent-hub-install-") and Path(destination) == target:
+        if self.parent.name.startswith(".mah-install-") and Path(destination) == target:
             raise OSError("injected replacement failure")
         return real_rename(self, destination)
 
@@ -227,3 +228,191 @@ def test_portable_attempt_history_detects_repeated_no_progress(tmp_path):
     assert second.returncode == 5
     assert "NO PROGRESS" in second.stdout
     assert len((project / ".multi-agent-hub/sample/attempts.jsonl").read_text().splitlines()) == 2
+
+
+def test_default_install_has_no_claude_destination_or_agents(tmp_path, monkeypatch):
+    installer = load_installer()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+    installer.main([])
+    assert (tmp_path / "home/.codex/skills/multi-agent-hub" / installer.MARKER).is_file()
+    assert not (tmp_path / "home/.claude").exists()
+    with pytest.raises(SystemExit):
+        installer.main(["--claude", "--dest", str(tmp_path / "x")])
+    with pytest.raises(SystemExit):
+        installer.main(["--claude-home", str(tmp_path / "x")])
+    assert not (tmp_path / "x").exists()
+
+
+def test_claude_install_places_skill_and_permission_shells(tmp_path):
+    installer = load_installer()
+    home = tmp_path / "claude"
+    installer.main(["--claude", "--claude-home", str(home)])
+    skill = home / "skills/multi-agent-hub"
+    assert (skill / "SKILL.md").is_file() and (skill / "skills/software-component/SKILL.md").is_file()
+    readonly = (home / "agents/hub-readonly.md").read_text(encoding="utf-8")
+    writer = (home / "agents/hub-writer.md").read_text(encoding="utf-8")
+    assert "\ntools: Read, Grep, Glob\n" in readonly and "Bash" not in readonly.split("---")[1]
+    assert 'name: "hub-writer"' in writer
+    generated = ROOT / ".claude/agents/hub-readonly.md"
+    if generated.is_file():  # same bytes as `hub.py sync` produces
+        assert generated.read_bytes().replace(b"\r\n", b"\n") == readonly.encode()
+    managed = json.loads((home / "agents" / installer.MARKER).read_text(encoding="utf-8"))
+    assert set(managed["files"]) == {"hub-readonly.md", "hub-writer.md"}
+    installer.main(["--claude", "--claude-home", str(home)])  # idempotent update of managed files
+    assert (home / "agents/hub-readonly.md").read_text(encoding="utf-8") == readonly
+
+
+def test_claude_install_refuses_unmanaged_or_modified_agents_before_any_write(tmp_path):
+    installer = load_installer()
+    home = tmp_path / "claude"
+    (home / "agents").mkdir(parents=True)
+    (home / "agents/hub-writer.md").write_text("owner agent", encoding="utf-8")
+    (home / "agents/other.md").write_text("keep", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        installer.main(["--claude", "--claude-home", str(home)])
+    assert (home / "agents/hub-writer.md").read_text(encoding="utf-8") == "owner agent"
+    assert not (home / "skills").exists() and not (home / "agents/hub-readonly.md").exists()
+    clean = tmp_path / "claude2"
+    installer.main(["--claude", "--claude-home", str(clean)])
+    (clean / "agents/hub-readonly.md").write_text("local edit", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        installer.main(["--claude", "--claude-home", str(clean)])
+    assert (clean / "agents/hub-readonly.md").read_text(encoding="utf-8") == "local edit"
+    with pytest.raises(ValueError, match="modified"):
+        installer.check_claude_agents(clean / "agents", installer.claude_agent_files())
+
+
+def test_older_smaller_managed_bundle_can_be_updated(tmp_path):
+    installer = load_installer()
+    target = tmp_path / "skill"
+    installer.install(target)
+    marker = json.loads((target / installer.MARKER).read_text(encoding="utf-8"))
+    for name in [n for n in marker["files"] if n.startswith(("skills/", "agents/"))]:
+        (target / name).unlink()
+        del marker["files"][name]
+    for directory in sorted((p for p in target.rglob("*") if p.is_dir()), reverse=True):
+        if not any(directory.iterdir()):
+            directory.rmdir()
+    (target / installer.MARKER).write_text(json.dumps(marker), encoding="utf-8")
+    installer.install(target)
+    assert (target / "skills/software-component/SKILL.md").is_file()
+
+
+def run_task_new(tmp_path, project, name="sample"):
+    wrapper = tmp_path / "home/.codex/skills/multi-agent-hub/scripts/run.py"
+    if not wrapper.is_file():
+        installed_wrapper(tmp_path)
+    return subprocess.run([PYTHON, str(wrapper), "task", "new", name, "--objective", "x", "--scope", "y",
+                           "--orchestrator", "claude"], cwd=project, env=isolated_env(tmp_path / "empty-user"),
+                          text=True, capture_output=True)
+
+
+def test_claude_install_midway_failure_never_strands_unmanaged_files(tmp_path, monkeypatch):
+    installer = load_installer()
+    home = tmp_path / "claude"
+    real = installer.write_atomic
+    state = {"agents": 0}
+
+    def fail_second_agent(path, data):
+        if path.parent.name == "agents" and path.suffix == ".md":
+            state["agents"] += 1
+            if state["agents"] == 2:
+                raise OSError("injected agent write failure")
+        return real(path, data)
+
+    monkeypatch.setattr(installer, "write_atomic", fail_second_agent)
+    with pytest.raises(SystemExit):
+        installer.main(["--claude", "--claude-home", str(home)])
+    marker = json.loads((home / "agents" / installer.MARKER).read_text(encoding="utf-8"))
+    written = {path.name for path in (home / "agents").glob("*.md")}
+    assert set(marker["files"]) == written == {"hub-readonly.md"}
+    assert marker["files"]["hub-readonly.md"] == installer.digest_bytes((home / "agents/hub-readonly.md").read_bytes())
+    monkeypatch.setattr(installer, "write_atomic", real)
+    installer.main(["--claude", "--claude-home", str(home)])  # the retry is not blocked by stranded files
+    assert set(json.loads((home / "agents" / installer.MARKER).read_text(encoding="utf-8"))["files"]) == {"hub-readonly.md", "hub-writer.md"}
+
+
+def test_codex_agents_opt_in_matches_sync_and_refuses_unowned_files(tmp_path, monkeypatch):
+    installer = load_installer()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+    installer.main([])
+    assert not (tmp_path / "home/.codex/agents").exists()  # no default write
+    home = tmp_path / "codex"
+    installer.main(["--codex-agents", "--codex-home", str(home)])
+    assert not (home / "skills").exists()
+    for name in ("hub-readonly.toml", "hub-writer.toml"):
+        generated = ROOT / ".codex/agents" / name
+        installed = (home / "agents" / name).read_bytes()
+        if generated.is_file():
+            assert generated.read_bytes().replace(b"\r\n", b"\n") == installed
+    assert b'sandbox_mode = "read-only"' in (home / "agents/hub-readonly.toml").read_bytes()
+    installer.main(["--codex-agents", "--codex-home", str(home)])  # idempotent
+    (home / "agents/hub-writer.toml").write_text("local edit", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        installer.main(["--codex-agents", "--codex-home", str(home)])
+    assert (home / "agents/hub-writer.toml").read_text(encoding="utf-8") == "local edit"
+    other = tmp_path / "codex2"
+    (other / "agents").mkdir(parents=True)
+    (other / "agents/hub-readonly.toml").write_text("owner file", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        installer.main(["--codex-agents", "--codex-home", str(other)])
+    assert (other / "agents/hub-readonly.toml").read_text(encoding="utf-8") == "owner file"
+    assert not (other / "agents/hub-writer.toml").exists()
+    with pytest.raises(SystemExit):
+        installer.main(["--codex-home", str(other)])
+    with pytest.raises(SystemExit):
+        installer.main(["--codex-agents", "--dest", str(tmp_path / "x")])
+
+
+def test_agent_replacement_is_undone_when_its_hash_cannot_be_recorded(tmp_path, monkeypatch):
+    installer = load_installer()
+    agents = tmp_path / "agents"
+    files = installer.claude_agent_files()
+    real = installer.write_atomic
+
+    def fail_marker(path, data):
+        if path.name == installer.MARKER:
+            raise OSError("injected marker failure")
+        return real(path, data)
+
+    monkeypatch.setattr(installer, "write_atomic", fail_marker)
+    with pytest.raises(OSError, match="marker"):  # first install: the unrecorded file is removed
+        installer.write_agents(agents, files)
+    assert not (agents / "hub-readonly.md").exists()
+    monkeypatch.setattr(installer, "write_atomic", real)
+    installer.write_agents(agents, files)
+    old = (agents / "hub-readonly.md").read_bytes()
+    newer = dict(files, **{"hub-readonly.md": files["hub-readonly.md"] + b"changed\n"})
+    monkeypatch.setattr(installer, "write_atomic", fail_marker)
+    with pytest.raises(OSError, match="marker"):  # update: the previous recorded bytes come back
+        installer.write_agents(agents, newer)
+    assert (agents / "hub-readonly.md").read_bytes() == old
+    monkeypatch.setattr(installer, "write_atomic", real)
+    installer.write_agents(agents, newer)  # next installation is not refused
+    assert (agents / "hub-readonly.md").read_bytes() == newer["hub-readonly.md"]
+
+
+def tree_digest(root):
+    import hashlib
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        digest.update(path.relative_to(root).as_posix().encode())
+        if path.is_file():
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def test_portable_task_new_prints_hint_and_never_touches_git(tmp_path):
+    project = tmp_path / "repo"
+    (project / ".git/info").mkdir(parents=True)
+    (project / ".git/HEAD").write_text("ref: refs/heads/main", encoding="utf-8")
+    (project / ".git/info/exclude").write_text("# keep", encoding="utf-8")
+    before = tree_digest(project / ".git")
+    result = run_task_new(tmp_path, project)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Records are in .multi-agent-hub/; keep them out of commits" in result.stdout
+    assert ".git/info/exclude" in result.stdout
+    assert tree_digest(project / ".git") == before
+    assert (project / ".multi-agent-hub/sample/CHECKPOINT.md").is_file()
