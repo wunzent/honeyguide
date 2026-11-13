@@ -476,3 +476,96 @@ def test_portable_task_new_prints_hint_and_never_touches_git(tmp_path):
     assert ".git/info/exclude" in result.stdout
     assert tree_digest(project / ".git") == before
     assert (project / ".multi-agent-hub/sample/CHECKPOINT.md").is_file()
+
+
+def test_update_refuses_linked_backup_root_and_keeps_active_install(tmp_path):
+    installer = load_installer()
+    target = tmp_path / "home/.codex/skills/multi-agent-hub"
+    installer.install(target)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    try:
+        (target.parent.parent / ".multi-agent-hub-backups").symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlinks unavailable")
+    before = (target / installer.MARKER).read_bytes()
+    with pytest.raises(ValueError, match="backup"):
+        installer.install(target)
+    assert (target / installer.MARKER).read_bytes() == before and (target / "SKILL.md").is_file()
+    assert not list(outside.iterdir()) and not list(target.parent.glob(".mah-install-*"))
+
+
+def test_stage_dir_is_plain_mkdir_not_mkdtemp(tmp_path, monkeypatch):
+    installer = load_installer()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("mkdtemp applies an owner-only ACL on Windows")
+
+    monkeypatch.setattr(installer.tempfile, "mkdtemp", forbidden)
+    target = tmp_path / "skills/multi-agent-hub"
+    installer.install(target)
+    installer.install(target)
+    assert (target / "SKILL.md").is_file() and not list(target.parent.glob(".mah-install-*"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="icacls is Windows-only")
+def test_installed_dir_inherits_parent_acl_on_windows(tmp_path):
+    installer = load_installer()
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    # An explicit Users entry on the parent must reach the installed files; an owner-only stage ACL would drop it.
+    grant = subprocess.run(["icacls", str(skills), "/grant", "*S-1-5-32-545:(OI)(CI)(RX)"], text=True, capture_output=True)
+    assert grant.returncode == 0, grant.stdout + grant.stderr
+    target = skills / "multi-agent-hub"
+    installer.install(target)
+    installer.install(target)
+    for path in (target, target / "SKILL.md", target / "references/brief.md"):
+        output = subprocess.run(["icacls", str(path)], text=True, capture_output=True).stdout
+        assert "Users:(I)" in output, output
+
+
+def test_update_refuses_junction_backup_root_inside_parent(tmp_path, monkeypatch):
+    installer = load_installer()
+    target = tmp_path / "home/.codex/skills/multi-agent-hub"
+    installer.install(target)
+    backup_root = target.parent.parent / ".multi-agent-hub-backups"
+    elsewhere = target.parent.parent / "elsewhere"  # a junction target inside the allowed parent still passes the resolve check
+    elsewhere.mkdir()
+    backup_root.mkdir()
+    real = Path.is_junction if hasattr(Path, "is_junction") else None
+    monkeypatch.setattr(Path, "is_junction", lambda self: self == backup_root or (real(self) if real else False), raising=False)
+    before = (target / installer.MARKER).read_bytes()
+    with pytest.raises(ValueError, match="junction"):
+        installer.install(target)
+    assert (target / installer.MARKER).read_bytes() == before and (target / "SKILL.md").is_file()
+    assert not list(backup_root.iterdir()) and not list(target.parent.glob(".mah-install-*"))
+
+
+def test_update_refuses_reparse_point_backup_root_without_is_junction(tmp_path, monkeypatch):
+    installer = load_installer()
+    target = tmp_path / "home/.codex/skills/multi-agent-hub"
+    installer.install(target)
+    backup_root = target.parent.parent / ".multi-agent-hub-backups"
+    backup_root.mkdir()
+    if hasattr(Path, "is_junction"):
+        monkeypatch.delattr(Path, "is_junction")  # simulate Python 3.11
+    real_lstat = os.lstat
+
+    class Faked:
+        def __init__(self, real):
+            self.real = real
+            self.st_file_attributes = getattr(real, "st_file_attributes", 0) | 0x400  # FILE_ATTRIBUTE_REPARSE_POINT
+
+        def __getattr__(self, name):
+            return getattr(self.real, name)
+
+    def lstat(path, *args, **kwargs):
+        result = real_lstat(path, *args, **kwargs)
+        return Faked(result) if Path(path) == backup_root else result
+
+    monkeypatch.setattr(installer.os, "lstat", lstat)
+    before = (target / installer.MARKER).read_bytes()
+    with pytest.raises(ValueError, match="junction"):
+        installer.install(target)
+    assert (target / installer.MARKER).read_bytes() == before and (target / "SKILL.md").is_file()
+    assert not list(backup_root.iterdir()) and not list(target.parent.glob(".mah-install-*"))

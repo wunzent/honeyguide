@@ -237,7 +237,7 @@ def test_codex_mismatch_and_missing_evidence(hub):
         hub[1]["FAKE_MODE"] = mode
         for path in Path(hub[1]["HUB_CODEX_SESSIONS"]).rglob("*.jsonl"):
             path.unlink()
-        summary = json.loads(route(hub, expected=3))
+        summary = json.loads(route(hub, expected=3 if mode == "mismatch" else 1))  # no evidence at all is a verification error
         assert summary["status"] == "failed"
         assert summary["actual_model"] == ("wrong-model" if mode == "mismatch" else "Unverified")
 
@@ -831,3 +831,126 @@ def test_verification_error_ends_worker_record_as_failed(hub, monkeypatch, capsy
     assert json.loads(capsys.readouterr().out)["status"] == "failed"
     text = record(hub)
     assert "| Status | failed |" in text and "escapes the Codex session root" in text
+
+
+def test_escaping_output_symlink_is_refused_before_dispatch(hub):
+    root, env, _ = hub
+    fake(hub, "codex")
+    env["HUB_PORTABLE"] = "1"
+    outside = root.parent / "outside"
+    outside.mkdir()
+    try:
+        (root / "work/sample/agents/coder-1.last.md").symlink_to(outside / "victim.md")
+    except OSError:
+        pytest.skip("symlink creation unavailable")
+    # the first free id is coder-1 only if the link does not collide with its record; the link is the future output
+    output = route(hub, expected=2)
+    assert output.startswith("REFUSED:") and "escapes" in output
+    assert not Path(env["FAKE_LOG"]).exists() and not (outside / "victim.md").exists()
+    assert "| Status | running |" not in record(hub)
+    assert "| Status | failed |" in record(hub)
+
+
+def make_state_db(env, rows, table="threads"):
+    import sqlite3
+    home = Path(env["HUB_CODEX_SESSIONS"]).parent
+    home.mkdir(exist_ok=True)
+    connection = sqlite3.connect(home / "state_5.sqlite")
+    if table:
+        connection.execute(f"CREATE TABLE {table} (id TEXT, model TEXT, reasoning_effort TEXT, rollout_path TEXT)")
+        connection.executemany(f"INSERT INTO {table} VALUES (?, ?, ?, ?)", rows)
+    connection.commit()
+    connection.close()
+    return home / "state_5.sqlite"
+
+
+@pytest.mark.parametrize("case", ["hit", "missing-row", "wrong-id", "missing-table", "missing-db"])
+def test_codex_verification_reads_state_database_without_rollout(hub, monkeypatch, case):
+    root, env, _ = hub
+    module = load_hub_module(root, "hub_state_db_test_" + case.replace("-", "_"))
+    monkeypatch.setenv("HUB_CODEX_SESSIONS", env["HUB_CODEX_SESSIONS"])
+    monkeypatch.delenv("HUB_CODEX_HOME", raising=False)
+    rows = {"hit": [("thread123", "gpt-6.1-sol", "low", "missing.jsonl")], "missing-row": [],
+            "wrong-id": [("thread1234", "gpt-6.1-sol", "low", "x"), ("other", "gpt-6.1-sol", "low", "x")]}
+    if case != "missing-db":
+        db = make_state_db(env, rows.get(case, []), table=None if case == "missing-table" else "threads")
+        before = db.read_bytes()
+    event_path = root / "worker-events.jsonl"
+    event_path.write_text(json.dumps({"type": "thread.started", "thread_id": "thread123"}), encoding="utf-8")
+    if case == "hit":
+        models, efforts, session, _, _, resume = module.verify("codex", event_path)
+        assert models == ["gpt-6.1-sol"] and efforts == ["low"] and resume == "thread123" and "thread123" in session
+        assert db.read_bytes() == before
+    else:
+        with pytest.raises(ValueError, match="evidence|database"):
+            module.verify("codex", event_path)
+
+
+def test_codex_home_override_and_rollout_first(hub, monkeypatch):
+    root, env, _ = hub
+    module = load_hub_module(root, "hub_state_db_home_test")
+    monkeypatch.setenv("HUB_CODEX_SESSIONS", env["HUB_CODEX_SESSIONS"])
+    other = root.parent / "other-home"
+    other.mkdir()
+    import sqlite3
+    connection = sqlite3.connect(other / "state_5.sqlite")
+    connection.execute("CREATE TABLE threads (id TEXT, model TEXT, reasoning_effort TEXT, rollout_path TEXT)")
+    connection.execute("INSERT INTO threads VALUES ('thread123', 'db-model', 'high', 'x')")
+    connection.commit()
+    connection.close()
+    monkeypatch.setenv("HUB_CODEX_HOME", str(other))
+    event_path = root / "worker-events.jsonl"
+    event_path.write_text(json.dumps({"type": "thread.started", "thread_id": "thread123"}), encoding="utf-8")
+    assert module.verify("codex", event_path)[:2] == (["db-model"], ["high"])
+    rollout = Path(env["HUB_CODEX_SESSIONS"]) / "rollout-2026-11-13T10-43-21-thread123.jsonl"
+    rollout.parent.mkdir(parents=True)
+    rollout.write_text(json.dumps({"type": "session_meta", "payload": {"id": "thread123"}}) + "\n" +
+                       json.dumps({"type": "turn_context", "payload": {"model": "file-model", "effort": "low"}}), encoding="utf-8")
+    assert module.verify("codex", event_path)[:2] == (["file-model"], ["low"])
+
+
+def test_unconfined_output_path_refused_before_launch_in_process(hub, monkeypatch, capsys):
+    root, env, _ = hub
+    fake(hub, "codex")
+    module = load_hub_module(root, "hub_output_guard_test")
+    for key in ("PATH", "FAKE_LOG", "FAKE_MODE", "HUB_CODEX_SESSIONS"):
+        monkeypatch.setenv(key, env[key])
+    real = module.record_path
+
+    def guard(path):
+        if str(path).endswith(".last.md"):
+            raise ValueError("record path escapes working directory")
+        return real(path)
+
+    monkeypatch.setattr(module, "record_path", guard)
+    args = module.parser().parse_args(["delegate", "sample", "--to", "codex", "--role", "coder", "--model", "gpt-6.1-sol",
+                                       "--effort", "low", "--brief", str(root / "brief.txt"),
+                                       "--reason", "Focused implementation", "--parent", "codex"])
+    assert module.delegate(args) == 2
+    assert "REFUSED" in capsys.readouterr().out and not Path(env["FAKE_LOG"]).exists()
+    text = record(hub)
+    assert "| Status | failed |" in text and "refused before dispatch" in text
+
+
+def test_non_string_thread_id_ends_worker_record_as_failed(hub, monkeypatch, capsys):
+    root, env, _ = hub
+    fake(hub, "codex")
+    module = load_hub_module(root, "hub_thread_type_test")
+    for key in ("PATH", "FAKE_LOG", "FAKE_MODE", "HUB_CODEX_SESSIONS"):
+        monkeypatch.setenv(key, env[key])
+    real = module.events
+
+    def numeric_thread(path, *args, **kwargs):
+        for event in real(path, *args, **kwargs):
+            if event.get("type") == "thread.started":
+                event = dict(event, thread_id=123)
+            yield event
+
+    monkeypatch.setattr(module, "events", numeric_thread)
+    args = module.parser().parse_args(["delegate", "sample", "--to", "codex", "--role", "coder", "--model", "gpt-6.1-sol",
+                                       "--effort", "low", "--brief", str(root / "brief.txt"),
+                                       "--reason", "Focused implementation", "--parent", "codex"])
+    assert module.delegate(args) == 1
+    assert json.loads(capsys.readouterr().out)["status"] == "failed"
+    text = record(hub)
+    assert "| Status | failed |" in text and "thread id must be a string" in text

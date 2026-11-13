@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import tempfile
 import uuid
 
@@ -85,6 +86,35 @@ def validate_existing(destination):
         raise ValueError("managed destination contains unexpected directories")
 
 
+def make_stage_dir(parent):
+    """Unique stage dir by plain mkdir: mkdtemp (Python >= 3.12.4, Windows) applies an owner-only ACL that the installed skill would keep."""
+    while True:
+        stage = parent / (".mah-install-" + uuid.uuid4().hex[:12])
+        try:
+            stage.mkdir()  # default mode, inherits the parent ACL; fails if it exists
+            return stage
+        except FileExistsError:
+            continue
+
+
+def is_reparse_point(path):
+    """Windows reparse point (junction, mount point, symlink) via lstat attributes; used where Path.is_junction is missing (Python 3.11)."""
+    try:
+        attributes = getattr(os.lstat(path), "st_file_attributes", 0)
+    except OSError:
+        return False
+    return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def check_backup_root(backup_root, skills_dir):
+    """The backup folder is a sibling outside the checked destination ancestry: refuse links before any mutation."""
+    junction = getattr(backup_root, "is_junction", None)  # Python >= 3.12
+    if backup_root.is_symlink() or (junction is not None and junction()) or (junction is None and is_reparse_point(backup_root)):
+        raise ValueError("refusing symlink or junction backup path: " + str(backup_root))
+    if backup_root.exists() and (not backup_root.is_dir() or not backup_root.resolve().is_relative_to(skills_dir.parent.resolve())):
+        raise ValueError("backup path escapes install location (link or junction): " + str(backup_root))
+
+
 def install(destination):
     destination = Path(os.path.abspath(destination.expanduser()))
     for parent in (destination, *destination.parents):
@@ -94,8 +124,11 @@ def install(destination):
     hashes = {name: digest_bytes(read_source(source)) for name, source in sources.items()}
     if destination.exists():
         validate_existing(destination)
+    backup_root = destination.parent.parent / ".multi-agent-hub-backups"
+    if destination.exists():
+        check_backup_root(backup_root, destination.parent)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    stage_root = Path(tempfile.mkdtemp(prefix=".mah-install-", dir=destination.parent))
+    stage_root = make_stage_dir(destination.parent)
     staged = stage_root / destination.name
     try:
         for relative, source in sources.items():
@@ -105,7 +138,6 @@ def install(destination):
         (staged / MARKER).write_text(json.dumps({"format": 1, "source": "multi-agent-hub", "files": hashes}, indent=2) + "\n", encoding="utf-8")
         backup = None
         if destination.exists():
-            backup_root = destination.parent.parent / ".multi-agent-hub-backups"
             backup_root.mkdir(parents=True, exist_ok=True)
             backup = backup_root / (destination.name + "-" + uuid.uuid4().hex)
             destination.rename(backup)

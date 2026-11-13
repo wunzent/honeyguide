@@ -9,6 +9,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sqlite3
 import tempfile
 import time
 import tomllib
@@ -245,6 +246,31 @@ def codex_session_dir():
     return Path(os.environ.get("HUB_CODEX_SESSIONS", str(Path.home() / ".codex/sessions")))
 
 
+def codex_home():
+    """Same configured Codex home as the sessions root, unless HUB_CODEX_HOME overrides it."""
+    override = os.environ.get("HUB_CODEX_HOME")
+    return Path(override) if override else codex_session_dir().parent
+
+
+def thread_state(thread):
+    """Model and effort of an exact thread id from the Codex state database (read-only), for CLIs that write no rollout file."""
+    home = codex_home().resolve()
+    db = home / "state_5.sqlite"
+    if not db.resolve().is_relative_to(home) or not db.is_file():
+        raise ValueError("Codex session evidence not found for thread " + thread)
+    try:
+        connection = sqlite3.connect("file:" + db.resolve().as_posix().replace("?", "%3f").replace("#", "%23") + "?mode=ro", uri=True)
+        try:
+            row = connection.execute("SELECT model, reasoning_effort FROM threads WHERE id = ?", (thread,)).fetchone()
+        finally:
+            connection.close()
+    except sqlite3.Error as exc:
+        raise ValueError("Codex state database unreadable: " + str(exc)) from exc
+    if row is None:
+        raise ValueError("Codex session evidence not found for thread " + thread)
+    return row[0], row[1]
+
+
 def is_windows():
     return os.name == "nt"
 
@@ -284,6 +310,13 @@ def verify(vendor, event_path, rollout_offsets=None):
                     if usage is not None and not isinstance(usage, dict):
                         raise ValueError("Codex token usage must be an object")
                     tokens = (usage or {}).get("total_tokens", "Unknown")
+        elif thread:
+            if not isinstance(thread, str):
+                raise ValueError("Codex thread id must be a string")
+            model, effort = thread_state(thread)
+            models.append(model)
+            efforts.append(effort)
+            session = "state_5.sqlite thread " + thread
     else:
         for event in data:
             if event.get("type") == "system" and event.get("subtype") == "init":
@@ -342,11 +375,17 @@ def delegate(args):
     first = next((line.strip() for line in brief.splitlines() if line.strip()), "")
     args.vendor, args.assignment = args.to, f"brief {args.brief}: {first[:200]}"
     agent_id = new_agent(args, "delegated")
+    last = directory / (agent_id + ".last.md")
+    event_path = directory / (agent_id + ".events.jsonl")
+    try:  # every output path is confined before the record turns running and before any child is launched
+        record_path(last), record_path(event_path)
+    except ValueError as exc:
+        update_agent(args.task, agent_id, {"Status": "failed"}, {"Blockers": "refused before dispatch: " + str(exc)})
+        print("REFUSED: " + str(exc))
+        return 2
     update_agent(args.task, agent_id, {"Status": "running"}, {"Progress": "Route reason: " + args.reason + ("; Premium: " + args.premium if args.premium else "")})
     if args.resume:
         update_agent(args.task, agent_id, entries={"Progress": "Resumes " + args.resume})
-    last = directory / (agent_id + ".last.md")
-    event_path = directory / (agent_id + ".events.jsonl")
     models, efforts, session, observed_resume = [], [], "Unknown", "Unknown"
     blocker, result, tokens = "", "", "Unknown"
     verification_error = ""
