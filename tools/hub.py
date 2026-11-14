@@ -9,13 +9,42 @@ import re
 import shutil
 import signal
 import subprocess
+import sqlite3
 import tempfile
 import time
 import tomllib
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(os.environ.get("HUB_PROJECT_ROOT", str(Path(__file__).resolve().parent.parent))).resolve()
+WORK_ROOT = Path(os.environ.get("HUB_WORK_ROOT", str(ROOT))).resolve()
+MODEL_CATALOG = Path(os.environ.get("HUB_MODEL_CATALOG", str(ROOT / "models.toml"))).resolve()
+RECORDS_ROOT = Path(os.environ.get("HUB_RECORDS_ROOT", str(WORK_ROOT / "work"))).resolve()
+
+
+def work_root():
+    return WORK_ROOT
+
+
+def records_root():
+    return RECORDS_ROOT
+
+
+def model_catalog():
+    return MODEL_CATALOG
+
+
+def record_path(path):
+    path = Path(path)
+    if os.environ.get("HUB_PORTABLE") == "1":
+        root = records_root().resolve()
+        if not path.resolve().is_relative_to(root):
+            raise ValueError("record path escapes working directory")
+    return path
+
+
+def read_record(path, **kwargs):
+    return record_path(path).read_text(**kwargs)
 SECTIONS = ["Objective", "Approved scope", "Current state", "Completed work",
             "Remaining work", "Files and artifacts", "Evidence and test results",
             "Failures and attempted approaches", "Next recommended action"]
@@ -34,13 +63,18 @@ def slug(value):
 
 
 def task_dir(task):
-    path = ROOT / "work" / slug(task)
-    if not (path / "CHECKPOINT.md").is_file():
+    root = records_root().resolve()
+    path = root / slug(task)
+    if not path.resolve().is_relative_to(root):
+        raise ValueError("task path escapes working directory")
+    checkpoint_path = record_path(path / "CHECKPOINT.md")
+    if not checkpoint_path.is_file():
         raise ValueError("unknown task")
     return path
 
 
 def write(path, text):
+    path = record_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
@@ -55,7 +89,9 @@ def write(path, text):
 
 @contextmanager
 def task_lock(directory):
+    directory = record_path(directory)
     path = directory / ".lock"
+    record_path(path)
     deadline = time.monotonic() + 30
     while True:
         try:
@@ -94,14 +130,17 @@ def checkpoint(task, name, text, replace=False):
 
 
 def update_checkpoint(directory, name, text, replace=False):
-    path = directory / "CHECKPOINT.md"
-    content = section(path.read_text(encoding="utf-8"), name, "- " + text, replace)
+    path = record_path(directory / "CHECKPOINT.md")
+    content = section(read_record(path, encoding="utf-8"), name, "- " + text, replace)
     content = re.sub(r"^Updated: .*", "Updated: " + now(), content, flags=re.M)
     write(path, content)
 
 
 def new_task(args):
-    path = ROOT / "work" / slug(args.task)
+    root = records_root().resolve()
+    path = root / slug(args.task)
+    if not path.resolve().is_relative_to(root):
+        raise ValueError("task path escapes working directory")
     if path.exists():
         raise ValueError("task already exists")
     bodies = {"Objective": args.objective, "Approved scope": args.scope, "Current state": "Planning"}
@@ -109,10 +148,12 @@ def new_task(args):
     content += "".join(f"## {name}\n{bodies.get(name, 'Unknown')}\n\n" for name in SECTIONS)
     write(path / "CHECKPOINT.md", content)
     (path / "agents").mkdir()
+    if os.environ.get("HUB_PORTABLE") == "1":
+        print("Records are in .multi-agent-hub/; keep them out of commits (for example add `.multi-agent-hub/` to .git/info/exclude yourself).")
 
 
 def new_agent(args, kind=None):
-    directory = task_dir(args.task) / "agents"
+    directory = record_path(task_dir(args.task) / "agents")
     role = slug(args.role)
     number = 1
     fields = {"Agent ID": "", "Role": role, "Task": args.task,
@@ -129,6 +170,7 @@ def new_agent(args, kind=None):
         content = f"# Agent {agent_id}\n| Field | Value |\n|---|---|\n"
         content += "".join(f"| {key} | {cell(value)} |\n" for key, value in fields.items())
         content += "\n## Progress\n\n## Result\n\n## Blockers\n"
+        record_path(directory / (agent_id + ".md"))
         try:
             with (directory / (agent_id + ".md")).open("x", encoding="utf-8") as stream:
                 stream.write(content)
@@ -138,16 +180,16 @@ def new_agent(args, kind=None):
 
 
 def agent_fields(path):
-    return dict(re.findall(r"^\| ([^|]+) \| (.*?) \|$", path.read_text(encoding="utf-8"), re.M))
+    return dict(re.findall(r"^\| ([^|]+) \| (.*?) \|$", read_record(path, encoding="utf-8"), re.M))
 
 
 def update_agent(task, agent_id, fields=None, entries=None, preserve_cancelled=False):
     directory = task_dir(task)
-    path = directory / "agents" / (slug(agent_id) + ".md")
+    path = record_path(directory / "agents" / (slug(agent_id) + ".md"))
     with task_lock(directory):
         if not path.is_file():
             raise ValueError("unknown agent")
-        content = path.read_text(encoding="utf-8")
+        content = read_record(path, encoding="utf-8")
         if preserve_cancelled and agent_fields(path).get("Status") == "cancelled":
             return False
         write_agent(path, content, fields, entries)
@@ -166,7 +208,17 @@ def write_agent(path, content, fields=None, entries=None):
     write(path, content)
 
 
-def events(path, offset=0):
+def session_path(path):
+    """Read-only access to a Codex rollout: allowed only under the Codex session root, never for records."""
+    path = Path(path)
+    root = codex_session_dir().resolve()
+    if not path.resolve().is_relative_to(root):
+        raise ValueError("session path escapes the Codex session root")
+    return path
+
+
+def events(path, offset=0, session=False):
+    path = session_path(path) if session else record_path(path)
     with path.open("rb") as stream:
         stream.seek(offset)
         text = stream.read().decode("utf-8-sig")
@@ -179,12 +231,44 @@ def events(path, offset=0):
             yield value
 
 
+def object_payload(event, label):
+    payload = event.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError(f"Codex {label} payload must be an object")
+    return payload
+
+
 def distinct(values):
     return list(dict.fromkeys(v for v in values if isinstance(v, str) and v))
 
 
 def codex_session_dir():
     return Path(os.environ.get("HUB_CODEX_SESSIONS", str(Path.home() / ".codex/sessions")))
+
+
+def codex_home():
+    """Same configured Codex home as the sessions root, unless HUB_CODEX_HOME overrides it."""
+    override = os.environ.get("HUB_CODEX_HOME")
+    return Path(override) if override else codex_session_dir().parent
+
+
+def thread_state(thread):
+    """Model and effort of an exact thread id from the Codex state database (read-only), for CLIs that write no rollout file."""
+    home = codex_home().resolve()
+    db = home / "state_5.sqlite"
+    if not db.resolve().is_relative_to(home) or not db.is_file():
+        raise ValueError("Codex session evidence not found for thread " + thread)
+    try:
+        connection = sqlite3.connect("file:" + db.resolve().as_posix().replace("?", "%3f").replace("#", "%23") + "?mode=ro", uri=True)
+        try:
+            row = connection.execute("SELECT model, reasoning_effort FROM threads WHERE id = ?", (thread,)).fetchone()
+        finally:
+            connection.close()
+    except sqlite3.Error as exc:
+        raise ValueError("Codex state database unreadable: " + str(exc)) from exc
+    if row is None:
+        raise ValueError("Codex session evidence not found for thread " + thread)
+    return row[0], row[1]
 
 
 def is_windows():
@@ -197,18 +281,42 @@ def verify(vendor, event_path, rollout_offsets=None):
     if vendor == "codex":
         thread = next((e.get("thread_id") for e in data if e.get("type") == "thread.started"), None)
         resume_id = thread if isinstance(thread, str) and thread else "Unknown"
-        directory = codex_session_dir()
+        directory = codex_session_dir().resolve()
         matches = sorted(p for p in directory.rglob("rollout-*.jsonl")
-                         if isinstance(thread, str) and thread and p.name.endswith(thread + ".jsonl")) if thread else []
+                         if isinstance(thread, str) and thread and p.stem.endswith("-" + thread)) if thread else []
         if matches:
-            session = matches[-1].name
-            for event in events(matches[-1], (rollout_offsets or {}).get(matches[-1], 0)):
-                payload = event.get("payload") or {}
+            path = session_path(matches[-1]).resolve()
+            metadata = next((e for e in events(path, session=True) if e.get("type") == "session_meta"), None)
+            if metadata is None:
+                raise ValueError("Codex session metadata is missing")
+            payload = object_payload(metadata, "session metadata")
+            if payload.get("id") != thread:
+                raise ValueError("Codex session metadata id does not match child thread id")
+            session = path.name
+            for event in events(path, (rollout_offsets or {}).get(path, 0), session=True):
                 if event.get("type") == "turn_context":
+                    payload = object_payload(event, "turn context")
                     models.append(payload.get("model"))
                     efforts.append(payload.get("effort"))
+                payload = event.get("payload")
+                if payload is not None and not isinstance(payload, dict):
+                    raise ValueError("Codex event payload must be an object")
+                payload = payload or {}
                 if payload.get("type") == "token_count":
-                    tokens = ((payload.get("info") or {}).get("total_token_usage") or {}).get("total_tokens", "Unknown")
+                    info = payload.get("info")
+                    if info is not None and not isinstance(info, dict):
+                        raise ValueError("Codex token info must be an object")
+                    usage = (info or {}).get("total_token_usage")
+                    if usage is not None and not isinstance(usage, dict):
+                        raise ValueError("Codex token usage must be an object")
+                    tokens = (usage or {}).get("total_tokens", "Unknown")
+        elif thread:
+            if not isinstance(thread, str):
+                raise ValueError("Codex thread id must be a string")
+            model, effort = thread_state(thread)
+            models.append(model)
+            efforts.append(effort)
+            session = "state_5.sqlite thread " + thread
     else:
         for event in data:
             if event.get("type") == "system" and event.get("subtype") == "init":
@@ -223,7 +331,7 @@ def verify(vendor, event_path, rollout_offsets=None):
 
 
 def validate_route(args):
-    catalog = tomllib.loads((ROOT / "models.toml").read_text(encoding="utf-8"))[args.to]
+    catalog = tomllib.loads(model_catalog().read_text(encoding="utf-8"))[args.to]
     if args.model not in catalog["verified"]:
         return "model is unverified or unknown"
     premium = args.model in catalog["premium"] or args.effort in catalog["premium_efforts"]
@@ -253,6 +361,7 @@ def delegate(args):
         except ValueError:
             print("REFUSED: invalid resume agent identifier")
             return 2
+        previous = record_path(previous)
         fields = agent_fields(previous) if previous.is_file() else {}
         if fields.get("Task") != args.task or fields.get("Vendor") != args.to:
             print("REFUSED: resume requires an agent from the same task and vendor")
@@ -262,17 +371,24 @@ def delegate(args):
             print("REFUSED: agent has no Resume id")
             return 2
     brief = Path(args.brief).read_text(encoding="utf-8")
-    cwd = str(Path(args.cwd or ROOT).resolve())
+    cwd = str(Path(args.cwd or work_root()).resolve())
     first = next((line.strip() for line in brief.splitlines() if line.strip()), "")
     args.vendor, args.assignment = args.to, f"brief {args.brief}: {first[:200]}"
     agent_id = new_agent(args, "delegated")
+    last = directory / (agent_id + ".last.md")
+    event_path = directory / (agent_id + ".events.jsonl")
+    try:  # every output path is confined before the record turns running and before any child is launched
+        record_path(last), record_path(event_path)
+    except ValueError as exc:
+        update_agent(args.task, agent_id, {"Status": "failed"}, {"Blockers": "refused before dispatch: " + str(exc)})
+        print("REFUSED: " + str(exc))
+        return 2
     update_agent(args.task, agent_id, {"Status": "running"}, {"Progress": "Route reason: " + args.reason + ("; Premium: " + args.premium if args.premium else "")})
     if args.resume:
         update_agent(args.task, agent_id, entries={"Progress": "Resumes " + args.resume})
-    last = directory / (agent_id + ".last.md")
-    event_path = directory / (agent_id + ".events.jsonl")
     models, efforts, session, observed_resume = [], [], "Unknown", "Unknown"
     blocker, result, tokens = "", "", "Unknown"
+    verification_error = ""
     process = None
     simulated = os.environ.get("HUB_SIMULATE_QUOTA") == args.to
     exe = shutil.which(args.to)
@@ -300,19 +416,21 @@ def delegate(args):
         try:
             timed_out = False
             kill_failure = ""
-            rollout_offsets = {path: path.stat().st_size for path in codex_session_dir().rglob("rollout-*.jsonl")} if args.to == "codex" else {}
-            child_env = None
+            session_root = codex_session_dir().resolve() if args.to == "codex" else None
+            rollout_offsets = {path.resolve(): path.stat().st_size for path in session_root.rglob("rollout-*.jsonl")} if session_root else {}
+            child_env = os.environ.copy()
+            for key in ("HUB_PORTABLE", "HUB_PROJECT_ROOT", "HUB_WORK_ROOT", "HUB_RECORDS_ROOT", "HUB_MODEL_CATALOG"):
+                child_env.pop(key, None)
             if args.to == "codex" and is_windows():
-                child_env = os.environ.copy()
                 child_env.pop("CODEX_WINDOWS_REGISTERED_CORE", None)
             # Publish the PID while holding the same lock used by stop, so stop
             # cannot race process creation or the final status update.
             with task_lock(directory.parent):
                 process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                            text=True, encoding="utf-8", errors="replace", cwd=cwd,
-                                           start_new_session=os.name != "nt", **({"env": child_env} if child_env is not None else {}))
+                                           start_new_session=os.name != "nt", env=child_env)
                 path = directory / (agent_id + ".md")
-                write_agent(path, path.read_text(encoding="utf-8"), {"PID": process.pid})
+                write_agent(path, read_record(path, encoding="utf-8"), {"PID": process.pid})
             try:
                 stdout, stderr = process.communicate(prompt, timeout=args.timeout * 60 if args.timeout else None)
             except subprocess.TimeoutExpired:
@@ -331,9 +449,13 @@ def delegate(args):
                 else:
                     stdout, stderr = process.communicate()
             write(event_path, stdout)
-            models, efforts, session, tokens, result, observed_resume = verify(args.to, event_path, rollout_offsets)
+            try:
+                models, efforts, session, tokens, result, observed_resume = verify(args.to, event_path, rollout_offsets)
+            except (OSError, ValueError) as exc:
+                verification_error = "evidence verification failed: " + str(exc)
+            last = record_path(last)
             if args.to == "codex" and last.is_file():
-                result = last.read_text(encoding="utf-8")
+                result = read_record(last, encoding="utf-8")
             quota = next((line[:300] for line in (stdout + "\n" + stderr).splitlines()
                           if re.search(r"usage limit|rate limit|quota|429|too many requests", line, re.I)), None)
             match = (models == [args.model] and efforts == [args.effort]) if args.to == "codex" else bool(models) and all(args.model in m for m in models)
@@ -343,12 +465,17 @@ def delegate(args):
                 status, code, blocker = "quota-unavailable", 4, quota
             elif process.returncode:
                 status, code, blocker = "failed", 1, f"process exited {process.returncode}: {stderr[:300]}"
+            elif verification_error:
+                status, code, blocker = "failed", 1, verification_error
             elif not match:
                 status, code, blocker = "failed", 3, "route mismatch or missing verification evidence"
             else:
                 status, code = "done", 0
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
+            # Verification problems must end the record as failed, never leave it running.
             status, code, blocker = "failed", 1, str(exc)
+    event_path = record_path(event_path)
+    last = record_path(last)
     if not event_path.exists():
         write(event_path, "")
     if args.to == "claude" or not last.exists():
@@ -386,14 +513,14 @@ def kill_tree(pid):
 
 def stop(args):
     directory = task_dir(args.task)
-    path = directory / "agents" / (slug(args.id) + ".md")
+    path = record_path(directory / "agents" / (slug(args.id) + ".md"))
     with task_lock(directory):
         fields = agent_fields(path)
         pid = fields.get("PID", "")
         if fields.get("Status") != "running" or not pid.isdecimal() or int(pid) <= 0:
             raise ValueError("agent is not running with a PID")
         kill_tree(int(pid))
-        write_agent(path, path.read_text(encoding="utf-8"), {"Status": "cancelled", "PID": "Unknown"},
+        write_agent(path, read_record(path, encoding="utf-8"), {"Status": "cancelled", "PID": "Unknown"},
                     {"Blockers": "stopped by orchestrator"})
 
 
@@ -419,13 +546,13 @@ def work_log(args):
     day = timestamp.date().isoformat() if args.show in (None, "") else args.show
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
         raise ValueError("log day must be YYYY-MM-DD")
-    directory = ROOT / "work/log"
-    path = directory / (day + ".md")
+    directory = record_path(records_root() / "log")
+    path = record_path(directory / (day + ".md"))
     if args.show is not None:
         if args.kind or args.text is not None or args.task:
             raise ValueError("--show cannot be combined with a log entry")
         if path.is_file():
-            print(path.read_text(encoding="utf-8"), end="")
+            print(read_record(path, encoding="utf-8"), end="")
         return
     if not args.kind or args.text is None:
         raise ValueError("log entry requires kind and --text")
@@ -435,7 +562,7 @@ def work_log(args):
     line = f"- {timestamp:%H:%M:%SZ} {args.kind}: {task}{' '.join(args.text.splitlines())}\n"
     directory.mkdir(parents=True, exist_ok=True)
     with task_lock(directory):
-        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        content = read_record(path, encoding="utf-8") if path.exists() else ""
         write(path, content + line)
 
 
@@ -450,10 +577,10 @@ def attempt(args):
     directory = task_dir(args.task)
     normalized = re.sub(r"\d", "#", " ".join((args.action + "\n" + args.outcome).lower().split()))
     fingerprint = hashlib.sha256(normalized.encode()).hexdigest()
-    path = directory / "attempts.jsonl"
+    path = record_path(directory / "attempts.jsonl")
     with task_lock(directory):
         previous = sum(e.get("fingerprint") == fingerprint for e in events(path)) if path.exists() else 0
-        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        content = read_record(path, encoding="utf-8") if path.exists() else ""
         content += json.dumps(dict(at=now(), fingerprint=fingerprint, action=args.action, outcome=args.outcome)) + "\n"
         write(path, content)
         update_checkpoint(directory, "Failures and attempted approaches", f"{now()} action: {args.action} | outcome: {args.outcome}")
@@ -464,27 +591,31 @@ def attempt(args):
 
 
 def status(args):
-    directories = [task_dir(args.task)] if args.task else sorted((ROOT / "work").glob("*/"))
+    directories = [task_dir(args.task)] if args.task else sorted(records_root().glob("*/"))
     keys = ["Agent ID", "Role", "Skills", "Vendor", "Kind", "Requested model", "Actual model", "Requested effort", "Actual effort", "Status"]
     for directory in directories:
-        checkpoint_path = directory / "CHECKPOINT.md"
+        record_path(directory)
+        checkpoint_path = record_path(directory / "CHECKPOINT.md")
         if not checkpoint_path.is_file():
             continue
-        content = checkpoint_path.read_text(encoding="utf-8")
+        content = read_record(checkpoint_path, encoding="utf-8")
         state = re.search(r"^## Current state\n(.*?)(?=^## |\Z)", content, re.M | re.S)
         print(f"\nTask: {directory.name}\nCurrent state: " + (state[1].strip() if state else "Unknown"))
         print("| " + " | ".join(keys) + " |\n|" + "---|" * len(keys))
-        for path in sorted((directory / "agents").glob("*.md")):
-            fields = dict(re.findall(r"^\| ([^|]+) \| (.*?) \|$", path.read_text(encoding="utf-8"), re.M))
+        agents_dir = record_path(directory / "agents")
+        for path in sorted(agents_dir.glob("*.md")):
+            fields = dict(re.findall(r"^\| ([^|]+) \| (.*?) \|$", read_record(path, encoding="utf-8"), re.M))
             if "Agent ID" in fields:
                 print("| " + " | ".join(fields.get(k, "Unknown") for k in keys) + " |")
 
 
 def sync(args):
+    if os.environ.get("HUB_PORTABLE") == "1":
+        raise ValueError("sync is unavailable in portable mode")
     from hub_skills import local_skill_dirs
-    local = local_skill_dirs(ROOT)
+    local = local_skill_dirs(work_root())
     expected = {}
-    for source in sorted((ROOT / "agents/shells").glob("*.md")):
+    for source in sorted((work_root() / "agents/shells").glob("*.md")):
         if source.name.lower() == "readme.md":
             continue
         text = source.read_text(encoding="utf-8")
@@ -643,7 +774,9 @@ def main(argv=None):
             return sync(args)
         elif args.command == "skills":
             from hub_skills import install_skills, index_skills
-            return install_skills(ROOT) if args.operation == "install" else index_skills(ROOT)
+            if args.operation == "install" and os.environ.get("HUB_PORTABLE") == "1":
+                raise ValueError("third-party skill installation is unavailable in portable mode")
+            return install_skills(work_root()) if args.operation == "install" else index_skills(work_root(), destination=records_root() / "skills-index.md")
     except (ValueError, OSError, KeyError, tomllib.TOMLDecodeError) as exc:
         print("ERROR: " + str(exc))
         return 1
