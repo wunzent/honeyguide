@@ -1,0 +1,37 @@
+# Release — {service} v{X.Y.Z}
+
+Folder: `Deployments/{service}/v{X.Y.Z}/` เก็บ release.md, manifest.md, checklist.md, rollback-plan.md,
+test-result.md และเมื่อ release เปลี่ยนฐานข้อมูล เก็บ database.md (+ ไฟล์ SQL ลงวันที่: สิ่งที่ต้อง backup, ลำดับ
+การ import, snapshot `db-YYYYMMDD.sql` และ `rollback.sql`, จำนวนแถวที่กระทบ; ห้ามมีข้อมูล production ใน repo) version ใหม่ใช้
+โฟลเดอร์ใหม่; ไฟล์ของ version ที่ส่งมอบแล้วไม่แก้อีก ยกเว้นเพิ่มผลหลัง deploy
+
+| Field | Value |
+|---|---|
+| Repo | `{repo}` |
+| Version | v{X.Y.Z} |
+| Date | YYYY-MM-DD |
+| Commits | `{from sha}..{to sha}` ({n} commits) |
+| Migrations | {n} (see manifest.md) |
+| Environment | {staging / production} |
+
+## Features
+
+- {feature} ({REQ / ticket}, [spec]({relative link}))
+
+## Fixes
+
+- {fix} ({ticket})
+
+## Breaking Changes / Ops Notes
+
+- {สิ่งที่ operator หรือ client ต้องเปลี่ยน หรือ "none"}
+
+## Related Artifacts
+
+| Artifact | Link |
+|---|---|
+| Manifest | [manifest.md](./manifest.md) |
+| Checklist | [checklist.md](./checklist.md) |
+| Rollback plan | [rollback-plan.md](./rollback-plan.md) |
+| Test result | [test-result.md](./test-result.md) |
+| Security review | [security-review-YYYYMMDD.md](./security-review-YYYYMMDD.md) (ถ้ามี) |

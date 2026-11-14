@@ -51,3 +51,8 @@ To continue a task in the other vendor (quota, preference): "Continue task `<slu
 - Acceptance evidence: `docs/ACCEPTANCE.md`; research reuse: `docs/SKILLS-REUSE.md`.
 - History: `docs/WORKLOG.md`, `docs/REBUILD-INVENTORY.md`. The previous version (engine, docs, evidence) is only in git
   history before `1f1d677` and in the backup `ALI/multi-agent-hub-v2-backups/20261111-173509/`.
+
+## Plugin
+The Hub workflow is also packaged as the `multi-agent-hub` plugin (Claude Code and Codex) from the `wunzent-hub`
+marketplace in this repository, so any project can use it as a skill without opening this Hub. Install, update,
+uninstall and limits: `plugins/multi-agent-hub/README.md`.
