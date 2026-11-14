@@ -1,6 +1,6 @@
 # Hardening Patterns
 
-Adapted from addyosmani/agent-skills, aeac41d. MIT License — Copyright (c) 2025 Addy Osmani; see [LICENSE](../LICENSE). Follow the parent skill Hub workflow boundaries.
+Adapted from addyosmani/agent-skills, aeac41d. MIT License — Copyright (c) 2025 Addy Osmani; see [LICENSE](../LICENSE). Follow the parent skill Workflow boundaries.
 
 Code patterns and decision aids for the `security-and-hardening` skill. The skill states each rule; this file shows one concrete implementation of it. Open the section you need when you reach that code — it is not meant to be read top to bottom.
 

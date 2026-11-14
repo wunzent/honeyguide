@@ -20,7 +20,7 @@ it for both CLIs. ChatGPT and other tools are out of scope.
    - `README.md`: install, update, uninstall, limits.
 2. Marketplaces at the repository root: `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`, both
    named `wunzent-hub`, listing `./plugins/multi-agent-hub`.
-3. The Hub itself (`AGENTS.md`, `tools/hub.py`, `skills/`, `.claude/`, `.codex/`) is unchanged. `feat/skill-first-hub`
+3. The Hub itself (`AGENTS.md`, `tools/hub.py`, `skills/`, `.claude/`, `.codex/`) is unchanged. Narrow exceptions: backend-api-safety frontmatter quoting (valid YAML) and neutral workflow wording in api-and-interface-design, security-and-hardening and lean-build (so the bundled copies work in any project); the hub's AGENTS.md still governs hub work. `feat/skill-first-hub`
    (portable helper + custom installer) is not merged; its security gate failed with 6 Important findings, all in code
    this design does not ship.
 
@@ -36,6 +36,18 @@ it for both CLIs. ChatGPT and other tools are out of scope.
   NO PROGRESS check, no verified model for workers.
 - Codex child read-only enforcement needs the owner-placed shells; otherwise the permission stays `Unverified`.
 - Marketplace installation changes each CLI's user configuration; only the owner runs it.
+
+## Bundled skills and 9arm
+
+- The plugin bundles byte copies of the Hub skills api-and-interface-design, backend-api-safety, context-engineering,
+  handoff, investigate-first, lean-build, safe-refactor, security-and-hardening, software-component, surgical-patch and
+  verify-and-stop. `brief` stays out (hub-specific); `references/brief.md` replaces it. A test checks every copy equals
+  its source.
+- `9arm-skills` (thananon/9arm-skills) is listed in the Claude marketplace as a github source pinned to a commit; upstream
+  ships its own `.claude-plugin/plugin.json`. Nothing of it is copied into this repository (no upstream licence). Codex has
+  no entry (no `.codex-plugin` upstream); the plugin README gives manual steps.
+- The plugin skill uses a retry cap (no third identical failing action; ask the owner after about 3 attempts) in
+  place of the `NO PROGRESS` rule, which needs `hub.py attempt`.
 
 ## Verification
 

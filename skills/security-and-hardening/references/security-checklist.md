@@ -1,6 +1,6 @@
 # Security Checklist
 
-Adapted from addyosmani/agent-skills, aeac41d. MIT License — Copyright (c) 2025 Addy Osmani; see [LICENSE](../LICENSE). Follow the parent skill Hub workflow boundaries.
+Adapted from addyosmani/agent-skills, aeac41d. MIT License — Copyright (c) 2025 Addy Osmani; see [LICENSE](../LICENSE). Follow the parent skill Workflow boundaries.
 
 Quick reference for web application security. Use alongside the `security-and-hardening` skill.
 

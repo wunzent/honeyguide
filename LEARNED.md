@@ -6,7 +6,8 @@ Project-specific detail goes in `projects/<name>.md`, not here. This file is the
 preferences: vendor memories point here instead of copying rules. While this list has fewer than 10 lines, end a
 delivered task that needed rework with one short question about what to do differently.
 
-- Keep the hub minimal and native: no retry budgets, custom engines, dashboards, signing or new frameworks.
+- Keep the hub minimal and native: no custom engines, dashboards, signing or new frameworks.
+- Retry rule for the plugin skill: never repeat a failing action a third time; after about 3 attempts on one problem, stop and ask the owner. The hub's AGENTS.md keeps progress-based attempts.
 - Preserve the owner's own formatting; style is not a defect unless it breaks something or a project rule.
 - Ask which branch (current, new, or a new worktree) before changing a target repo.
 - Plans and specs live in the target repo (`docs/plans/`, `docs/specs/` or the repo's own place).

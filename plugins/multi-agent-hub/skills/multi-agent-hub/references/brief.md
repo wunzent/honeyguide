@@ -18,7 +18,7 @@ REPORT FILE: <path for a writer's full report; read-only workers have none and r
 
 Keep each brief self-contained and bounded. Include only context the worker cannot read from the project. Do not paste conversation history, credentials, or customer data.
 
-Nontrivial work (any spawn or high risk) must have `.multi-agent-hub/<task>/` records written before the first spawn: checkpoint, this brief as `briefs/<id>.md`, and an agent record per spawn. Keep an agent record with duty, skills, vendor, parent/id, requested and observed model/effort/permission, status, and evidence. A requested permission mode is not proof of enforcement; record what the runtime actually exposes, or `Unverified`.
+Nontrivial work (any spawn other than a cheap delegation of low-risk work, or high risk) must have `.multi-agent-hub/<task>/` records written before the first spawn: checkpoint, this brief as `briefs/<id>.md`, and an agent record per spawn. Keep an agent record with duty, skills, vendor, parent/id, requested and observed model/effort/permission, status, and evidence. A requested permission mode is not proof of enforcement; record what the runtime actually exposes, or `Unverified`.
 
 Implementer duty: implement only the assigned slice with the smallest correct diff. When purpose, interface, behaviour, dependencies or operations of a component change, update that component's documentation in the same task (`software-component` when available); internal, behaviour-preserving work changes no documentation. Self-review scope and error paths and run the assigned checks. After findings, append fix evidence to the same report.
 
