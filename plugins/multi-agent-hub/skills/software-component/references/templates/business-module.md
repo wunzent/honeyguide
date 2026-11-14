@@ -1,0 +1,39 @@
+# Business Requirements — {NN} {Module}
+
+**Status**: {Draft / Approved}  **Version**: {X.Y}  **Related to**: [{NN} {Other module}]({relative})
+
+ไม่บังคับ path: `docs/business/{NN}_{MODULE}.md` พร้อม index `README.md` (module, key entities, ช่วง UC)
+ใช้เมื่อโปรเจกต์เก็บ business requirement เป็น Markdown; REQ/AC ของ SWC อ้างรหัส FR/UC เหล่านี้
+
+## 1. Overview
+
+{module นี้มีไว้ทำอะไร ใครใช้}
+
+## 2. Entities
+
+| Entity | Key fields | Notes |
+|---|---|---|
+| {Entity} | `{field}`, `{field}` | {...} |
+
+## 3. Functional Requirements
+
+### FR-{AREA}-{nn}: {title}
+
+- **Actor**: {role}
+- **Description**: {ระบบต้องทำอะไร}
+- **Rules**: {...}
+- **Acceptance**: {ผลที่ตรวจได้}
+
+## 4. Protection Rules
+
+- {สิ่งที่ห้ามเกิดขึ้น เช่น ลบ X ขณะที่ Y ยังอยู่}
+
+## 5. Status Flow
+
+{ลิงก์ไป workflow หรือตารางสั้นๆ}
+
+## 6. Related Use Cases
+
+| UC | Title | Actor |
+|---|---|---|
+| UC-{nn} | {...} | {...} |

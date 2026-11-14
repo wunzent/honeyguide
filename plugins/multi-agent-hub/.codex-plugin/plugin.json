@@ -1,0 +1,16 @@
+{
+  "name": "multi-agent-hub",
+  "version": "0.1.0",
+  "description": "Plan and carry out software work with native agents, risk-based independent review and project-local records.",
+  "author": { "name": "wunzent" },
+  "license": "UNLICENSED",
+  "interface": {
+    "displayName": "Multi-Agent Hub",
+    "shortDescription": "Native agents with risk-based independent review",
+    "developerName": "wunzent",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": ["Use multi-agent-hub to plan and carry out this change with an independent review if it is high risk."]
+  },
+  "skills": "./skills/"
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Software Component"
+  short_description: "Write FE/BE SWC docs to the project's SWC folder using the standards"
+  default_prompt: "Use $software-component to write the SWC for this feature."

@@ -1,0 +1,57 @@
+# {Module} — Shared Reference
+
+**Module**: {Module Name} (Phase {N})
+**Last Updated**: YYYY-MM-DD
+<!-- เมื่อติดตาม REQ/AC ให้เพิ่ม: -->
+**Status**: Draft | In Review | Approved | Implemented (when REQ/AC are tracked)
+**Evidence**: Current | Proposed | POC | Verified (when REQ/AC are tracked)
+**REQ Refs**: REQ-nn (when REQ/AC are tracked)
+**Owner**: @name หรือ — (when REQ/AC are tracked)
+
+---
+
+## 1. Composable: `useXxx.ts`
+
+### Methods
+| Method | Calls | Returns |
+|---|---|---|
+| `method(params)` | POST /endpoint | `Type` |
+
+### State (Pinia: `useXxxStore`)
+```typescript
+interface XxxStore {
+  field: type
+}
+```
+
+---
+
+## 2. Business Rules
+
+### Rule Group
+- รายละเอียด rule
+
+---
+
+## 3. Components
+
+| Component | ใช้ใน Page | ความรับผิดชอบ |
+|---|---|---|
+| `Component.vue` | `/path` | ความรับผิดชอบ |
+
+---
+
+## 4. Error Handling Summary
+
+| Scenario | HTTP | Frontend Action |
+|---|---|---|
+| Network error / 5xx | — | toast "เกิดข้อผิดพลาด กรุณาลองใหม่" |
+| 401 (any protected route) | 401 | refresh → retry → redirect /login |
+
+---
+
+## 5. Pages Overview
+
+| Page | Path | Layout | Auth Required |
+|---|---|---|---|
+| Page Name | `/path` | `layout.vue` | Full Token |
