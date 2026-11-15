@@ -1,47 +1,21 @@
 {
   "name": "wunzent-hub",
-  "owner": { "name": "wunzent" },
+  "owner": {
+    "name": "wunzent"
+  },
+  "metadata": {
+    "description": "multi-agent-hub and egm."
+  },
   "plugins": [
     {
       "name": "multi-agent-hub",
-      "source": "./plugins/multi-agent-hub",
+      "source": "./",
       "description": "Plan and carry out software work with native agents, risk-based independent review and project-local records."
     },
     {
-      "name": "9arm-skills",
-      "source": {
-        "source": "github",
-        "repo": "thananon/9arm-skills",
-        "sha": "a1fc303b274ed06c32d405ba5a6db00ded6e5663"
-      },
-      "description": "Third-party engineering and productivity skills (debug-mantra, scrutinize, post-mortem, management-talk, qwenchance), pinned to one commit."
-    },
-    {
       "name": "egm",
-      "source": {
-        "source": "github",
-        "repo": "google/elephant-goldfish-model",
-        "sha": "964a4f1ecd333961375c35cb37ed09364dab5e4e"
-      },
-      "description": "Design with context, review with fresh-eyes reviewers; skills egm-bootstrap, egm-brainstorm, egm-draft, egm-review, egm-review-loop, egm-resolve, egm-drift-report."
-    },
-    {
-      "name": "uxkin",
-      "source": {
-        "source": "github",
-        "repo": "uxkin/agent",
-        "sha": "c9425694cbf77ca13c067ae100a34eeec5a2856e"
-      },
-      "description": "Website design: landing-page, web-design-system, web-review."
-    },
-    {
-      "name": "base44",
-      "source": {
-        "source": "github",
-        "repo": "base44/skills",
-        "sha": "8a7fc77304c8a9ab995d68aa5cdcbce6eddb631b"
-      },
-      "description": "Base44 platform skills; only useful with Base44."
+      "source": "./plugins/egm",
+      "description": "Develop ideas with context and review documents with fresh eyes."
     }
   ]
 }
