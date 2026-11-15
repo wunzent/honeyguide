@@ -1,0 +1,13 @@
+{
+  "name": "multi-agent-hub",
+  "version": "0.1.0",
+  "description": "Plan and carry out software work with native agents, risk-based independent review and project-local records.",
+  "author": {
+    "name": "wunzent"
+  },
+  "license": "UNLICENSED",
+  "agents": [
+    "./agents/hub-readonly.md",
+    "./agents/hub-writer.md"
+  ]
+}

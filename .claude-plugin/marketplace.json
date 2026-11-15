@@ -1,11 +1,21 @@
 {
   "name": "wunzent-hub",
-  "owner": { "name": "wunzent" },
+  "owner": {
+    "name": "wunzent"
+  },
+  "metadata": {
+    "description": "multi-agent-hub and egm."
+  },
   "plugins": [
     {
       "name": "multi-agent-hub",
-      "source": "./plugins/multi-agent-hub",
+      "source": "./",
       "description": "Plan and carry out software work with native agents, risk-based independent review and project-local records."
+    },
+    {
+      "name": "egm",
+      "source": "./plugins/egm",
+      "description": "Develop ideas with context and review documents with fresh eyes."
     }
   ]
 }

@@ -1,63 +1,95 @@
-# Multi-Agent Hub (minimal native, Claude Code + Codex)
+# wunzent-hub: multi-agent-hub and egm
 
-## Portable Codex skill
-Install the owned native-first Codex skill with `python tools/install_hub_skill.py` (or `python tools/install_hub_skill.py --dest <skill-directory>` for a chosen native skill path), then invoke `$multi-agent-hub` from any software project. Re-run the same command to update it; prior managed versions are retained outside the scanned skills directory. It needs no Hub project card or dashboard. The optional helper writes `.multi-agent-hub` task data in the current project and reuses the existing Hub runtime. Native work remains available without Python. Add `--claude` (optionally `--claude-home <dir>`) to opt in to a Claude Code install instead: the skill goes to `~/.claude/skills/multi-agent-hub` and the `hub-readonly`/`hub-writer` permission shells to `~/.claude/agents`, managed with hashes and never replacing files it does not own. `--codex-agents` (optionally `--codex-home <dir>`) likewise installs only the generated Codex `hub-readonly.toml`/`hub-writer.toml` into `~/.codex/agents` under the same rules; nothing is written there by default. The bundle also carries the hub-owned `software-component` skill. Installation does not configure the CLI or install third-party skills.
+Two plugins for Claude Code and Codex in one marketplace (`wunzent-hub`): `multi-agent-hub` (the repository root) and `egm` (`plugins/egm`).
 
-A small shared workspace in which **Claude Code or Codex** acts as the orchestrator, builds a team with duties defined
-per assignment and two generic permission shells, delegates within and across vendors, and keeps readable records and checkpoints.
-There is no engine, scheduler, dashboard or approval ceremony: planning, skills and subagents are the CLIs' own.
+`multi-agent-hub`: It plans and carries out software work with the active CLI's native agents, with
+risk-based independent review and project-local records under `.multi-agent-hub/`. No Python helper, installer or
+cross-vendor delegation. The repository root is the plugin. The repository is public; the plugin is `UNLICENSED`.
 
-## Start a task
-**From Claude Code:** open this folder in Claude Code (Desktop Code tab or `claude`) and describe the task.
-**From Codex:** open this folder in Codex (Desktop or `codex`) and describe the task.
-Example: "Task: add input validation to `<repo>/src/x.ts`; working directory `<repo>`; tests must pass."
-The orchestrator follows `AGENTS.md`: it creates `work/<task>/CHECKPOINT.md`, picks duties, models and efforts,
-delegates, records every agent and reports the result.
+## Layout
 
-**Legacy repository mode (optional):** open this Hub repository and use the commands below to manage Hub-rooted records and maintenance surfaces.
+    .claude-plugin/       plugin.json, marketplace.json (Claude Code)
+    .codex-plugin/        plugin.json
+    .agents/plugins/      marketplace.json (Codex)
+    skills/               20 skills of multi-agent-hub (see below)
+    agents/               Claude agents hub-readonly, hub-writer
+    codex-agents/         Codex agent shells (copy by hand, see below)
+    plugins/egm/          the `egm` plugin: unchanged upstream copy with LICENSE, SOURCE.md, manifest.sha256
+    docs/                 specs, plans, audits, RECOMMENDED.md (reference list only)
+    tests/test_plugin.py  static checks (standard library only)
 
-To continue a task in the other vendor (quota, preference): "Continue task `<slug>` from `work/<slug>/CHECKPOINT.md`."
+## Skills in multi-agent-hub (20)
 
-## What you can inspect
-| What | Where |
+| Skill | What it is |
 |---|---|
-| Agents of a task (duty, skills, vendor, requested/actual model and effort, status) | `python tools/hub.py status <task>` or `work/<task>/agents/*.md` |
-| Task state, remaining work, failures tried | `work/<task>/CHECKPOINT.md` |
-| Worker output | `work/<task>/agents/<id>.last.md` |
-| Permission shells and duty notes | `agents/INVENTORY.md`, `agents/shells/`, `skills/brief/SKILL.md` |
-| Discovered skills | `python tools/hub.py skills` -> local `work/skills-index.md` |
-| Approved third-party sources | `skills/external.toml`; `skills/EXTERNAL.md` |
-| Orchestrator rules | `AGENTS.md` (both), `CLAUDE.md`, `agents/orchestrators/` |
-| Models allowed for routing | `models.toml` |
+| multi-agent-hub | Core workflow: native agents, risk-based independent review, records |
+| cheap-delegation | Give mechanical, low-risk work to the cheapest native model |
+| debug-mantra | Reproduce, trace, falsify, cross-check before any fix |
+| scrutinize | Outsider review of a plan, PR or change |
+| post-mortem | Engineering record of a fixed bug |
+| management-talk | Rewrite engineering content for leadership and the channel |
+| stay-on-track | Loop detection, three-attempt rule, context handoff |
+| api-and-interface-design, backend-api-safety, context-engineering, handoff, investigate-first, lean-build, safe-refactor, security-and-hardening, software-component, surgical-patch, verify-and-stop | Engineering skills |
+| ub-mode | Coding discipline (unclebob/ub-mode, MIT, unchanged) |
+| find-skills | Skill discovery helper (vercel-labs/skills, MIT, unchanged) |
 
-## Maintenance
-- Edit shells in `agents/shells/*.md` or hub-owned skills in `skills/`, then `python tools/hub.py sync`
-  (regenerates `.claude/agents`, `.codex/agents`, `.claude/skills`, `.agents/skills`; `--check` shows drift).
-- Python: `.venv\Scripts\python.exe` (stdlib only; `pytest` for `tests/test_hub.py`). Create with
-  `py -3.11 -m venv .venv` and `.venv\Scripts\pip install -r requirements.txt` on a new machine.
-- Discover all project/user/plugin skills with `python tools/hub.py skills`; it prints counts and the index path.
-  Read selected SKILL.md files, check requirements and native availability. After owner approval, `... skills install`
-  clones pinned sources to ignored `.hub/vendor/` and copies supported skills into `.claude/skills` and `.agents/skills`.
-  Local copies have `.hub-local` and git info/exclude entries; `sync --check` lists them as `LOCAL SKILL`, not drift.
-  A linked worktree's outside-scope info/exclude is reported for the orchestrator to handle. Globals are untouched;
-  unclear-licence copies never belong in commits. See `skills/EXTERNAL.md`.
-- Plugin catalogs are shown as not installed and excluded from available counts; plugin cache activation is unverified.
-  Read-only duties needing commands use Codex hub-readonly or `hub.py delegate`; Claude native hub-readonly has no Bash.
-- Either vendor works alone with native/same-vendor CLI workers; with both, cross-vendor delegation and quota handoff work.
-- `models.toml` is the routing catalog; use only verified models and record actual values when observable.
+## The egm plugin (7 skills)
 
-## Limits (honest)
-- Prompt rules are not enforcement: file limits come from the CLI sandbox (Codex `-s read-only|workspace-write`) and
-  tool permissions (Claude `--allowedTools`). Claude Code has no OS sandbox.
-- Codex -> Claude delegation needs network and writes under the user profile. In the acceptance run it worked from the
-  default Codex workspace sandbox on this Windows machine; other setups may block it - then approve the escalation Codex asks for.
-- Native subagent model/effort is not always reported back; records say `Unverified` instead of guessing.
-- Quota detection is text-based (usage-limit messages and exit codes); the handoff itself is the orchestrator's job.
-- Acceptance evidence: `docs/ACCEPTANCE.md`; research reuse: `docs/SKILLS-REUSE.md`.
-- History: `docs/WORKLOG.md`, `docs/REBUILD-INVENTORY.md`. The previous version (engine, docs, evidence) is only in git
-  history before `1f1d677` and in the backup `ALI/multi-agent-hub-v2-backups/20261111-173509/`.
+`egm` is google/elephant-goldfish-model at commit `964a4f1` (Apache-2.0), copied unchanged into `plugins/egm` with
+upstream's own manifests, so its names are upstream's: skills `/egm:egm-bootstrap`, `egm-brainstorm`, `egm-draft`,
+`egm-drift-report`, `egm-resolve`, `egm-review`, `egm-review-loop`, and Claude reviewer agents `egm:egm-<name>`. See
+`plugins/egm/SOURCE.md`. Reviews need a local executor and isolated subagents. Upstream ships a Codex manifest, so Codex
+can install it; the 10 reviewer adapters are Claude Code agents (Codex behaviour unverified in a live session).
 
-## Plugin
-The Hub workflow is also packaged as the `multi-agent-hub` plugin (Claude Code and Codex) from the `wunzent-hub`
-marketplace in this repository, so any project can use it as a skill without opening this Hub. Install, update,
-uninstall and limits: `plugins/multi-agent-hub/README.md`.
+## Install
+
+Run the `/plugin ...` lines inside a Claude Code session (or use `claude plugin ...` in a terminal) and the `codex`
+lines in a terminal. These change that CLI's user configuration, so only the owner runs them.
+
+Claude Code:
+
+    /plugin marketplace add <path-or-git-url-of-this-repository>
+    /plugin install multi-agent-hub@wunzent-hub
+    /plugin install egm@wunzent-hub
+
+Codex:
+
+    codex plugin marketplace add <path-or-git-url-of-this-repository>
+    codex plugin add multi-agent-hub@wunzent-hub
+    codex plugin add egm@wunzent-hub
+
+Codex plugins cannot ship agents. To get an enforced read-only sandbox for review duties, copy
+`codex-agents/hub-readonly.toml` and `codex-agents/hub-writer.toml` into `~/.codex/agents` (all projects) or a trusted
+project's `.codex/agents`. Without them the permission of Codex children stays `Unverified`.
+
+## Update
+
+Claude Code:
+
+    /plugin marketplace update wunzent-hub
+    claude plugin update multi-agent-hub@wunzent-hub
+    claude plugin update egm@wunzent-hub
+
+Codex:
+
+    codex plugin marketplace upgrade wunzent-hub
+
+## Uninstall
+
+Claude Code:
+
+    /plugin uninstall multi-agent-hub@wunzent-hub
+    /plugin uninstall egm@wunzent-hub
+    /plugin marketplace remove wunzent-hub
+
+Codex:
+
+    codex plugin remove multi-agent-hub@wunzent-hub
+    codex plugin remove egm@wunzent-hub
+    codex plugin marketplace remove wunzent-hub
+
+## Limits
+
+- Checked statically (`claude plugin validate .`, `tests/test_plugin.py`), not by installing into a live CLI profile.
+- Third-party files are byte copies at a pinned commit and are not updated automatically.
+- Other third-party plugins are not part of this repository; `docs/RECOMMENDED.md` is a reference list only.

@@ -23,3 +23,6 @@ logs/
 # Third-party source checkouts (local copies are in git info/exclude)
 .hub/vendor/
 .hub/staging/
+
+# Project-local multi-agent-hub records
+.multi-agent-hub/

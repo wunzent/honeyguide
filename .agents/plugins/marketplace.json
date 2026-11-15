@@ -1,12 +1,32 @@
 {
   "name": "wunzent-hub",
-  "interface": { "displayName": "Wunzent Hub" },
+  "interface": {
+    "displayName": "Wunzent Hub"
+  },
   "plugins": [
     {
       "name": "multi-agent-hub",
-      "source": { "source": "local", "path": "./plugins/multi-agent-hub" },
-      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
       "category": "Developer Tools"
+    },
+    {
+      "name": "egm",
+      "source": {
+        "source": "local",
+        "path": "./plugins/egm"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
     }
   ]
 }
