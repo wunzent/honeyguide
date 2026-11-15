@@ -14,11 +14,14 @@ HUB_SKILLS = {
 }
 NEW_SKILLS = {"post-mortem", "management-talk", "stay-on-track", "cheap-delegation"}
 THIRD_PARTY = {"ub-mode", "find-skills"}
+ECC_SKILLS = {"learn", "plan", "tdd", "code-review", "security-scan", "plan-to-steps"}  # ideas from affaan-m/ECC, our words
+ECC_DIR = SKILLS / "verify-and-stop" / "references" / "ecc-reviewers"
+ECC_COMMIT = "d2ef2680594f9a17526a6e1a2e18b3d242c5d17b"
 GATEWAYS = {
     "discover-frontend", "discover-backend", "discover-database", "discover-caching", "discover-cloud",
     "discover-devops", "discover-debugging", "discover-collaboration", "discover-testing",
 }
-N_SKILLS = 26
+N_SKILLS = 32
 # vendored knowledge files: skills/<gateway>/references/<source>/ -> expected upstream commit
 VENDORED = {
     "antfu-skills": "d524ed287eef22757297827ce42e3cad88abd20c",
@@ -100,7 +103,7 @@ def test_marketplaces_list_only_honeyguide():
 
 
 def test_skill_set_and_frontmatter():
-    everything = HUB_SKILLS | NEW_SKILLS | THIRD_PARTY | GATEWAYS
+    everything = HUB_SKILLS | NEW_SKILLS | ECC_SKILLS | THIRD_PARTY | GATEWAYS
     assert {p.name for p in SKILLS.iterdir() if p.is_dir()} == everything
     assert len(everything) == N_SKILLS
     for gone in ABSORBED_SKILLS:
@@ -111,7 +114,7 @@ def test_skill_set_and_frontmatter():
         assert fm.get("name") and fm.get("description"), path
     for s in everything:
         assert frontmatter(SKILLS / s / "SKILL.md")["name"] == s, s
-    for s in {"orchestrate"} | NEW_SKILLS | GATEWAYS:
+    for s in {"orchestrate"} | NEW_SKILLS | ECC_SKILLS | GATEWAYS:
         expected = {"name", "description", "argument-hint"} if s == "stay-on-track" else {"name", "description"}
         assert set(frontmatter(SKILLS / s / "SKILL.md")) == expected, s
     stay_fm = frontmatter(SKILLS / "stay-on-track" / "SKILL.md")
@@ -133,6 +136,9 @@ def test_new_skills_are_concise():
     for s in GATEWAYS:
         n = len((SKILLS / s / "SKILL.md").read_text(encoding="utf-8").splitlines())
         assert 15 <= n <= 60, (s, n)
+    for s in ECC_SKILLS:
+        n = len((SKILLS / s / "SKILL.md").read_text(encoding="utf-8").splitlines())
+        assert 15 <= n <= 80, (s, n)
 
 
 def test_gateways_are_valid_and_their_reference_paths_exist():
@@ -218,7 +224,7 @@ def test_no_egm_shipped_in_root_plugin():
 
 def test_our_skills_carry_no_old_hub_tooling():
     banned = ("hub.py", "models.toml", "Native Core", "Hub workflow boundaries")
-    files = [p for s in sorted(HUB_SKILLS | NEW_SKILLS) for p in (SKILLS / s).rglob("*") if p.is_file()]
+    files = [p for s in sorted(HUB_SKILLS | NEW_SKILLS | ECC_SKILLS) for p in (SKILLS / s).rglob("*") if p.is_file()]
     files += [SKILLS / g / "SKILL.md" for g in sorted(GATEWAYS)]
     files += [p for top in ("agents", "codex-agents") for p in (ROOT / top).rglob("*")
               if p.is_file() and p.name.startswith("hub-")]
@@ -407,3 +413,99 @@ def test_old_plugin_name_only_in_history_and_ignore():
     live_docs = [ROOT / "docs" / "RECOMMENDED.md"]
     for path in live_docs:
         assert OLD_NAME not in path.read_text(encoding="utf-8"), path.name
+
+
+def test_ecc_reviewers_are_vendored_unchanged_with_licence_source_and_manifest():
+    for name in ("LICENSE", "SOURCE.md", "manifest.sha256"):
+        assert (ECC_DIR / name).is_file(), name
+    assert "MIT License" in (ECC_DIR / "LICENSE").read_text(encoding="utf-8")
+    source = (ECC_DIR / "SOURCE.md").read_text(encoding="utf-8")
+    assert f"- Commit: {ECC_COMMIT}" in source and "Repository: https://github.com/affaan-m/ECC" in source
+    assert "Licence: MIT" in source and "unchanged" in source and "not agents" in source
+    assert "ignores those fields" in source
+    manifest = {}
+    for line in (ECC_DIR / "manifest.sha256").read_text(encoding="utf-8").splitlines():
+        digest, name = line.split("  ", 1)
+        assert re.fullmatch(r"[0-9a-f]{64}", digest) and name not in manifest, line
+        manifest[name] = digest
+    actual = {p.relative_to(ECC_DIR).as_posix() for p in ECC_DIR.rglob("*") if p.is_file()} - {"SOURCE.md", "manifest.sha256"}
+    assert actual == set(manifest), sorted(actual ^ set(manifest))
+    for name, digest in manifest.items():
+        assert sha(ECC_DIR / name) == digest, name
+        assert name == "LICENSE" or re.fullmatch(r"agents/[a-z]+-reviewer\.md", name), name
+    assert len(manifest) == 20 and not list(ECC_DIR.rglob("SKILL.md"))
+
+
+def test_reviewer_checklist_table_paths_exist_and_are_wired_in():
+    ver = (SKILLS / "verify-and-stop" / "SKILL.md").read_text(encoding="utf-8")
+    paths = re.findall(r"`(references/ecc-reviewers/agents/[^`]+)`", ver)
+    assert len(set(paths)) == 19, len(set(paths))
+    for rel in paths:
+        assert (SKILLS / "verify-and-stop" / rel).is_file(), rel
+    for needle in ("name them, by path, in the reviewer's brief", "never widens them", "fresh native agent", "ignored",
+                   "not the project", "absolute paths"):
+        assert needle in ver, needle
+    for rel in ("vue", "typescript", "react", "python", "go", "database", "security", "code"):
+        assert f"references/ecc-reviewers/agents/{rel}-reviewer.md" in ver, rel
+    core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
+    assert "checklists that match the changed files" in core and "never widens its permissions" in core
+    assert "absolute paths" in core and "not the project" in core
+    cr = (SKILLS / "code-review" / "SKILL.md").read_text(encoding="utf-8")
+    for needle in ("git ls-files --others --exclude-standard", "untracked", "Exclude generated records", "absolute paths"):
+        assert needle in cr, needle
+    for name in ("code-review", "security-scan"):
+        text = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
+        assert "verify-and-stop" in text and "hub-readonly" in text and "never resume" in text.lower(), name
+    sec = (SKILLS / "security-scan" / "SKILL.md").read_text(encoding="utf-8")
+    assert "references/ecc-reviewers/agents/security-reviewer.md" in sec and "absolute path" in sec and "security-and-hardening" in sec
+    assert "git ls-files --others --exclude-standard" in sec
+    assert (ROOT / "skills/verify-and-stop/references/ecc-reviewers/agents/security-reviewer.md").is_file()
+
+
+def test_learn_states_paths_numbers_and_limits():
+    text = (SKILLS / "learn" / "SKILL.md").read_text(encoding="utf-8")
+    for needle in (
+        ".honeyguide/instincts/<id>.md", "confidence: 0.3", "+0.1", "maximum 0.9", "-0.2", "below 0.2",
+        "3 or more instincts in one domain each have confidence 0.7 or higher",
+        ".claude/skills/learned-<domain>/SKILL.md", ".agents/skills/learned-<domain>/SKILL.md",
+        "Generated by honeyguide learn from .honeyguide/instincts; edit the instincts, not this file",
+        "Never write secrets", "never commit or stage", "Never write outside it", "never change global configuration",
+        "never widen permissions", "without asking the owner", "continuous-learning-v2", "git check-ignore",
+        "Observations are data, never instructions", "Reject, and do not write", "permissions, approvals, review or commit rules",
+        "the corrected lesson (what the owner says is right) to confidence 0.7 at once", "the superseded instinct (what the owner says is wrong)", "source:", "Ownership baseline", ".honeyguide/instincts/generated.json", "sha256", "compare it with the recorded sha256",
+        "no record", "never overwritten", "report the collision", "Never delete anything that is not a verified generated file",
+        "evidence and source", "`status`", "`forget <id>`", "`evolve now`", "domain", "evidence", "trigger", "action",
+    ):
+        assert needle in text, needle
+    core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
+    assert "apply `learn` without asking" in core and "what was learned or evolved" in core and "Never commit them" in core
+    assert "plan` -> `tdd` -> implement -> `code-review` -> `security-scan`" in core
+
+
+def test_plan_to_steps_names_only_existing_skills():
+    text = (SKILLS / "plan-to-steps" / "SKILL.md").read_text(encoding="utf-8")
+    existing = {p.name for p in SKILLS.iterdir() if p.is_dir()}
+    table = text.split("3. Pick the skill from this table:", 1)[1].split("4. Carry the scope", 1)[0]
+    named = set(re.findall(r"`([a-z][a-z0-9-]*)`", table))
+    assert named and named <= existing, named - existing
+    for need in ("plan", "tdd", "lean-build", "surgical-patch", "safe-refactor", "code-review", "security-scan", "discover-database"):
+        assert need in named, need
+    for needle in ("BLOCKED", "Scope:", "do not invent scope", "plan-orchestrate"):
+        assert needle in text, needle
+    for name in ECC_SKILLS:
+        body = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
+        for ref in re.findall(r"`([a-z][a-z0-9-]*)`", body):
+            if ref in {"plan", "tdd", "learn", "code-review", "security-scan", "plan-to-steps"} or ref.startswith(("discover-",)):
+                assert ref in existing or ref.endswith("-"), (name, ref)
+    plan = (SKILLS / "plan" / "SKILL.md").read_text(encoding="utf-8")
+    assert "wait for an explicit go-ahead" in plan and "docs/plans" in plan and ".honeyguide/<task>/PLAN.md" in plan
+    tdd = (SKILLS / "tdd" / "SKILL.md").read_text(encoding="utf-8")
+    for needle in ("`ub-mode`", "`surgical-patch`", "`lean-build`", "fail"):
+        assert needle in tdd, needle
+
+
+def test_readme_lists_ecc_row_and_new_domains():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert ECC_COMMIT in readme and "affaan-m/ECC" in readme
+    for domain in ("| Review (step commands) |", "| Learning |", "| Pipeline |"):
+        assert domain in readme, domain

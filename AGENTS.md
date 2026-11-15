@@ -3,10 +3,10 @@
 This repository is the `wunzent-hub` marketplace for Claude Code and Codex with one plugin, `honeyguide` (the
 repository root, laid out like obra/superpowers; UNLICENSED and ours). It is public. `ub-mode` and `find-skills` in
 `skills/` are unchanged third-party copies, and the `discover-*` gateway skills carry unchanged third-party knowledge files
-under their `references/` (see README.md, Third-party content). `egm` is only recommended (docs/RECOMMENDED.md), not shipped. See README.md.
+under their `references/` (so does `verify-and-stop`: ECC reviewer checklists) (see README.md, Third-party content). `egm` is only recommended (docs/RECOMMENDED.md), not shipped. See README.md.
 
 ## Layout
-- Root plugin: `.claude-plugin/` (plugin.json, marketplace.json), `.codex-plugin/plugin.json`, `skills/` (26 skills),
+- Root plugin: `.claude-plugin/` (plugin.json, marketplace.json), `.codex-plugin/plugin.json`, `skills/` (32 skills),
   `agents/`, `codex-agents/`; Codex marketplace: `.agents/plugins/marketplace.json`
 - `docs/` specs, plans, audits, history/, RECOMMENDED.md; `tests/test_plugin.py`
 
@@ -15,7 +15,7 @@ under their `references/` (see README.md, Third-party content). `egm` is only re
 - `git diff --check`
 - `claude plugin validate .`
 
-## Update a third-party copy (`ub-mode`, `find-skills`, `skills/discover-*/references/<source>/`)
+## Update a third-party copy (`ub-mode`, `find-skills`, `skills/discover-*/references/<source>/`, `skills/verify-and-stop/references/ecc-reviewers/`)
 1. Clone upstream into a scratch folder outside the repo with `git -c core.autocrlf=false`; never run upstream scripts.
 2. Replace the files at the same relative paths; update the commit in the skill's SOURCE.md and the hashes in `tests/test_plugin.py` (for `references/<source>/`: regenerate its `manifest.sha256`), then run the checks.
 

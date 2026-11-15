@@ -13,15 +13,15 @@ from its table or used on their own (`/honeyguide:<skill>`).
     .claude-plugin/       plugin.json, marketplace.json (Claude Code)
     .codex-plugin/        plugin.json
     .agents/plugins/      marketplace.json (Codex)
-    skills/               26 skills of honeyguide (see below)
+    skills/               32 skills of honeyguide (see below)
     agents/               Claude agents hub-readonly, hub-writer
     codex-agents/         Codex agent shells (copy by hand, see below)
     docs/                 specs, plans, audits, history/, RECOMMENDED.md (reference list only)
     tests/test_plugin.py  static checks (standard library only)
 
-## Skills in honeyguide (26)
+## Skills in honeyguide (32)
 
-17 workflow skills that work with any language or framework, plus 9 `discover-*` gateways, one per technology domain.
+23 workflow skills that work with any language or framework, plus 9 `discover-*` gateways, one per technology domain.
 Every task starts at `orchestrate`, which routes to the other skills through its table; the gateway column names the
 skill to start a domain from. A gateway is short: it lists which third-party knowledge file answers which topic, and the
 agent reads only those files (see Third-party content).
@@ -31,7 +31,10 @@ agent reads only those files (see Third-party content).
 | Workflow | Planning, native agents, independent review, checkpoints, long or looping work, context setup | 4: orchestrate, cheap-delegation, stay-on-track, context-engineering | orchestrate |
 | Build | New features, small bug fixes, behaviour-preserving restructuring | 3: lean-build, surgical-patch, safe-refactor | orchestrate |
 | Debug | Proving a cause (reproduce, trace, falsify, cross-check); browser devtools, pdb, GDB/LLDB, profiling, memory, production debugging | 2: investigate-first, discover-debugging | discover-debugging |
-| Review and verify | Acceptance proof without scope growth; outsider review of a plan, PR or change | 1: verify-and-stop | orchestrate |
+| Review and verify | Acceptance proof without scope growth; outsider review of a plan, PR or change; language and framework reviewer checklists (ECC, vendored) | 1: verify-and-stop | orchestrate |
+| Review (step commands) | Fresh-reviewer code review of a diff with the matching language checklists; security review of a change | 2: code-review, security-scan | orchestrate |
+| Learning | Project-local instincts with confidence scores written at delivery, evolved into a project skill; show, forget, evolve on request | 1: learn | learn |
+| Pipeline | Plan before code and wait for go-ahead; test-first build; plan to ready steps. Features: plan, tdd, implement, code-review, security-scan | 3: plan, tdd, plan-to-steps | plan |
 | Coding discipline | Make it work, make it right, follow practice | 1: ub-mode | ub-mode |
 | Frontend | Vue 3, Nuxt 5 prerelease (5.0.0-0; check your project's version), Pinia, Vite, Vitest, React, Next.js, accessibility, frontend performance | 1: discover-frontend | discover-frontend |
 | Backend | AdonisJS v6, NestJS, Nitro v3 beta (3.0.260903; check your project's version; Nuxt server), REST, GraphQL, authentication, errors, versioning, rate limiting; endpoint safety and type contracts (any framework) | 3: discover-backend, api-and-interface-design, backend-api-safety | discover-backend |
@@ -51,7 +54,7 @@ agent reads only those files (see Third-party content).
 
 Unchanged upstream copies, all MIT, each with its `LICENSE` and a `SOURCE.md`. The gateway files live in
 `skills/discover-*/references/<source>/` at their original relative paths, with a `manifest.sha256` that the tests
-check. Only documentation was copied: no scripts, code examples (except AdonisJS `.ts`/`.yml` examples, read-only text),
+check; the ECC reviewer checklists live in `skills/verify-and-stop/references/ecc-reviewers/` the same way. Only documentation was copied: no scripts, code examples (except AdonisJS `.ts`/`.yml` examples, read-only text),
 package or lock files. Upstream `SKILL.md` files are stored as `SKILL.upstream.md` so no CLI loads them as skills. The files are reference material; the project's own rules win.
 
 | Source | Commit | Licence | Where |
@@ -62,8 +65,9 @@ package or lock files. Upstream `SKILL.md` files are stored as `SKILL.upstream.m
 | HoangNguyen0403/agent-skills-standard (nestjs) | 24d9034d21d3b2ab5815236d20ba32a4e85c4c04 | MIT | `discover-backend` |
 | omakei/adonisjs-architecture-skill (adonisjs) | 8ee242685af8974ad45179497ae384629144c2b8 | MIT | `discover-backend` |
 | rand/cc-polymath (12 categories) | baa2df114416570f5e0e2961143d20e3716a2fc8 | MIT | all nine `discover-*` gateways |
+| affaan-m/ECC (19 reviewer checklists: agents/*-reviewer.md, used as checklists, not as agents) | d2ef2680594f9a17526a6e1a2e18b3d242c5d17b | MIT | `verify-and-stop`, `code-review`, `security-scan` |
 
-stay-on-track's handoff section is adapted from Matt Pocock's `handoff` (MIT).
+stay-on-track's handoff section is adapted from Matt Pocock's `handoff` (MIT). The ideas behind `learn`, `plan`, `tdd`, `code-review`, `security-scan` and `plan-to-steps` come from ECC (affaan-m/ECC, MIT); those skills are written here in our own words, hook-free.
 
 ## Recommended
 
@@ -92,7 +96,7 @@ Other optional tools (all MIT, none bundled; details, install commands and what 
 | `spec-kit` (github/spec-kit) | Full Spec-Driven Development in one project: constitution, spec, plan, tasks, implement | Claude Code, Codex (and others) | A Python CLI that writes `.specify/` and `/speckit-*` commands into the project |
 | `antislop` (miqdadbadjuber/anti-slop) | Filtering generic AI-looking UI, copy and code | Claude Code, Codex | The Claude plugin starts a `node` MCP server (contrast checker) |
 | `cc-polymath` (rand/cc-polymath) | Technology domains not bundled here (mobile, security, distributed systems, ML, Rust, ...) | Claude Code only | SessionStart/SubagentStart hooks that only print text |
-| `ecc` (affaan-m/ECC) | Not recommended together with honeyguide: its own orchestration, memory and hooks overlap ours | Claude Code, Codex | Many hooks that run code on tool use, prompts, stop and session events |
+| `ecc` (affaan-m/ECC) | Not recommended together with honeyguide: its own orchestration, memory and hooks overlap ours (honeyguide already bundles its reviewer checklists and re-implements a few of its ideas without hooks) | Claude Code, Codex | Many hooks that run code on tool use, prompts, stop and session events |
 
 ## Install
 
@@ -139,5 +143,5 @@ Codex:
 ## Limits
 
 - Checked statically (`claude plugin validate .`, `tests/test_plugin.py`), not by installing into a live CLI profile.
-- `ub-mode`, `find-skills` and the `references/` of the `discover-*` gateways are unchanged third-party copies at a pinned commit and are not updated automatically; their content is unreviewed upstream advice (the AdonisJS files in particular are one author's opinion).
+- `ub-mode`, `find-skills`, `verify-and-stop/references/ecc-reviewers/` and the `references/` of the `discover-*` gateways are unchanged third-party copies at a pinned commit and are not updated automatically; their content is unreviewed upstream advice (the AdonisJS files in particular are one author's opinion).
 - Recommended plugins (`egm`, others) are not part of this repository; `docs/RECOMMENDED.md` is a reference list only.
