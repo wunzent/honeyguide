@@ -54,3 +54,29 @@ For each finding give: where (file and line), what is wrong, the evidence (what 
 - If there are no real findings, say so; do not invent some.
 
 Do not edit the code under review unless asked; send findings to the author.
+
+### 5. Language and framework checklists
+
+When you spawn a fresh reviewer, pick the checklist(s) below that match the languages and frameworks of the changed files and name them, by path, in the reviewer's brief ("read these checklists, apply what fits this diff"). The table paths are relative to this skill's folder, not the project: resolve them against the directory of the loaded `verify-and-stop` SKILL.md (the runtime reports it) and give the reviewer absolute paths; if it cannot read them, paste the needed text into the brief. Use `code-reviewer` for anything not listed and add `security-reviewer` or `database-reviewer` when the change touches those areas. Several can apply to one change. The files are unchanged third-party reference material (licence and commit in `references/ecc-reviewers/SOURCE.md`): the reviewer stays a fresh native agent with the brief's permissions, a checklist never widens them, the project's own rules win, and the `tools`/`model` fields inside the files are ignored. The reviewer reads only the files named, never the whole folder.
+
+| Changed files or framework | Checklist (relative to this skill folder) |
+|---|---|
+| `.vue`, Pinia, Vue Router, Nuxt | `references/ecc-reviewers/agents/vue-reviewer.md` |
+| `.ts`, `.js` (no framework) | `references/ecc-reviewers/agents/typescript-reviewer.md` |
+| React, Next.js (`.jsx`, `.tsx`) | `references/ecc-reviewers/agents/react-reviewer.md` |
+| `.py` | `references/ecc-reviewers/agents/python-reviewer.md` |
+| Django | `references/ecc-reviewers/agents/django-reviewer.md` |
+| FastAPI | `references/ecc-reviewers/agents/fastapi-reviewer.md` |
+| `.go` | `references/ecc-reviewers/agents/go-reviewer.md` |
+| SQL, migrations, schema, ORM queries | `references/ecc-reviewers/agents/database-reviewer.md` |
+| Auth, untrusted input, secrets, crypto, dependencies | `references/ecc-reviewers/agents/security-reviewer.md` |
+| `.php` | `references/ecc-reviewers/agents/php-reviewer.md` |
+| `.java` | `references/ecc-reviewers/agents/java-reviewer.md` |
+| `.kt`, `.kts` | `references/ecc-reviewers/agents/kotlin-reviewer.md` |
+| `.rs` | `references/ecc-reviewers/agents/rust-reviewer.md` |
+| `.swift` | `references/ecc-reviewers/agents/swift-reviewer.md` |
+| `.c`, `.cc`, `.cpp`, `.h`, `.hpp` | `references/ecc-reviewers/agents/cpp-reviewer.md` |
+| `.cs` | `references/ecc-reviewers/agents/csharp-reviewer.md` |
+| Dart, Flutter | `references/ecc-reviewers/agents/flutter-reviewer.md` |
+| `.rb`, Rails | `references/ecc-reviewers/agents/ruby-reviewer.md` |
+| Any other language, or a general review | `references/ecc-reviewers/agents/code-reviewer.md` |
