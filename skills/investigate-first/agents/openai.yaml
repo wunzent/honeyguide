@@ -1,4 +1,4 @@
 interface:
   display_name: "Investigate First"
-  short_description: "Find credible cause before editing code"
-  default_prompt: "Use $investigate-first to diagnose this failure before proposing edits."
+  short_description: "Prove the cause before editing code"
+  default_prompt: "Use $investigate-first to reproduce, trace and prove the cause of this failure before proposing edits."

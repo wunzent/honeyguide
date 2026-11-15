@@ -1,6 +1,6 @@
 ---
 name: cheap-delegation
-description: Hand mechanical, low-risk, self-contained work to the cheapest native model to save quota. Defines what fits, what does not, how to write the brief, and how to verify the result.
+description: "Use when work is mechanical, low-risk and self-contained (bulk edits, doc fixes, log reading, per-file changes): hand it to the cheapest native model to save quota. Defines what fits, what does not, how to write the brief, and how to verify the result."
 ---
 
 # Cheap delegation

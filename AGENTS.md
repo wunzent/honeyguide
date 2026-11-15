@@ -6,10 +6,10 @@ google/elephant-goldfish-model). It is public. `ub-mode` and `find-skills` in `s
 copies. See README.md.
 
 ## Layout
-- Root plugin: `.claude-plugin/` (plugin.json, marketplace.json), `.codex-plugin/plugin.json`, `skills/` (20 skills),
+- Root plugin: `.claude-plugin/` (plugin.json, marketplace.json), `.codex-plugin/plugin.json`, `skills/` (17 skills),
   `agents/`, `codex-agents/`; Codex marketplace: `.agents/plugins/marketplace.json`
 - `plugins/egm/` (7 skills): upstream layout, its own manifests, `LICENSE`, `SOURCE.md`, `manifest.sha256`
-- `docs/` specs, plans, audits, RECOMMENDED.md; `tests/test_plugin.py`
+- `docs/` specs, plans, audits, history/, RECOMMENDED.md; `tests/test_plugin.py`
 
 ## Checks
 - `.venv\Scripts\python.exe -m pytest -q` (standard library only; `pytest.ini` limits collection to `tests/`)

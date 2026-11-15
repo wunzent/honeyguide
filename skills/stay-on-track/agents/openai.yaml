@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stay on Track"
+  short_description: "Break loops, ask after three attempts; handoff on request"
+  default_prompt: "Use $stay-on-track to check this task for loops and stalls, and write a handoff document only if the owner asks for one."

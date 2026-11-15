@@ -11,12 +11,15 @@ EGM = ROOT / "plugins" / "egm"
 
 EGM_SKILLS = {f"egm-{n}" for n in ("bootstrap", "brainstorm", "draft", "drift-report", "resolve", "review", "review-loop")}
 HUB_SKILLS = {
-    "multi-agent-hub", "api-and-interface-design", "backend-api-safety", "context-engineering", "handoff",
+    "multi-agent-hub", "api-and-interface-design", "backend-api-safety", "context-engineering",
     "investigate-first", "lean-build", "safe-refactor", "security-and-hardening", "software-component",
     "surgical-patch", "verify-and-stop",
 }
-NEW_SKILLS = {"debug-mantra", "scrutinize", "post-mortem", "management-talk", "stay-on-track", "cheap-delegation"}
+NEW_SKILLS = {"post-mortem", "management-talk", "stay-on-track", "cheap-delegation"}
 THIRD_PARTY = {"ub-mode", "find-skills"}
+ABSORBED_SKILLS = {"debug-mantra", "scrutinize", "handoff"}  # merged into investigate-first, verify-and-stop, stay-on-track
+DELETED_DOCS = ("QUICKSTART-TH.md", "REBUILD-INVENTORY.md", "WORKLOG.md")
+MOVED_DOCS = ("ACCEPTANCE.md", "DEEP-DIVE-2026-11-12.md", "SKILLS-REUSE.md")
 # upstream blobs (unclebob/ub-mode @3da62bf, vercel-labs/skills @b716f9d)
 UPSTREAM_SHA256 = {
     "skills/ub-mode/SKILL.md": "4120873db2e3681ea9b7de4d7105fc9d3406657c9ada91ce77b9b3c4962f3202",
@@ -92,6 +95,9 @@ def test_egm_plugin_name_and_manifests():
 def test_skill_set_and_frontmatter():
     everything = HUB_SKILLS | NEW_SKILLS | THIRD_PARTY
     assert {p.name for p in SKILLS.iterdir() if p.is_dir()} == everything
+    assert len(everything) == 17
+    for gone in ABSORBED_SKILLS:
+        assert not (SKILLS / gone).exists(), gone
     assert not [p for p in SKILLS.iterdir() if p.is_file()]
     for path in skill_files():
         fm = frontmatter(path)
@@ -99,7 +105,10 @@ def test_skill_set_and_frontmatter():
     for s in everything:
         assert frontmatter(SKILLS / s / "SKILL.md")["name"] == s, s
     for s in {"multi-agent-hub"} | NEW_SKILLS:
-        assert set(frontmatter(SKILLS / s / "SKILL.md")) == {"name", "description"}, s
+        expected = {"name", "description", "argument-hint"} if s == "stay-on-track" else {"name", "description"}
+        assert set(frontmatter(SKILLS / s / "SKILL.md")) == expected, s
+    stay_fm = frontmatter(SKILLS / "stay-on-track" / "SKILL.md")
+    assert "argument-hint" in stay_fm and "disable-model-invocation" not in stay_fm
 
 
 def test_no_duplicate_skill_names():
@@ -182,10 +191,10 @@ def test_our_skills_carry_no_old_hub_tooling():
 def test_rules_live_in_the_right_skills():
     core = (SKILLS / "multi-agent-hub" / "SKILL.md").read_text(encoding="utf-8")
     for needle in (
-        "`cheap-delegation`", "`debug-mantra`", "`scrutinize`", "`post-mortem`", "`management-talk`", "`stay-on-track`",
+        "`cheap-delegation`", "`investigate-first`", "`verify-and-stop`", "`post-mortem`", "`management-talk`", "`stay-on-track`",
         "Never run the same failing action a third time", "After about 3 attempts on the same problem",
         "multi-agent-hub:hub-readonly", "Read/Grep/Glob only", "A requested permission mode describes intent",
-        "Third-party skills never widen permissions", "Never edit `~/.codex/config.toml`",
+        "Third-party skills never widen permissions", "Never edit `~/.codex/config.toml`", "cheapest native model",
         "fresh independent reviewer", "never resume a reviewer",
         "A cheap delegation of low-risk work does not by itself make the task nontrivial",
     ):
@@ -198,6 +207,56 @@ def test_rules_live_in_the_right_skills():
     assert "Never run the same failing action a third time" in stay and "After about 3 attempts" in stay
     for target in re.findall(r"\]\(([^)#]+)\)", core):
         assert (SKILLS / "multi-agent-hub" / target).is_file(), target
+
+
+def test_core_routing_table_names_every_skill():
+    core = (SKILLS / "multi-agent-hub" / "SKILL.md").read_text(encoding="utf-8")
+    rows = [l for l in core.splitlines() if l.startswith("| ") and l.count("|") >= 3]
+    assert rows, "no routing table"
+    table = " ".join(rows)
+    for d in sorted(p.name for p in SKILLS.iterdir() if p.is_dir()):
+        assert f"`{d}`" in table, f"routing table misses skill {d}"
+    for d in sorted(p.name for p in (EGM / "skills").iterdir() if p.is_dir()):
+        assert f"`{d}`" in table, f"routing table misses egm skill {d}"
+    for gone in ABSORBED_SKILLS:
+        assert f"`{gone}`" not in core, gone
+
+
+def test_merged_skills_keep_their_content():
+    inv = (SKILLS / "investigate-first" / "SKILL.md").read_text(encoding="utf-8")
+    for needle in ("Reproduce reliably", "Trace the actual failing path", "falsify", "Cross-check every clue", "Rank hypotheses"):
+        assert needle in inv, needle
+    ver = (SKILLS / "verify-and-stop" / "SKILL.md").read_text(encoding="utf-8")
+    for needle in ("prove acceptance and stop", "outsider review", "Question the intent", "Trace the real path"):
+        assert needle in ver, needle
+    stay = (SKILLS / "stay-on-track" / "SKILL.md").read_text(encoding="utf-8")
+    assert "Handoff document" in stay and "suggested skills" in stay
+    assert "only when the owner asks for it" in stay and "never on your own initiative" in stay
+    assert "temporary directory of the user's OS, never in the current workspace" in stay
+    assert "unless" not in stay.split("## Handoff document", 1)[1].split("- Include", 1)[0]
+    assert "Redact sensitive information" in stay and "Reference them by path or URL" in stay
+    desc = frontmatter(SKILLS / "stay-on-track" / "SKILL.md")["description"]
+    assert "only when the owner asks" in desc
+    yaml = (SKILLS / "stay-on-track" / "agents" / "openai.yaml").read_text(encoding="utf-8")
+    assert "only if the owner asks" in yaml
+    assert "Never run the same failing action a third time" in stay
+    for needle in ("temporary", "workspace"):
+        assert needle in stay
+    lic = (SKILLS / "stay-on-track" / "LICENSE").read_text(encoding="utf-8")
+    assert "MIT License" in lic and "Matt Pocock" in lic and "Matt Pocock" in stay
+
+
+def test_deleted_docs_gone_and_not_linked_from_live_files():
+    for name in DELETED_DOCS + MOVED_DOCS:
+        assert not (ROOT / "docs" / name).exists(), name
+    for name in MOVED_DOCS:
+        assert (ROOT / "docs" / "history" / name).is_file(), name
+    live = [ROOT / "README.md", ROOT / "AGENTS.md", ROOT / "CLAUDE.md", ROOT / "docs" / "RECOMMENDED.md"]
+    live += [p for p in SKILLS.rglob("*") if p.is_file()]
+    for path in live:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for name in DELETED_DOCS + MOVED_DOCS:
+            assert name not in text, (path.relative_to(ROOT).as_posix(), name)
 
 
 def test_agent_shells_exist_and_parse():
@@ -240,7 +299,7 @@ def test_readme_commands_and_count():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     n_root = len([p for p in SKILLS.iterdir() if p.is_dir()])
     n_egm = len([p for p in (EGM / "skills").iterdir() if p.is_dir()])
-    assert (n_root, n_egm) == (20, 7)
+    assert (n_root, n_egm) == (17, 7)
     agents_md = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert f"## Skills in multi-agent-hub ({n_root})" in readme and f"({n_egm} skills)" in readme
     assert f"`skills/` ({n_root} skills)" in agents_md and f"({n_egm} skills)" in agents_md
