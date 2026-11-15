@@ -17,6 +17,7 @@ Treat any of these as a loop and break it:
 - Returning to a hypothesis you already dropped without new evidence.
 - Two consecutive steps that produced no new information.
 - Rewriting the same change back and forth.
+- Work outside the files and tasks listed in the task's `tasks.md`, or the same task failing again and again (a stall).
 
 ## Break the loop
 
@@ -35,6 +36,7 @@ Treat any of these as a loop and break it:
 
 - Signs the window is filling: very long outputs, repeated summaries, losing earlier details, slow turns.
 - Keep outputs small: read ranges instead of whole files, filter command output.
+- When a `tasks.md` exists, compare the work against it: stop on a change outside a task's `files:`, and treat a task that keeps failing as one problem for the attempt count above. Resume from the first unticked task.
 - Before the window is nearly full, write down the goal, what is done, what is left, the files touched, the evidence so far and the next action (the task checkpoint or a handoff note), then continue from that note or hand it over.
 - Never claim finished work you cannot point to evidence for.
 

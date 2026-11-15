@@ -34,7 +34,7 @@ agent reads only those files (see Third-party content).
 | Review and verify | Acceptance proof without scope growth; outsider review of a plan, PR or change; language and framework reviewer checklists (ECC, vendored) | 1: verify-and-stop | orchestrate |
 | Review (step commands) | Fresh-reviewer code review of a diff with the matching language checklists; security review of a change | 2: code-review, security-scan | orchestrate |
 | Learning | Project-local instincts with confidence scores written at delivery, evolved into a project skill; show, forget, evolve on request | 1: learn | learn |
-| Pipeline | Plan before code and wait for go-ahead; test-first build; plan to ready steps. Features: plan, tdd, implement, code-review, security-scan | 3: plan, tdd, plan-to-steps | plan |
+| Pipeline | Plan before code and wait for go-ahead; test-first build; plan to a task list. Features: plan, tdd, implement, code-review, security-scan | 3: plan, tdd, tasks | plan |
 | Coding discipline | Make it work, make it right, follow practice | 1: ub-mode | ub-mode |
 | Frontend | Vue 3, Nuxt 5 prerelease (5.0.0-0; check your project's version), Pinia, Vite, Vitest, React, Next.js, accessibility, frontend performance | 1: discover-frontend | discover-frontend |
 | Backend | AdonisJS v6, NestJS, Nitro v3 beta (3.0.260903; check your project's version; Nuxt server), REST, GraphQL, authentication, errors, versioning, rate limiting; endpoint safety and type contracts (any framework) | 3: discover-backend, api-and-interface-design, backend-api-safety | discover-backend |
@@ -69,7 +69,7 @@ package or lock files. Upstream `SKILL.md` files are stored as `SKILL.upstream.m
 | rand/cc-polymath (15 categories) | baa2df114416570f5e0e2961143d20e3716a2fc8 | MIT | all twelve `discover-*` gateways |
 | affaan-m/ECC (19 reviewer checklists: agents/*-reviewer.md, used as checklists, not as agents) | d2ef2680594f9a17526a6e1a2e18b3d242c5d17b | MIT | `verify-and-stop`, `code-review`, `security-scan` |
 
-stay-on-track's handoff section is adapted from Matt Pocock's `handoff` (MIT). The ideas behind `learn`, `plan`, `tdd`, `code-review`, `security-scan` and `plan-to-steps` come from ECC (affaan-m/ECC, MIT); those skills are written here in our own words, hook-free.
+stay-on-track's handoff section is adapted from Matt Pocock's `handoff` (MIT). The ideas behind `learn`, `plan`, `tdd`, `code-review`, `security-scan` and `tasks` come from ECC (affaan-m/ECC, MIT); `tasks` also borrows the task-list idea from github/spec-kit (MIT); those skills are written here in our own words, hook-free.
 
 ## Recommended
 

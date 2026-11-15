@@ -14,7 +14,7 @@ HUB_SKILLS = {
 }
 NEW_SKILLS = {"post-mortem", "management-talk", "stay-on-track", "cheap-delegation"}
 THIRD_PARTY = {"ub-mode", "find-skills"}
-ECC_SKILLS = {"learn", "plan", "tdd", "code-review", "security-scan", "plan-to-steps"}  # ideas from affaan-m/ECC, our words
+ECC_SKILLS = {"learn", "plan", "tdd", "code-review", "security-scan", "tasks"}  # ideas from affaan-m/ECC, our words
 ECC_DIR = SKILLS / "verify-and-stop" / "references" / "ecc-reviewers"
 ECC_COMMIT = "d2ef2680594f9a17526a6e1a2e18b3d242c5d17b"
 GATEWAYS = {
@@ -480,23 +480,147 @@ def test_learn_states_paths_numbers_and_limits():
         assert needle in text, needle
     core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
     assert "apply `learn` without asking" in core and "what was learned or evolved" in core and "Never commit them" in core
-    assert "plan` -> `tdd` -> implement -> `code-review` -> `security-scan`" in core
+    assert "plan` -> `tasks` -> per task (every Build task that changes code or tests runs `tdd`, with an optional `guide:` such as `lean-build`, `surgical-patch` or `safe-refactor`) -> `code-review` -> `security-scan`" in core
 
 
-def test_plan_to_steps_names_only_existing_skills():
-    text = (SKILLS / "plan-to-steps" / "SKILL.md").read_text(encoding="utf-8")
+NAME = r"[a-z][a-z0-9-]*"
+TASK_RE = re.compile(
+    r"^- \[( |x)\] (T\d{3})( \[P\])?(?: BLOCKED: (.+)| (.+?)(?: \(after: ([^)]*)\))? -> skill: (" + NAME
+    + r")(?: guide: (" + NAME + r"(?:, " + NAME + r")*))? files: (.+))$")
+
+
+def check_task_list(text, existing):
+    """Return a list of rule violations for a tasks.md body (empty = valid)."""
+    errors, tasks, phase, phases = [], {}, None, {}
+    for line in text.splitlines():
+        if line.startswith("## "):
+            phase = line[3:].strip()
+            if phase in phases:
+                errors.append("repeated phase heading: " + phase)
+            phases.setdefault(phase, [])
+        elif line.startswith("- ["):
+            m = TASK_RE.match(line)
+            if not m:
+                errors.append("bad line: " + line)
+                continue
+            done, tid, par, reason, desc, after, skill, guide, files = m.groups()
+            if phase is None:
+                errors.append("task outside a phase: " + tid)
+            deps = [d.strip() for d in after.split(",")] if after is not None else []
+            if any(not re.fullmatch(r"T\d{3}", d) for d in deps):
+                errors.append("malformed dependency in %s: %r" % (tid, after))
+            if desc is not None and ("after:" in desc or "skill:" in desc):
+                errors.append("malformed clause in description of " + tid)
+            blocked = reason is not None
+            if blocked and par:
+                errors.append("blocked task cannot carry [P]: " + tid)
+            if not blocked:
+                if skill not in existing:
+                    errors.append("unknown skill %s in %s" % (skill, tid))
+                for g in (guide.split(", ") if guide else []):
+                    if g not in existing:
+                        errors.append("unknown guide %s in %s" % (g, tid))
+                if guide and phase != "Build":
+                    errors.append("guide only on Build tasks: " + tid)
+                if phase == "Build" and skill != "tdd":
+                    errors.append("Build task %s must use skill tdd" % tid)
+                if phase == "Review" and skill not in {"code-review", "security-scan"}:
+                    errors.append("Review task %s must use code-review or security-scan" % tid)
+            if tid in tasks:
+                errors.append("duplicate " + tid)
+            tasks[tid] = {"done": done == "x", "par": bool(par), "deps": deps, "skill": skill,
+                          "files": {f.strip() for f in files.split(",")} if files else set()}
+            if phase is not None:
+                phases[phase].append(tid)
+    ids = list(tasks)
+    if ids != ["T%03d" % i for i in range(1, len(ids) + 1)]:
+        errors.append("ids not ordered from T001: %s" % ids)
+    for tid, info in tasks.items():
+        for d in info["deps"]:
+            if d not in tasks or ids.index(d) >= ids.index(tid):
+                errors.append("%s depends on missing or later %s" % (tid, d))
+            elif info["done"] and not tasks[d]["done"]:
+                errors.append("%s ticked before prerequisite %s" % (tid, d))
+    for members in phases.values():
+        par = [x for x in members if tasks[x]["par"]]
+        for i, x in enumerate(par):
+            for y in par[i + 1:]:
+                if tasks[x]["files"] & tasks[y]["files"]:
+                    errors.append("[P] tasks %s and %s share files" % (x, y))
+    if not [x for x in phases.get("Review", []) if tasks[x]["skill"] == "code-review"]:
+        errors.append("Review has no code-review task")
+    return errors
+
+
+def test_task_list_checker_accepts_and_rejects():
     existing = {p.name for p in SKILLS.iterdir() if p.is_dir()}
-    table = text.split("3. Pick the skill from this table:", 1)[1].split("4. Carry the scope", 1)[0]
+    good = (
+        "## Setup\n- [x] T001 Config -> skill: lean-build files: a.ts\n"
+        "## Build\n- [ ] T002 [P] One (after: T001) -> skill: tdd guide: lean-build files: b.ts, b.test.ts\n"
+        "- [ ] T003 [P] Two (after: T001) -> skill: tdd guide: surgical-patch, discover-database files: c.ts, c.test.ts\n"
+        "- [ ] T004 BLOCKED: owner decision on lockout\n"
+        "## Review\n- [ ] T005 Review (after: T002, T003) -> skill: code-review files: b.ts\n"
+    )
+    assert check_task_list(good, existing) == []
+
+    def bad(old, new, text=good):
+        assert old in text, old
+        return check_task_list(text.replace(old, new), existing)
+
+    def has(errors, word):
+        return any(word in e for e in errors)
+
+    assert has(bad("c.ts, c.test.ts", "b.ts"), "share files")
+    assert has(bad("(after: T001) -> skill: tdd guide: surgical", "(after: T009) -> skill: tdd guide: surgical"), "missing or later")
+    assert has(bad("T003", "T007"), "not ordered")
+    assert has(bad("BLOCKED: owner decision on lockout", "BLOCKED: "), "bad line")
+    assert has(bad("T004 BLOCKED", "T004 [P] BLOCKED"), "cannot carry [P]")
+    assert has(bad("skill: code-review", "skill: security-scan"), "no code-review")
+    assert has(bad("skill: lean-build files: a.ts", "skill: nope files: a.ts"), "unknown skill")
+    assert has(bad("guide: lean-build", "guide: nope"), "unknown guide")
+    assert has(bad("T002 [P] One (after: T001) -> skill: tdd", "T002 [P] One (after: T001) -> skill: surgical-patch"), "must use skill tdd")
+    assert has(bad("skill: lean-build files: a.ts", "skill: lean-build guide: plan files: a.ts"), "guide only on Build")
+    assert has(bad("- [ ] T002", "- [x] T002", good.replace("- [x] T001", "- [ ] T001")), "ticked before prerequisite")
+    assert has(bad("(after: T001) -> skill: tdd guide: surgical-patch, discover-database files: c.ts, c.test.ts", "(after: T001) files: c.ts"), "bad line")
+    # malformed dependency clauses
+    assert has(bad("Config -> skill", "Config (after: none) -> skill"), "malformed dependency")
+    assert has(bad("(after: T002, T003)", "(after: T002,T00x)"), "malformed dependency")
+    assert has(bad("Config -> skill", "Config after: T000 -> skill"), "malformed clause")
+    # repeated phase headings must not hide overlapping [P] tasks
+    repeated = good.replace("- [ ] T004 BLOCKED: owner decision on lockout\n", "- [ ] T004 BLOCKED: owner decision on lockout\n## Build\n- [ ] T006 [P] Three (after: T001) -> skill: tdd files: b.ts\n")
+    assert has(check_task_list(repeated, existing), "repeated phase heading")
+    assert has(check_task_list(repeated, existing), "share files")
+
+
+def test_tasks_skill_replaces_plan_to_steps_and_names_only_existing_skills():
+    assert (SKILLS / "tasks").is_dir() and not (SKILLS / "plan-to-steps").exists()
+    text = (SKILLS / "tasks" / "SKILL.md").read_text(encoding="utf-8")
+    existing = {p.name for p in SKILLS.iterdir() if p.is_dir()}
+    table = text.split("5. Pick the skill.", 1)[1].split("6. Ready and parallel.", 1)[0]
     named = set(re.findall(r"`([a-z][a-z0-9-]*)`", table))
     assert named and named <= existing, named - existing
     for need in ("plan", "tdd", "lean-build", "surgical-patch", "safe-refactor", "code-review", "security-scan", "discover-database"):
         assert need in named, need
-    for needle in ("BLOCKED", "Scope:", "do not invent scope", "plan-orchestrate"):
+    for needle in ("- [ ] T001 [P] <short description> (after: T00x, ...) -> skill: <honeyguide skill> guide: <skill> files: <paths>",
+                   "BLOCKED", "do not invent scope", "github/spec-kit", "(after: ...)", "A task is ready when every task in its `after:` is ticked",
+                   "two tasks that share a file never both carry `[P]`", "re-check which tasks are now ready", "Setup, Build, Review",
+                   "not blocked; it keeps its full line", "one task per slice", "it owns the whole test-first cycle (red, green, refactor)", "`code-review` task", "`security-scan` task",
+                   "3 or more steps", "Every Build task that changes code or tests routes `skill: tdd`", "`guide:` is optional", ".honeyguide/<task>/tasks.md", "source plan path"):
         assert needle in text, needle
+    assert "Tests first" not in text
+    block = re.search(r"```tasks.md\n(.*?)```", text, re.S).group(1)
+    assert check_task_list(block, existing) == []
+    orch = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
+    for needle in ("`tasks.md` drives dispatch", "only after you verified its result", "continue from the first unticked task",
+                   "`plan` -> `tasks` -> per task (every Build task that changes code or tests runs `tdd`"):
+        assert needle in orch, needle
+    assert "tasks.md" in (SKILLS / "stay-on-track" / "SKILL.md").read_text(encoding="utf-8")
+    for p in [ROOT / "README.md", ROOT / "AGENTS.md"] + sorted(SKILLS.glob("*/SKILL.md")):
+        assert "plan-to-steps" not in p.read_text(encoding="utf-8"), p
     for name in ECC_SKILLS:
         body = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
         for ref in re.findall(r"`([a-z][a-z0-9-]*)`", body):
-            if ref in {"plan", "tdd", "learn", "code-review", "security-scan", "plan-to-steps"} or ref.startswith(("discover-",)):
+            if ref in {"plan", "tdd", "learn", "code-review", "security-scan", "tasks"} or ref.startswith(("discover-",)):
                 assert ref in existing or ref.endswith("-"), (name, ref)
     plan = (SKILLS / "plan" / "SKILL.md").read_text(encoding="utf-8")
     assert "wait for an explicit go-ahead" in plan and "docs/plans" in plan and ".honeyguide/<task>/PLAN.md" in plan

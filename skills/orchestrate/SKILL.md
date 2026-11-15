@@ -28,7 +28,7 @@ Skills: search the runtime's actual skill catalog (its native listing) by task n
 | Solution planning, SWC, component documentation | `software-component` |
 | Proving acceptance conditions, completion checks; outsider review of a plan, PR or change | `verify-and-stop` |
 | Plan a nontrivial change before coding and stop for the owner's go-ahead | `plan` |
-| Turn a plan document into ordered, ready steps naming the skill for each | `plan-to-steps` |
+| Work with 3 or more steps: turn the plan into a task list file (`tasks.md`) naming the skill for each task | `tasks` |
 | Build or fix behaviour test-first (red, green, refactor) | `tdd` |
 | Review the current diff with a fresh reviewer and the language checklists | `code-review` |
 | Security review of a change (input, auth, secrets, dependencies) | `security-scan` |
@@ -53,7 +53,9 @@ Skills: search the runtime's actual skill catalog (its native listing) by task n
 | Distributed systems: consensus, CRDTs, clocks, replication, sharding, event sourcing; system-design interview preparation | `discover-distributed` |
 | Design specs and design decisions | The recommended `egm` plugin, if installed (not part of this plugin; the owner types `/egm:egm-<skill>`, the orchestrator can only suggest it); when it is absent, suggest installing it (see `docs/RECOMMENDED.md`) |
 
-Feature pipeline: `plan` -> `tdd` -> implement -> `code-review` -> `security-scan`; `plan-to-steps` turns the approved plan into steps. Skip the stages the risk does not need.
+Feature pipeline: `plan` -> `tasks` -> per task (every Build task that changes code or tests runs `tdd`, with an optional `guide:` such as `lean-build`, `surgical-patch` or `safe-refactor`) -> `code-review` -> `security-scan`. Skip the stages the risk does not need. Work with fewer than 3 steps needs no task list, and trivial work still goes to cheap delegation.
+
+`tasks.md` drives dispatch: a task is ready when every task in its `after:` is ticked; ready `[P]` tasks of one phase with disjoint files may go to parallel agents, but two writers never touch the same files, and readiness is re-checked after each verified tick; tick a task `[x]` only after you verified its result; on a new session or handoff, continue from the first unticked task; `BLOCKED` tasks go to the owner. `tasks.md` lives with the task records in `.honeyguide/<task>/` and is not committed unless the project keeps its plans in the repo.
 
 Records are required for nontrivial work, meaning any work that spawns an agent other than a cheap delegation, or is rated high risk; trivial work writes none. Before the first spawn write `.honeyguide/<task>/CHECKPOINT.md` (goal, scope, risk rating), then a `briefs/<id>.md` for each agent and an `agents/<id>.md` for each spawn with requested and observed values (write the files directly); the final report names the record folder. Skipping them is a defect, not a shortcut. Preserve existing task history when continuing work. Record each agent's duty, skills, vendor, parent and id, requested and observed model/effort, requested permission, observed enforcement, status, and evidence. Keep requested values separate from observed values; use `Unverified` when evidence is unavailable. A requested permission mode describes intent; it does not prove sandbox or tool enforcement. Never write secrets or customer data. Keep records inside the project even when paths contain symlinks. No tool writes Git metadata: if `.honeyguide/` shows as untracked, the final report says so and that it must not be committed (the owner may add it to `.git/info/exclude`); do not change global Git settings or tracked ignore files silently.
 
