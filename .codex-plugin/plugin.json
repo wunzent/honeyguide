@@ -1,11 +1,11 @@
 {
-  "name": "multi-agent-hub",
+  "name": "honeyguide",
   "version": "0.1.0",
   "description": "Plan and carry out software work with native agents, risk-based independent review and project-local records.",
   "author": { "name": "wunzent" },
   "license": "UNLICENSED",
   "interface": {
-    "displayName": "Multi-Agent Hub",
+    "displayName": "Honeyguide",
     "shortDescription": "Native agents with risk-based independent review",
     "developerName": "wunzent",
     "category": "Developer Tools",

@@ -24,5 +24,6 @@ logs/
 .hub/vendor/
 .hub/staging/
 
-# Project-local multi-agent-hub records
+# Project-local honeyguide records (.multi-agent-hub/ is the old folder name; old local records may remain)
+.honeyguide/
 .multi-agent-hub/

@@ -1,26 +1,25 @@
-# wunzent-hub: multi-agent-hub and egm
+# honeyguide
 
-Two plugins for Claude Code and Codex in one marketplace (`wunzent-hub`): `multi-agent-hub` (the repository root) and `egm` (`plugins/egm`).
+A plugin for Claude Code and Codex, published in the `wunzent-hub` marketplace as `honeyguide` (the repository root).
 
-`multi-agent-hub`: It plans and carries out software work with the active CLI's native agents, with
-risk-based independent review and project-local records under `.multi-agent-hub/`. No Python helper, installer or
+`honeyguide` plans and carries out software work with the active CLI's native agents, with
+risk-based independent review and project-local records under `.honeyguide/`. No Python helper, installer or
 cross-vendor delegation. The repository root is the plugin. The repository is public; the plugin is `UNLICENSED`.
-Its entry point is the `orchestrate` skill (Claude Code: `/multi-agent-hub:orchestrate`); the other skills are routed
-from its table or used on their own (`/multi-agent-hub:<skill>`).
+Its entry point is the `orchestrate` skill (Claude Code: `/honeyguide:orchestrate`); the other skills are routed
+from its table or used on their own (`/honeyguide:<skill>`).
 
 ## Layout
 
     .claude-plugin/       plugin.json, marketplace.json (Claude Code)
     .codex-plugin/        plugin.json
     .agents/plugins/      marketplace.json (Codex)
-    skills/               17 skills of multi-agent-hub (see below)
+    skills/               17 skills of honeyguide (see below)
     agents/               Claude agents hub-readonly, hub-writer
     codex-agents/         Codex agent shells (copy by hand, see below)
-    plugins/egm/          the `egm` plugin: unchanged upstream copy with LICENSE, SOURCE.md, manifest.sha256
     docs/                 specs, plans, audits, history/, RECOMMENDED.md (reference list only)
     tests/test_plugin.py  static checks (standard library only)
 
-## Skills in multi-agent-hub (17)
+## Skills in honeyguide (17)
 
 | Skill | What it is |
 |---|---|
@@ -35,13 +34,24 @@ from its table or used on their own (`/multi-agent-hub:<skill>`).
 | ub-mode | Coding discipline (unclebob/ub-mode, MIT, unchanged) |
 | find-skills | Skill discovery helper (vercel-labs/skills, MIT, unchanged) |
 
-## The egm plugin (7 skills)
+## Recommended
 
-`egm` is google/elephant-goldfish-model at commit `964a4f1` (Apache-2.0), copied unchanged into `plugins/egm` with
-upstream's own manifests, so its names are upstream's: skills `/egm:egm-bootstrap`, `egm-brainstorm`, `egm-draft`,
-`egm-drift-report`, `egm-resolve`, `egm-review`, `egm-review-loop`, and Claude reviewer agents `egm:egm-<name>`. See
-`plugins/egm/SOURCE.md`. Reviews need a local executor and isolated subagents. Upstream ships a Codex manifest, so Codex
-can install it; the 10 reviewer adapters are Claude Code agents (Codex behaviour unverified in a live session).
+`egm` (Elephant-Goldfish Model, google/elephant-goldfish-model, Apache-2.0) is recommended for design specs and design
+decisions. It is not part of this repository or installed by it. Install it from Google's own marketplace (the marketplace
+and plugin are both named `egm`); the owner runs these, they change that CLI's user configuration:
+
+Claude Code (terminal):
+
+    claude plugin marketplace add google/elephant-goldfish-model
+    claude plugin install egm@egm
+
+Codex (terminal):
+
+    codex plugin marketplace add google/elephant-goldfish-model
+    codex plugin add egm@egm
+
+Its skills are manual: type `/egm:egm-<skill>` (for example `/egm:egm-review <path>`); the orchestrator can only suggest
+them. See `docs/RECOMMENDED.md`.
 
 ## Install
 
@@ -51,14 +61,12 @@ lines in a terminal. These change that CLI's user configuration, so only the own
 Claude Code:
 
     /plugin marketplace add <path-or-git-url-of-this-repository>
-    /plugin install multi-agent-hub@wunzent-hub
-    /plugin install egm@wunzent-hub
+    /plugin install honeyguide@wunzent-hub
 
 Codex:
 
     codex plugin marketplace add <path-or-git-url-of-this-repository>
-    codex plugin add multi-agent-hub@wunzent-hub
-    codex plugin add egm@wunzent-hub
+    codex plugin add honeyguide@wunzent-hub
 
 Codex plugins cannot ship agents. To get an enforced read-only sandbox for review duties, copy
 `codex-agents/hub-readonly.toml` and `codex-agents/hub-writer.toml` into `~/.codex/agents` (all projects) or a trusted
@@ -69,8 +77,7 @@ project's `.codex/agents`. Without them the permission of Codex children stays `
 Claude Code:
 
     /plugin marketplace update wunzent-hub
-    claude plugin update multi-agent-hub@wunzent-hub
-    claude plugin update egm@wunzent-hub
+    claude plugin update honeyguide@wunzent-hub
 
 Codex:
 
@@ -80,18 +87,16 @@ Codex:
 
 Claude Code:
 
-    /plugin uninstall multi-agent-hub@wunzent-hub
-    /plugin uninstall egm@wunzent-hub
+    /plugin uninstall honeyguide@wunzent-hub
     /plugin marketplace remove wunzent-hub
 
 Codex:
 
-    codex plugin remove multi-agent-hub@wunzent-hub
-    codex plugin remove egm@wunzent-hub
+    codex plugin remove honeyguide@wunzent-hub
     codex plugin marketplace remove wunzent-hub
 
 ## Limits
 
 - Checked statically (`claude plugin validate .`, `tests/test_plugin.py`), not by installing into a live CLI profile.
-- Third-party files are byte copies at a pinned commit and are not updated automatically.
-- Other third-party plugins are not part of this repository; `docs/RECOMMENDED.md` is a reference list only.
+- `ub-mode` and `find-skills` are unchanged third-party copies at a pinned commit and are not updated automatically.
+- Recommended plugins (`egm`, others) are not part of this repository; `docs/RECOMMENDED.md` is a reference list only.

@@ -5,7 +5,7 @@ description: "Use when work is mechanical, low-risk and self-contained (bulk edi
 
 # Cheap delegation
 
-Use the cheapest native model the active CLI exposes for work that is mechanical and cheap to check. Claude Code: `Agent` with `model: haiku` and the `multi-agent-hub:hub-writer` or `multi-agent-hub:hub-readonly` shell. Codex: `spawn_agent` with the cheapest available model (for example `gpt-6-luna`) and `fork_turns=none`.
+Use the cheapest native model the active CLI exposes for work that is mechanical and cheap to check. Claude Code: `Agent` with `model: haiku` and the `honeyguide:hub-writer` or `honeyguide:hub-readonly` shell. Codex: `spawn_agent` with the cheapest available model (for example `gpt-6-luna`) and `fork_turns=none`.
 
 ## What fits
 
@@ -38,4 +38,4 @@ When in doubt, keep the work.
 
 ## Records
 
-A cheap delegation of low-risk work does not by itself make the task nontrivial: write no records for it unless the task already has a `.multi-agent-hub/<task>/` folder, then add an agent record there. Trivial work never writes records, even when such a folder exists.
+A cheap delegation of low-risk work does not by itself make the task nontrivial: write no records for it unless the task already has a `.honeyguide/<task>/` folder, then add an agent record there. Trivial work never writes records, even when such a folder exists.

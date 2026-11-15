@@ -1,5 +1,4 @@
-# Third-party files (plugins/egm, ub-mode, find-skills) must stay byte-identical to upstream (sha256 checked by tests):
+# Third-party files (ub-mode, find-skills) must stay byte-identical to upstream (sha256 checked by tests):
 # no line-ending conversion and no whitespace checks.
-plugins/egm/** -text whitespace=-trailing-space,-space-before-tab,-indent-with-non-tab,-tab-in-indent,-cr-at-eol,-blank-at-eol,-blank-at-eof
 skills/ub-mode/** -text
 skills/find-skills/** -text

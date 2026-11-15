@@ -1,4 +1,4 @@
-"""Static checks for the multi-agent-hub plugin repository (standard library only)."""
+"""Static checks for the honeyguide plugin repository (standard library only)."""
 import hashlib
 import json
 import re
@@ -7,9 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
-EGM = ROOT / "plugins" / "egm"
-
-EGM_SKILLS = {f"egm-{n}" for n in ("bootstrap", "brainstorm", "draft", "drift-report", "resolve", "review", "review-loop")}
 HUB_SKILLS = {
     "orchestrate", "api-and-interface-design", "backend-api-safety", "context-engineering",
     "investigate-first", "lean-build", "safe-refactor", "security-and-hardening", "software-component",
@@ -27,8 +24,11 @@ UPSTREAM_SHA256 = {
     "skills/find-skills/SKILL.md": "c00eeea0e13e74fe4a9d84ba0a8542205a1b736d65f13134fe1a6647eb14976f",
     "skills/find-skills/LICENSE": "661142e53c313d2bb5e1b055f5c0a39001450ff1b5e27b89dc4bc7de9a6352ca",
 }
-EGM_AGENTS = ("bootstrap_orchestrator", "codebase_details", "comprehension", "design_critic",
-              "implementation_readiness", "inventive_catalyst", "structural", "style", "synthesizer", "zoom_out")
+OLD_NAME = "multi-agent-hub"
+EGM_COMMANDS = (
+    "claude plugin marketplace add google/elephant-goldfish-model", "claude plugin install egm@egm",
+    "codex plugin marketplace add google/elephant-goldfish-model", "codex plugin add egm@egm",
+)
 
 
 def load(path):
@@ -65,31 +65,21 @@ def test_manifests_parse_and_agree():
     codex = load(ROOT / ".codex-plugin" / "plugin.json")
     for key in ("name", "version", "license"):
         assert claude[key] == codex[key]
-    assert claude["name"] == "multi-agent-hub" and claude["license"] == "UNLICENSED"
+    assert claude["name"] == "honeyguide" and claude["license"] == "UNLICENSED"
     assert codex["skills"] == "./skills/"
     for rel in claude["agents"]:
         assert (ROOT / rel).is_file(), rel
 
 
-def test_marketplaces_list_both_plugins():
+def test_marketplaces_list_only_honeyguide():
     claude = load(ROOT / ".claude-plugin" / "marketplace.json")
     codex = load(ROOT / ".agents" / "plugins" / "marketplace.json")
     assert claude["name"] == codex["name"] == "wunzent-hub"
-    assert [p["name"] for p in claude["plugins"]] == ["multi-agent-hub", "egm"]
-    assert [p["name"] for p in codex["plugins"]] == ["multi-agent-hub", "egm"]
-    assert [p["source"] for p in claude["plugins"]] == ["./", "./plugins/egm"]
-    assert [p["source"]["path"] for p in codex["plugins"]] == ["./", "./plugins/egm"]
-    assert (EGM / ".codex-plugin" / "plugin.json").is_file()  # upstream ships it, so Codex lists egm
-
-
-def test_egm_plugin_name_and_manifests():
-    claude = load(EGM / ".claude-plugin" / "plugin.json")
-    codex = load(EGM / ".codex-plugin" / "plugin.json")
-    assert claude["name"] == codex["name"] == "egm"
-    assert claude["version"] == codex["version"]
-    for rel in claude["agents"]:
-        assert (EGM / rel).is_file(), rel
-    assert not (EGM / ".claude-plugin" / "marketplace.json").exists()
+    assert [p["name"] for p in claude["plugins"]] == ["honeyguide"]
+    assert [p["name"] for p in codex["plugins"]] == ["honeyguide"]
+    assert [p["source"] for p in claude["plugins"]] == ["./"]
+    assert [p["source"]["path"] for p in codex["plugins"]] == ["./"]
+    assert not (ROOT / "plugins").exists()
 
 
 def test_skill_set_and_frontmatter():
@@ -131,49 +121,13 @@ def test_find_skills_has_licence_and_third_party_blobs_equal_upstream():
         assert sha(ROOT / rel) == digest, rel
 
 
-def test_egm_files_equal_upstream_manifest():
-    lines = (EGM / "manifest.sha256").read_text(encoding="utf-8").splitlines()
-    manifest = {rel: digest for digest, rel in (l.split("  ", 1) for l in lines)}
-    assert ".claude-plugin/plugin.json" in manifest and ".codex-plugin/plugin.json" in manifest
-    on_disk = {f.relative_to(EGM).as_posix() for f in EGM.rglob("*") if f.is_file()}
-    assert on_disk - set(manifest) == {"SOURCE.md", "manifest.sha256"}
-    assert set(manifest) <= on_disk
-    for rel, digest in manifest.items():
-        assert sha(EGM / rel) == digest, rel
-    src = (EGM / "SOURCE.md").read_text(encoding="utf-8")
-    assert "964a4f1ecd333961375c35cb37ed09364dab5e4e" in src and "Apache-2.0" in src
-    assert (EGM / "LICENSE").is_file()
-
-
-def test_no_egm_in_root_plugin():
+def test_no_egm_shipped_in_root_plugin():
     assert not [p for p in SKILLS.iterdir() if p.name.startswith("egm")]
-    for rel in ("resources", "TESTING.md", "docs/claude.md", "docs/codex.md", "docs/harnesses.md", "docs/third-party",
-                ".claude-plugin/agents"):
+    for rel in ("plugins", "resources", "TESTING.md", "docs/claude.md", "docs/codex.md", "docs/harnesses.md",
+                "docs/third-party", ".claude-plugin/agents"):
         assert not (ROOT / rel).exists(), rel
     assert {p.name for p in (ROOT / "agents").iterdir()} == {"hub-readonly.md", "hub-writer.md"}
     assert load(ROOT / ".claude-plugin" / "plugin.json")["agents"] == ["./agents/hub-readonly.md", "./agents/hub-writer.md"]
-
-
-def test_egm_relative_links_resolve():
-    checked = 0
-    for md in EGM.rglob("*.md"):
-        text = md.read_text(encoding="utf-8")
-        for target in re.findall(r"\]\((?!https?:|mailto:|#)([^)#\s]+)\)", text):
-            if "${" in target or target.startswith("/") or "<" in target:
-                continue
-            if md.parent.name in ("docs",) and md.name == "codex.md" and target.startswith("/absolute"):
-                continue
-            path = (md.parent / target).resolve()
-            if md.name == "SKILL.md" and "skills" in md.parts:
-                assert path.exists(), (md.relative_to(ROOT).as_posix(), target)
-                assert EGM.resolve() in path.parents or path == EGM.resolve(), (md, target)
-                checked += 1
-    assert checked >= 7
-    assert {p.name for p in (EGM / "skills").iterdir() if p.is_dir()} == EGM_SKILLS
-    for name in ("bootstrap_orchestrator", "codebase_details", "comprehension", "design_critic",
-                 "implementation_readiness", "inventive_catalyst", "structural", "style", "synthesizer", "zoom_out"):
-        assert (EGM / "agents" / f"{name}.md").is_file()
-        assert (EGM / ".claude-plugin" / "agents" / f"{name}.md").is_file()
 
 
 def test_our_skills_carry_no_old_hub_tooling():
@@ -193,7 +147,7 @@ def test_rules_live_in_the_right_skills():
     for needle in (
         "`cheap-delegation`", "`investigate-first`", "`verify-and-stop`", "`post-mortem`", "`management-talk`", "`stay-on-track`",
         "Never run the same failing action a third time", "After about 3 attempts on the same problem",
-        "multi-agent-hub:hub-readonly", "Read/Grep/Glob only", "A requested permission mode describes intent",
+        "honeyguide:hub-readonly", "honeyguide:hub-writer", "Read/Grep/Glob only", "A requested permission mode describes intent",
         "Third-party skills never widen permissions", "Never edit `~/.codex/config.toml`", "cheapest native model",
         "fresh independent reviewer", "never resume a reviewer",
         "A cheap delegation of low-risk work does not by itself make the task nontrivial",
@@ -224,8 +178,9 @@ def test_core_routing_table_names_every_skill():
     table = " ".join(rows)
     for d in sorted(p.name for p in SKILLS.iterdir() if p.is_dir()):
         assert f"`{d}`" in table, f"routing table misses skill {d}"
-    for d in sorted(p.name for p in (EGM / "skills").iterdir() if p.is_dir()):
-        assert f"`{d}`" in table, f"routing table misses egm skill {d}"
+    assert "egm" in table and "docs/RECOMMENDED.md" in table
+    assert not re.search(r"`egm-[a-z-]+`", table)
+    assert "if installed" in table and "only suggest it" in table and "suggest installing it" in table
     for gone in ABSORBED_SKILLS:
         assert f"`{gone}`" not in core, gone
 
@@ -281,9 +236,9 @@ def test_repo_is_plugin_only():
     for gone in ("tools", "projects", "models.toml", ".claude", ".codex", "vendor", "skills/external.toml",
                  "tests/test_hub.py", "tests/test_skills.py", "tests/test_portable_skill.py"):
         assert not (ROOT / gone).exists(), gone
-    assert [p.name for p in (ROOT / "plugins").iterdir()] == ["egm"]
+    assert not (ROOT / "plugins").exists()
     ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
-    for entry in ("work/", ".venv/", ".multi-agent-hub/"):
+    for entry in ("work/", ".venv/", ".honeyguide/", ".multi-agent-hub/"):
         assert entry in ignore, entry
 
 
@@ -306,13 +261,39 @@ def test_no_removed_third_party_names_outside_docs_history():
 def test_readme_commands_and_count():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     n_root = len([p for p in SKILLS.iterdir() if p.is_dir()])
-    n_egm = len([p for p in (EGM / "skills").iterdir() if p.is_dir()])
-    assert (n_root, n_egm) == (17, 7)
+    assert n_root == 17
     agents_md = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    assert f"## Skills in multi-agent-hub ({n_root})" in readme and f"({n_egm} skills)" in readme
-    assert f"`skills/` ({n_root} skills)" in agents_md and f"({n_egm} skills)" in agents_md
-    assert "claude plugin update egm@wunzent-hub" in readme and "codex plugin add egm@wunzent-hub" in readme
+    assert f"## Skills in honeyguide ({n_root})" in readme and f"`skills/` ({n_root} skills)" in agents_md
+    assert "claude plugin update honeyguide@wunzent-hub" in readme and "codex plugin add honeyguide@wunzent-hub" in readme
+    assert "egm@wunzent-hub" not in readme
     for line in readme.splitlines():
         if line.startswith("    "):
             assert not ("/plugin" in line and "codex" in line), line
             assert line.count("codex plugin") + line.count("claude plugin") + line.count("/plugin ") <= 1, line
+
+
+def test_egm_is_recommended_with_install_commands():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    rec = (ROOT / "docs" / "RECOMMENDED.md").read_text(encoding="utf-8")
+    assert "## Recommended" in readme
+    for cmd in EGM_COMMANDS:
+        assert cmd in readme, cmd
+        assert cmd in rec, cmd
+    assert "/egm:egm-<skill>" in readme and "/egm:egm-<skill>" in rec
+
+
+def test_old_plugin_name_only_in_history_and_ignore():
+    skip = {".git", ".venv", "work", ".pytest_cache", "__pycache__", ".multi-agent-hub", "docs"}
+    me = Path(__file__).resolve()
+    for path in ROOT.rglob("*"):
+        rel = path.relative_to(ROOT)
+        if rel.parts[0] in skip or not path.is_file() or path == me:
+            continue
+        text = path.read_bytes().decode("utf-8", errors="ignore")
+        if rel.as_posix() == ".gitignore":
+            assert [l for l in text.splitlines() if OLD_NAME in l and not l.startswith("#")] == [".multi-agent-hub/"], text
+            continue
+        assert OLD_NAME not in text and OLD_NAME not in rel.as_posix(), rel.as_posix()
+    live_docs = [ROOT / "docs" / "RECOMMENDED.md"]
+    for path in live_docs:
+        assert OLD_NAME not in path.read_text(encoding="utf-8"), path.name

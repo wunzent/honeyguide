@@ -4,18 +4,13 @@
     "name": "wunzent"
   },
   "metadata": {
-    "description": "multi-agent-hub and egm."
+    "description": "honeyguide."
   },
   "plugins": [
     {
-      "name": "multi-agent-hub",
+      "name": "honeyguide",
       "source": "./",
       "description": "Plan and carry out software work with native agents, risk-based independent review and project-local records."
-    },
-    {
-      "name": "egm",
-      "source": "./plugins/egm",
-      "description": "Develop ideas with context and review documents with fresh eyes."
     }
   ]
 }

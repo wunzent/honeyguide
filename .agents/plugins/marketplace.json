@@ -5,7 +5,7 @@
   },
   "plugins": [
     {
-      "name": "multi-agent-hub",
+      "name": "honeyguide",
       "source": {
         "source": "local",
         "path": "./"
@@ -15,18 +15,6 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Developer Tools"
-    },
-    {
-      "name": "egm",
-      "source": {
-        "source": "local",
-        "path": "./plugins/egm"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
     }
   ]
 }
