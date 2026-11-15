@@ -1,6 +1,6 @@
 ---
 name: backend-api-safety
-description: "Checklist for any backend API change (any framework): authorization, tenant scoping, validation, secrets, idempotency, logging, error codes, contract stability. Use when adding or changing endpoints or data writes."
+description: "Use when adding or changing backend endpoints or data writes (any framework): checklist for authorization, tenant scoping, validation, secrets, idempotency, logging, error codes and contract stability."
 ---
 
 # Backend API safety checklist

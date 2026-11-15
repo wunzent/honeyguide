@@ -1,6 +1,6 @@
 ---
 name: software-component
-description: Write or update Software Component (SWC) documents (solution overview, Frontend page SWC, Backend API/flow SWC, diagrams, AC/test cases, manual notes, decisions, traceability). Use for any solution planning or SWC documentation task.
+description: "Use when planning a solution or writing or updating Software Component (SWC) documents: solution overview, Frontend page SWC, Backend API/flow SWC, diagrams, AC/test cases, manual notes, decisions, traceability."
 ---
 
 # Software Component (SWC)

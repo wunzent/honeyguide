@@ -1,6 +1,6 @@
 ---
 name: post-mortem
-description: "Write the canonical engineering record of a fixed bug after the fix lands: symptom, root cause, mechanism, fix, validation, why it slipped through, follow-ups. For an engineer audience."
+description: "Use after a bug fix lands: write the canonical engineering record (symptom, root cause, mechanism, fix, validation, why it slipped through, follow-ups) for an engineer audience."
 ---
 
 # Post-mortem

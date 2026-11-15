@@ -11,25 +11,25 @@ cross-vendor delegation. The repository root is the plugin. The repository is pu
     .claude-plugin/       plugin.json, marketplace.json (Claude Code)
     .codex-plugin/        plugin.json
     .agents/plugins/      marketplace.json (Codex)
-    skills/               20 skills of multi-agent-hub (see below)
+    skills/               17 skills of multi-agent-hub (see below)
     agents/               Claude agents hub-readonly, hub-writer
     codex-agents/         Codex agent shells (copy by hand, see below)
     plugins/egm/          the `egm` plugin: unchanged upstream copy with LICENSE, SOURCE.md, manifest.sha256
-    docs/                 specs, plans, audits, RECOMMENDED.md (reference list only)
+    docs/                 specs, plans, audits, history/, RECOMMENDED.md (reference list only)
     tests/test_plugin.py  static checks (standard library only)
 
-## Skills in multi-agent-hub (20)
+## Skills in multi-agent-hub (17)
 
 | Skill | What it is |
 |---|---|
-| multi-agent-hub | Core workflow: native agents, risk-based independent review, records |
+| multi-agent-hub | Core workflow: native agents, risk-based independent review, records, and the routing table from work type to skill |
 | cheap-delegation | Give mechanical, low-risk work to the cheapest native model |
-| debug-mantra | Reproduce, trace, falsify, cross-check before any fix |
-| scrutinize | Outsider review of a plan, PR or change |
+| investigate-first | Prove the cause before any fix: reproduce, trace, falsify, cross-check |
+| verify-and-stop | Prove acceptance without scope growth; outsider review of a plan, PR or change |
 | post-mortem | Engineering record of a fixed bug |
 | management-talk | Rewrite engineering content for leadership and the channel |
-| stay-on-track | Loop detection, three-attempt rule, context handoff |
-| api-and-interface-design, backend-api-safety, context-engineering, handoff, investigate-first, lean-build, safe-refactor, security-and-hardening, software-component, surgical-patch, verify-and-stop | Engineering skills |
+| stay-on-track | Loop detection, three-attempt rule, handoff document (adapted from Matt Pocock's `handoff`, MIT) |
+| api-and-interface-design, backend-api-safety, context-engineering, lean-build, safe-refactor, security-and-hardening, software-component, surgical-patch | Engineering skills |
 | ub-mode | Coding discipline (unclebob/ub-mode, MIT, unchanged) |
 | find-skills | Skill discovery helper (vercel-labs/skills, MIT, unchanged) |
 

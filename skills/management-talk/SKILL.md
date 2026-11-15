@@ -1,6 +1,6 @@
 ---
 name: management-talk
-description: Rewrite engineer-level content for engineering leadership (directors, product managers, release managers) and shape it for the channel (ticket comment, chat post, standup line, email, meeting points). Leads with impact, status, risk and ask.
+description: "Use when reporting to engineering leadership (directors, product managers, release managers) or shaping content for a channel (ticket comment, chat post, standup line, email, meeting points). Leads with impact, status, risk and ask."
 ---
 
 # Management talk

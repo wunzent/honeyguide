@@ -1,6 +1,7 @@
 ---
 name: stay-on-track
-description: Keep long or difficult tasks on course. Detect loops and stalls, stop repeating failing actions, ask the owner after about three attempts, bound deliberation, and hand off cleanly before the context window fills.
+description: "Use on long, difficult or looping work: detect loops and stalls, stop repeating a failing action, ask the owner after about three attempts, bound deliberation, and, only when the owner asks for it, write a handoff document for another agent."
+argument-hint: "What will the next session be used for? (handoff document only)"
 ---
 
 # Stay on track
@@ -36,3 +37,15 @@ Treat any of these as a loop and break it:
 - Keep outputs small: read ranges instead of whole files, filter command output.
 - Before the window is nearly full, write down the goal, what is done, what is left, the files touched, the evidence so far and the next action (the task checkpoint or a handoff note), then continue from that note or hand it over.
 - Never claim finished work you cannot point to evidence for.
+
+## Handoff document
+
+Loop detection and the context watch above run on their own. The handoff document is different: write it only when the owner asks for it (for example to hand the work to another agent or to continue in a fresh session), never on your own initiative. When the context is nearly full and the owner has not asked, update the task checkpoint (a separate project record) and offer the handoff instead of writing it. The handoff compacts the conversation into a document a fresh agent can continue from.
+
+- Save it to the temporary directory of the user's OS, never in the current workspace. This is separate from the project checkpoint, which stays in the project; no exception.
+- Include a "suggested skills" section naming which skills the next agent should call the Skill tool for.
+- Do not duplicate content already captured in other artifacts (specs, plans, ADRs, issues, commits, diffs). Reference them by path or URL.
+- Redact sensitive information such as API keys, passwords and personally identifiable information.
+- If the owner passed arguments, treat them as the focus of the next session and tailor the document to it.
+
+The handoff section is adapted from the `handoff` skill by Matt Pocock (MIT); the licence text is in `LICENSE` in this folder.
