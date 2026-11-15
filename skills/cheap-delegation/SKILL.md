@@ -9,6 +9,7 @@ Use the cheapest native model the active CLI exposes for work that is mechanical
 
 ## What fits
 
+- Trivial work: a typo, one obvious edit, a status check. The orchestrator delegates it instead of doing it itself.
 - Bulk renames, formatting, boilerplate, find-replace.
 - Search and summarise; reading or condensing logs and files.
 - Scaffolding tests, docstrings and comments.
@@ -33,8 +34,8 @@ When in doubt, keep the work.
 ## Afterwards
 
 - Always verify the result yourself against the acceptance criteria before reporting it. Cheap-model claims are unverified until checked (re-run the check, read the diff).
-- If the result is wrong, fix the brief or do the work yourself; do not resend the same brief unchanged.
+- If the result is wrong, fix the brief and delegate again; do not resend the same brief unchanged. Do the work yourself only for non-trivial work, or for trivial work after the cheap agent failed it twice (say so).
 
 ## Records
 
-A cheap delegation of low-risk work does not by itself make the task nontrivial: write no records for it unless the task already has a `.multi-agent-hub/<task>/` folder, then add an agent record there.
+A cheap delegation of low-risk work does not by itself make the task nontrivial: write no records for it unless the task already has a `.multi-agent-hub/<task>/` folder, then add an agent record there. Trivial work never writes records, even when such a folder exists.

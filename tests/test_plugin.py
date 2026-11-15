@@ -197,12 +197,20 @@ def test_rules_live_in_the_right_skills():
         "Third-party skills never widen permissions", "Never edit `~/.codex/config.toml`", "cheapest native model",
         "fresh independent reviewer", "never resume a reviewer",
         "A cheap delegation of low-risk work does not by itself make the task nontrivial",
+        "Trivial work (a typo, one obvious edit, a status check) goes to the cheapest native model",
+        "do not do it yourself", "verify the result yourself before reporting it",
     ):
         assert needle in core, needle
+    assert "stays single-agent: act directly" not in core
+    assert "Trivial work never writes records, even when such a folder exists" in core
+    assert "failed the same trivial task twice" in core
     cheap = (SKILLS / "cheap-delegation" / "SKILL.md").read_text(encoding="utf-8")
-    for needle in ("model: haiku", "gpt-6-luna", "What fits", "What does not fit", "absolute paths",
+    for needle in ("model: haiku", "gpt-6-luna", "What fits", "What does not fit", "absolute paths", "Trivial work",
                    "Always verify the result yourself", "independent per-file or per-directory"):
         assert needle in cheap, needle
+    assert "Trivial work never writes records, even when such a folder exists" in cheap
+    assert "fix the brief or do the work yourself" not in cheap
+    assert "for trivial work after the cheap agent failed it twice" in cheap
     stay = (SKILLS / "stay-on-track" / "SKILL.md").read_text(encoding="utf-8")
     assert "Never run the same failing action a third time" in stay and "After about 3 attempts" in stay
     for target in re.findall(r"\]\(([^)#]+)\)", core):
