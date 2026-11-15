@@ -11,7 +11,7 @@ EGM = ROOT / "plugins" / "egm"
 
 EGM_SKILLS = {f"egm-{n}" for n in ("bootstrap", "brainstorm", "draft", "drift-report", "resolve", "review", "review-loop")}
 HUB_SKILLS = {
-    "multi-agent-hub", "api-and-interface-design", "backend-api-safety", "context-engineering",
+    "orchestrate", "api-and-interface-design", "backend-api-safety", "context-engineering",
     "investigate-first", "lean-build", "safe-refactor", "security-and-hardening", "software-component",
     "surgical-patch", "verify-and-stop",
 }
@@ -104,7 +104,7 @@ def test_skill_set_and_frontmatter():
         assert fm.get("name") and fm.get("description"), path
     for s in everything:
         assert frontmatter(SKILLS / s / "SKILL.md")["name"] == s, s
-    for s in {"multi-agent-hub"} | NEW_SKILLS:
+    for s in {"orchestrate"} | NEW_SKILLS:
         expected = {"name", "description", "argument-hint"} if s == "stay-on-track" else {"name", "description"}
         assert set(frontmatter(SKILLS / s / "SKILL.md")) == expected, s
     stay_fm = frontmatter(SKILLS / "stay-on-track" / "SKILL.md")
@@ -189,7 +189,7 @@ def test_our_skills_carry_no_old_hub_tooling():
 
 
 def test_rules_live_in_the_right_skills():
-    core = (SKILLS / "multi-agent-hub" / "SKILL.md").read_text(encoding="utf-8")
+    core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
     for needle in (
         "`cheap-delegation`", "`investigate-first`", "`verify-and-stop`", "`post-mortem`", "`management-talk`", "`stay-on-track`",
         "Never run the same failing action a third time", "After about 3 attempts on the same problem",
@@ -206,11 +206,11 @@ def test_rules_live_in_the_right_skills():
     stay = (SKILLS / "stay-on-track" / "SKILL.md").read_text(encoding="utf-8")
     assert "Never run the same failing action a third time" in stay and "After about 3 attempts" in stay
     for target in re.findall(r"\]\(([^)#]+)\)", core):
-        assert (SKILLS / "multi-agent-hub" / target).is_file(), target
+        assert (SKILLS / "orchestrate" / target).is_file(), target
 
 
 def test_core_routing_table_names_every_skill():
-    core = (SKILLS / "multi-agent-hub" / "SKILL.md").read_text(encoding="utf-8")
+    core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
     rows = [l for l in core.splitlines() if l.startswith("| ") and l.count("|") >= 3]
     assert rows, "no routing table"
     table = " ".join(rows)

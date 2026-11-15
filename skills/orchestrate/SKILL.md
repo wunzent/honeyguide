@@ -1,8 +1,8 @@
 ---
-name: multi-agent-hub
+name: orchestrate
 description: Plan and carry out software work in the current project with the active CLI's native agents (Claude Code or Codex), with risk-based independent review and project-local records.
 ---
-# Multi-Agent Hub
+# Orchestrate
 
 Use the current software project as the task boundary. Read its `AGENTS.md`, `CLAUDE.md` or equivalent and relevant project guidance first. Confirm the full instructions are loaded and, for nontrivial work, record in the checkpoint which installed copy actually loaded (the SKILL.md path or base directory the runtime reports); catalog visibility alone is not activation. Do not require a Hub project card, dashboard, the other vendor's CLI, a model catalogue or Python.
 
@@ -16,7 +16,7 @@ Skills: search the runtime's actual skill catalog (its native listing) by task n
 
 | Work type or situation | Skill |
 |---|---|
-| Any software task: plan, delegate, review, records (this skill) | `multi-agent-hub` |
+| Any software task: plan, delegate, review, records (this skill) | `orchestrate` |
 | Cause of a bug, failing test, intermittent failure or regression not yet proven | `investigate-first` |
 | Small bug fix or behaviour change at the narrowest layer, with regression proof | `surgical-patch` |
 | New feature, slice or integration with overbuilding risk | `lean-build` |

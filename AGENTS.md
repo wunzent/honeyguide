@@ -26,4 +26,4 @@ copies. See README.md.
 - Commit and push only with the owner's OK; stage explicit files, never `git add -A`.
 - Third-party files stay byte-identical to upstream (`.gitattributes` disables line-ending conversion for them).
 - Add a third-party file only when its licence clearly allows redistribution.
-- Use the `multi-agent-hub` skill for work here. Reply to the owner in Thai (LEARNED.md); code and docs stay in English.
+- Use the `orchestrate` skill (plugin `multi-agent-hub`) for work here. Reply to the owner in Thai (LEARNED.md); code and docs stay in English.

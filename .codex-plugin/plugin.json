@@ -10,7 +10,7 @@
     "developerName": "wunzent",
     "category": "Developer Tools",
     "capabilities": ["Read", "Write"],
-    "defaultPrompt": ["Use multi-agent-hub to plan and carry out this change with an independent review if it is high risk."]
+    "defaultPrompt": ["Use the orchestrate skill to plan and carry out this change with an independent review if it is high risk."]
   },
   "skills": "./skills/"
 }

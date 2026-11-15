@@ -5,6 +5,8 @@ Two plugins for Claude Code and Codex in one marketplace (`wunzent-hub`): `multi
 `multi-agent-hub`: It plans and carries out software work with the active CLI's native agents, with
 risk-based independent review and project-local records under `.multi-agent-hub/`. No Python helper, installer or
 cross-vendor delegation. The repository root is the plugin. The repository is public; the plugin is `UNLICENSED`.
+Its entry point is the `orchestrate` skill (Claude Code: `/multi-agent-hub:orchestrate`); the other skills are routed
+from its table or used on their own (`/multi-agent-hub:<skill>`).
 
 ## Layout
 
@@ -22,7 +24,7 @@ cross-vendor delegation. The repository root is the plugin. The repository is pu
 
 | Skill | What it is |
 |---|---|
-| multi-agent-hub | Core workflow: native agents, risk-based independent review, records, and the routing table from work type to skill |
+| orchestrate | Core workflow: native agents, risk-based independent review, records, and the routing table from work type to skill |
 | cheap-delegation | Give mechanical, low-risk work to the cheapest native model |
 | investigate-first | Prove the cause before any fix: reproduce, trace, falsify, cross-check |
 | verify-and-stop | Prove acceptance without scope growth; outsider review of a plan, PR or change |
