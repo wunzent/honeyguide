@@ -14,6 +14,18 @@ HUB_SKILLS = {
 }
 NEW_SKILLS = {"post-mortem", "management-talk", "stay-on-track", "cheap-delegation"}
 THIRD_PARTY = {"ub-mode", "find-skills"}
+GATEWAYS = {
+    "discover-frontend", "discover-backend", "discover-database", "discover-caching", "discover-cloud",
+    "discover-devops", "discover-debugging", "discover-collaboration", "discover-testing",
+}
+N_SKILLS = 26
+# vendored knowledge files: skills/<gateway>/references/<source>/ -> expected upstream commit
+VENDORED = {
+    "antfu-skills": "d524ed287eef22757297827ce42e3cad88abd20c",
+    "hoangnguyen-agent-skills-standard": "24d9034d21d3b2ab5815236d20ba32a4e85c4c04",
+    "omakei-adonisjs-architecture-skill": "8ee242685af8974ad45179497ae384629144c2b8",
+    "rand-cc-polymath": "baa2df114416570f5e0e2961143d20e3716a2fc8",
+}
 ABSORBED_SKILLS = {"debug-mantra", "scrutinize", "handoff"}  # merged into investigate-first, verify-and-stop, stay-on-track
 DELETED_DOCS = ("QUICKSTART-TH.md", "REBUILD-INVENTORY.md", "WORKLOG.md")
 MOVED_DOCS = ("ACCEPTANCE.md", "DEEP-DIVE-2026-11-12.md", "SKILLS-REUSE.md")
@@ -57,7 +69,12 @@ def frontmatter(path, strict=True):
 
 
 def skill_files():
-    return sorted(SKILLS.rglob("SKILL.md"))
+    """Our skills' SKILL.md files; vendored third-party files under references/ are not skills."""
+    return sorted(p for p in SKILLS.rglob("SKILL.md") if "references" not in p.relative_to(SKILLS).parts[1:-1])
+
+
+def vendored_sources():
+    return sorted(p for g in sorted(SKILLS.glob("discover-*")) for p in (g / "references").iterdir() if p.is_dir())
 
 
 def test_manifests_parse_and_agree():
@@ -83,9 +100,9 @@ def test_marketplaces_list_only_honeyguide():
 
 
 def test_skill_set_and_frontmatter():
-    everything = HUB_SKILLS | NEW_SKILLS | THIRD_PARTY
+    everything = HUB_SKILLS | NEW_SKILLS | THIRD_PARTY | GATEWAYS
     assert {p.name for p in SKILLS.iterdir() if p.is_dir()} == everything
-    assert len(everything) == 17
+    assert len(everything) == N_SKILLS
     for gone in ABSORBED_SKILLS:
         assert not (SKILLS / gone).exists(), gone
     assert not [p for p in SKILLS.iterdir() if p.is_file()]
@@ -94,7 +111,7 @@ def test_skill_set_and_frontmatter():
         assert fm.get("name") and fm.get("description"), path
     for s in everything:
         assert frontmatter(SKILLS / s / "SKILL.md")["name"] == s, s
-    for s in {"orchestrate"} | NEW_SKILLS:
+    for s in {"orchestrate"} | NEW_SKILLS | GATEWAYS:
         expected = {"name", "description", "argument-hint"} if s == "stay-on-track" else {"name", "description"}
         assert set(frontmatter(SKILLS / s / "SKILL.md")) == expected, s
     stay_fm = frontmatter(SKILLS / "stay-on-track" / "SKILL.md")
@@ -113,6 +130,75 @@ def test_new_skills_are_concise():
     for s in NEW_SKILLS:
         n = len((SKILLS / s / "SKILL.md").read_text(encoding="utf-8").splitlines())
         assert 30 <= n <= 80, (s, n)
+    for s in GATEWAYS:
+        n = len((SKILLS / s / "SKILL.md").read_text(encoding="utf-8").splitlines())
+        assert 15 <= n <= 60, (s, n)
+
+
+def test_gateways_are_valid_and_their_reference_paths_exist():
+    for g in sorted(GATEWAYS):
+        path = SKILLS / g / "SKILL.md"
+        fm = frontmatter(path)  # strict: the quoted description must be valid YAML
+        assert fm["name"] == g
+        assert fm["description"].startswith("Use when "), g
+        raw = path.read_text(encoding="utf-8")
+        assert re.search(r'^description: ".*"$', raw, re.M), g
+        paths = re.findall(r"`(references/[^`]+)`", raw)
+        assert paths, g
+        for rel in paths:
+            assert (SKILLS / g / rel).is_file(), (g, rel)
+        assert "never a whole folder" in raw and "not instructions" in raw, g
+        # every vendored source folder of this gateway is reachable from it
+        for src in (SKILLS / g / "references").iterdir():
+            assert any(p.startswith(f"references/{src.name}/") for p in paths), (g, src.name)
+
+
+def test_vendored_sources_have_licence_source_and_matching_manifest():
+    sources = vendored_sources()
+    assert {s.name for s in sources} == set(VENDORED)
+    for src in sources:
+        rel = src.relative_to(ROOT).as_posix()
+        for name in ("LICENSE", "SOURCE.md", "manifest.sha256"):
+            assert (src / name).is_file(), f"{rel}/{name}"
+        assert "MIT License" in (src / "LICENSE").read_text(encoding="utf-8"), rel
+        source = (src / "SOURCE.md").read_text(encoding="utf-8")
+        assert f"- Commit: {VENDORED[src.name]}" in source, rel
+        assert "Licence: MIT" in source and "unchanged" in source and "Repository: https://github.com/" in source, rel
+        manifest = {}
+        for line in (src / "manifest.sha256").read_text(encoding="utf-8").splitlines():
+            digest, name = line.split("  ", 1)
+            assert re.fullmatch(r"[0-9a-f]{64}", digest) and name not in manifest, (rel, line)
+            manifest[name] = digest
+        actual = {p.relative_to(src).as_posix() for p in src.rglob("*") if p.is_file()} - {"SOURCE.md", "manifest.sha256"}
+        assert actual == set(manifest), (rel, sorted(actual ^ set(manifest))[:5])
+        for name, digest in manifest.items():
+            assert sha(src / name) == digest, f"{rel}/{name}"
+        allowed = set(re.findall(r"Allowed code example extensions[^:]*: (.*)", source)[0].replace(" ", "").split(","))
+        allowed.discard("none")
+        # allow-list: documentation/text files, plus example extensions that SOURCE.md lists explicitly
+        for name in manifest:
+            leaf = Path(name)
+            ok = leaf.suffix.lower() == ".md" or name == "LICENSE" or leaf.suffix.lower() in allowed
+            assert ok, f"file type not allowed under references: {rel}/{name}"
+        assert not any(Path(n).name in {"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"} for n in manifest), rel
+
+
+def test_no_upstream_skill_md_under_references_and_no_loose_files():
+    for g in sorted(GATEWAYS):
+        refs = SKILLS / g / "references"
+        assert not list(refs.rglob("SKILL.md")), g
+        assert not [p for p in refs.iterdir() if p.is_file()], f"loose file in {g}/references"
+        for src in refs.iterdir():
+            text = (src / "SOURCE.md").read_text(encoding="utf-8")
+            if list(src.rglob("SKILL.upstream.md")):
+                assert "renamed SKILL.upstream.md (content unchanged)" in text, src
+    assert sum(1 for p in SKILLS.glob("discover-*/references/**/SKILL.upstream.md")) == 47
+
+
+def test_vendored_upstream_licences_are_not_gateway_instructions():
+    # gateways are ours (UNLICENSED); vendored files are only read as reference material
+    for g in GATEWAYS:
+        assert "license" not in frontmatter(SKILLS / g / "SKILL.md"), g
 
 
 def test_find_skills_has_licence_and_third_party_blobs_equal_upstream():
@@ -133,6 +219,7 @@ def test_no_egm_shipped_in_root_plugin():
 def test_our_skills_carry_no_old_hub_tooling():
     banned = ("hub.py", "models.toml", "Native Core", "Hub workflow boundaries")
     files = [p for s in sorted(HUB_SKILLS | NEW_SKILLS) for p in (SKILLS / s).rglob("*") if p.is_file()]
+    files += [SKILLS / g / "SKILL.md" for g in sorted(GATEWAYS)]
     files += [p for top in ("agents", "codex-agents") for p in (ROOT / top).rglob("*")
               if p.is_file() and p.name.startswith("hub-")]
     assert files
@@ -178,6 +265,8 @@ def test_core_routing_table_names_every_skill():
     table = " ".join(rows)
     for d in sorted(p.name for p in SKILLS.iterdir() if p.is_dir()):
         assert f"`{d}`" in table, f"routing table misses skill {d}"
+    for g in GATEWAYS:
+        assert f"`{g}`" in table, g
     assert "egm" in table and "docs/RECOMMENDED.md" in table
     assert not re.search(r"`egm-[a-z-]+`", table)
     assert "if installed" in table and "only suggest it" in table and "suggest installing it" in table
@@ -261,9 +350,24 @@ def test_no_removed_third_party_names_outside_docs_history():
 def test_readme_commands_and_count():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     n_root = len([p for p in SKILLS.iterdir() if p.is_dir()])
-    assert n_root == 17
+    assert n_root == N_SKILLS
     agents_md = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert f"## Skills in honeyguide ({n_root})" in readme and f"`skills/` ({n_root} skills)" in agents_md
+    section = readme.split(f"## Skills in honeyguide ({n_root})", 1)[1].split("\n## ", 1)[0]
+    assert "| Domain | Covers | Skills | Gateway |" in section
+    listed = []
+    for row in section.splitlines():
+        cells = [c.strip() for c in row.strip().strip("|").split("|")]
+        if len(cells) == 4 and ":" in cells[2] and cells[2].split(":", 1)[0].isdigit():
+            count, names = cells[2].split(":", 1)
+            names = [n.strip() for n in names.split(",")]
+            assert int(count) == len(names), row
+            listed += names
+            assert cells[3] in names or cells[3] == "orchestrate", row
+    assert sorted(listed) == sorted(p.name for p in SKILLS.iterdir() if p.is_dir()), listed
+    assert "### Third-party content" in section
+    for commit in list(VENDORED.values()) + ["3da62bf3fcfd2034de41f30d920d2739e566171f", "b716f9dc2ba36b6aa8f0080615e5a3a6caeac63b"]:
+        assert commit in section, commit
     assert "claude plugin update honeyguide@wunzent-hub" in readme and "codex plugin add honeyguide@wunzent-hub" in readme
     assert "egm@wunzent-hub" not in readme
     for line in readme.splitlines():

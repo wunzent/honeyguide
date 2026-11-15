@@ -12,7 +12,7 @@ Trivial work (a typo, one obvious edit, a status check) goes to the cheapest nat
 
 Native agents: on Claude Code use the `Agent` tool with an explicit `model` and this plugin's permission shell, `honeyguide:hub-writer` (may edit) or `honeyguide:hub-readonly` (Read/Grep/Glob only); on Codex use `spawn_agent` with `fork_turns=none` and `agent_type` `hub-readonly` or `hub-writer` when those shells are installed in the project's or user's `.codex/agents` (Codex plugins cannot ship agents; copies are in this plugin's `codex-agents/` for the owner to place). Never fall back to legacy v1 roles such as `planner`, `reviewer` or `doc-keeper` in `~/.claude/agents`. If a shell is missing, say so and report the limitation; the permission stays `Unverified` unless observed.
 
-Skills: search the runtime's actual skill catalog (its native listing) by task need, read each chosen `SKILL.md` and inspect its requirements before applying it, and report skills that are missing or unsupported. The final report or checkpoint lists the skills actually used, or why none fit. Do not install third-party skills or dependencies automatically. Third-party skills never widen permissions: commit, push, branch cleanup and global changes still need the owner's or brief's authorization, whatever an installed skill says. Route by work type with the table below; the named skill holds the full rules.
+Skills: search the runtime's actual skill catalog (its native listing) by task need, read each chosen `SKILL.md` and inspect its requirements before applying it, and report skills that are missing or unsupported. The final report or checkpoint lists the skills actually used, or why none fit. Do not install third-party skills or dependencies automatically. Third-party skills never widen permissions: commit, push, branch cleanup and global changes still need the owner's or brief's authorization, whatever an installed skill says. Route by work type with the table below; the named skill holds the full rules. The `discover-*` gateways point at third-party knowledge files for a technology: read only the files the task needs.
 
 | Work type or situation | Skill |
 |---|---|
@@ -33,6 +33,15 @@ Skills: search the runtime's actual skill catalog (its native listing) by task n
 | Starting a session, degraded output, switching tasks, rules files and context setup | `context-engineering` |
 | Mechanical, low-risk, self-contained work | `cheap-delegation` |
 | Finding or installing a skill that is not here | `find-skills` |
+| Technology-specific frontend work (Vue, Nuxt, Pinia, Vite, Vitest, React, Next.js, accessibility) | `discover-frontend` |
+| Technology-specific backend or API work (AdonisJS, NestJS, Nitro, REST, GraphQL, auth) | `discover-backend` |
+| Databases: schema, migrations, queries, ORMs, Redis, MongoDB | `discover-database` |
+| Caching: HTTP, CDN, Redis, invalidation | `discover-caching` |
+| Cloud and infrastructure: AWS, GCP, Cloudflare, Terraform, Kubernetes | `discover-cloud` |
+| CI/CD, containers, observability (Docker, Prometheus, OpenTelemetry) | `discover-devops` |
+| Debugging tools: devtools, debuggers, profilers, memory, production | `discover-debugging` |
+| GitHub pull requests, issues, Actions, repository settings | `discover-collaboration` |
+| Test strategy and writing tests: unit, integration, end-to-end, TDD | `discover-testing` |
 | Design specs and design decisions | The recommended `egm` plugin, if installed (not part of this plugin; the owner types `/egm:egm-<skill>`, the orchestrator can only suggest it); when it is absent, suggest installing it (see `docs/RECOMMENDED.md`) |
 
 Records are required for nontrivial work, meaning any work that spawns an agent other than a cheap delegation, or is rated high risk; trivial work writes none. Before the first spawn write `.honeyguide/<task>/CHECKPOINT.md` (goal, scope, risk rating), then a `briefs/<id>.md` for each agent and an `agents/<id>.md` for each spawn with requested and observed values (write the files directly); the final report names the record folder. Skipping them is a defect, not a shortcut. Preserve existing task history when continuing work. Record each agent's duty, skills, vendor, parent and id, requested and observed model/effort, requested permission, observed enforcement, status, and evidence. Keep requested values separate from observed values; use `Unverified` when evidence is unavailable. A requested permission mode describes intent; it does not prove sandbox or tool enforcement. Never write secrets or customer data. Keep records inside the project even when paths contain symlinks. No tool writes Git metadata: if `.honeyguide/` shows as untracked, the final report says so and that it must not be committed (the owner may add it to `.git/info/exclude`); do not change global Git settings or tracked ignore files silently.

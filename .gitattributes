@@ -2,3 +2,4 @@
 # no line-ending conversion and no whitespace checks.
 skills/ub-mode/** -text
 skills/find-skills/** -text
+skills/discover-*/references/** -text -whitespace
