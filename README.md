@@ -15,7 +15,7 @@ from its table or used on their own (`/honeyguide:<skill>`).
     .agents/plugins/      marketplace.json (Codex)
     skills/               35 skills of honeyguide (see below)
     agents/               Claude agents hub-readonly, hub-writer
-    codex-agents/         Codex agent shells (copy by hand, see below)
+    codex-agents/         optional Codex instruction presets (see Permissions)
     docs/                 specs, plans, audits, history/, RECOMMENDED.md (reference list only)
     tests/test_plugin.py  static checks (standard library only)
 
@@ -115,9 +115,15 @@ Codex:
     codex plugin marketplace add <path-or-git-url-of-this-repository>
     codex plugin add honeyguide@wunzent-hub
 
-Codex plugins cannot ship agents. To get an enforced read-only sandbox for review duties, copy
-`codex-agents/hub-readonly.toml` and `codex-agents/hub-writer.toml` into `~/.codex/agents` (all projects) or a trusted
-project's `.codex/agents`. Without them the permission of Codex children stays `Unverified`.
+Codex plugins cannot ship agents. The files in `codex-agents/` are optional instruction presets (copy
+`hub-readonly.toml` and `hub-writer.toml` into `~/.codex/agents` or a trusted project's `.codex/agents`); they add
+instructions only and enforce no sandbox.
+
+### Permissions
+
+- Claude Code: the `hub-readonly` and `hub-writer` agents ship with the plugin and their tool lists are enforced.
+- Codex: children inherit the session sandbox, so read-only is a brief rule plus a git before/after check by the orchestrator. OS-enforced read-only is available through a separate `codex exec -s read-only` run that the owner approves.
+- Subagents never publish, post, send, upload or push, and use no MCP or connector tool unless the brief names one a task really needs, read-only and noted in the agent record, and never for publishing, posting, sending, uploading or creating shared documents or artifacts.
 
 ## Update
 

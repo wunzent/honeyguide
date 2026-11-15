@@ -324,7 +324,26 @@ def test_agent_shells_exist_and_parse():
         data = tomllib.loads((ROOT / "codex-agents" / f"{n}.toml").read_text(encoding="utf-8"))
         assert data["name"] == n and data["developer_instructions"]
     ro = tomllib.loads((ROOT / "codex-agents" / "hub-readonly.toml").read_text(encoding="utf-8"))
-    assert ro["sandbox_mode"] == "read-only"
+    wr = tomllib.loads((ROOT / "codex-agents" / "hub-writer.toml").read_text(encoding="utf-8"))
+    assert "sandbox_mode" not in ro and "sandbox_mode" not in wr
+    ro_text = (ROOT / "codex-agents" / "hub-readonly.toml").read_text(encoding="utf-8")
+    assert "apply_patch" in ro_text and "Read, Grep and Glob" not in ro_text
+    for n in ("hub-readonly", "hub-writer"):
+        assert "publish" in (ROOT / "agents" / f"{n}.md").read_text(encoding="utf-8")
+    orch = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
+    for needle in ("share the parent session's sandbox", "--untracked-files=all", "`instruction + post-check`",
+                   "--strict-mcp-config", "Outward actions:", "never publish, post, send, upload, push"):
+        assert needle in orch, needle
+    for needle in ("READ-ONLY DUTY", "git diff HEAD --binary", "git rev-parse HEAD", "not proof", "shared documents or artifacts"):
+        assert needle in orch, needle
+    brief = (SKILLS / "orchestrate" / "references" / "brief.md").read_text(encoding="utf-8")
+    assert "PERMISSION:" in brief and "READ-ONLY DUTY" in brief and "MCP: <none | one named server a task really needs, read-only, noted in the agent record" in brief
+    assert "read-only shell commands" in ro_text and "Never use apply_patch" in ro_text
+    mcp_files = [ROOT / "codex-agents" / "hub-readonly.toml", ROOT / "codex-agents" / "hub-writer.toml", ROOT / "README.md"]
+    for path in mcp_files:
+        text = path.read_text(encoding="utf-8")
+        assert "a task really needs, read-only" in text and "shared documents or artifacts" in text, path.name
+    assert "a task really needs, read-only" in orch
     assert "Edit" not in frontmatter(ROOT / "agents" / "hub-readonly.md")["tools"]
 
 
