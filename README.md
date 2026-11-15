@@ -82,7 +82,17 @@ Codex (terminal):
     codex plugin add egm@egm
 
 Its skills are manual: type `/egm:egm-<skill>` (for example `/egm:egm-review <path>`); the orchestrator can only suggest
-them. See `docs/RECOMMENDED.md`.
+them.
+
+Other optional tools (all MIT, none bundled; details, install commands and what each runs on its own are in
+`docs/RECOMMENDED.md`):
+
+| Tool | Use it for | CLIs | Runs on its own |
+|---|---|---|---|
+| `spec-kit` (github/spec-kit) | Full Spec-Driven Development in one project: constitution, spec, plan, tasks, implement | Claude Code, Codex (and others) | A Python CLI that writes `.specify/` and `/speckit-*` commands into the project |
+| `antislop` (miqdadbadjuber/anti-slop) | Filtering generic AI-looking UI, copy and code | Claude Code, Codex | The Claude plugin starts a `node` MCP server (contrast checker) |
+| `cc-polymath` (rand/cc-polymath) | Technology domains not bundled here (mobile, security, distributed systems, ML, Rust, ...) | Claude Code only | SessionStart/SubagentStart hooks that only print text |
+| `ecc` (affaan-m/ECC) | Not recommended together with honeyguide: its own orchestration, memory and hooks overlap ours | Claude Code, Codex | Many hooks that run code on tool use, prompts, stop and session events |
 
 ## Install
 

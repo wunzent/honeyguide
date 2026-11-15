@@ -384,6 +384,12 @@ def test_egm_is_recommended_with_install_commands():
         assert cmd in readme, cmd
         assert cmd in rec, cmd
     assert "/egm:egm-<skill>" in readme and "/egm:egm-<skill>" in rec
+    for name in ("spec-kit", "antislop", "cc-polymath", "ecc"):
+        assert f"`{name}`" in readme and f"`{name}`" in rec, name
+    for cmd in ("uv tool install specify-cli", "codex plugin add antislop@anti-slop",
+                "/plugin install cc-polymath@cc-polymath-marketplace", "codex plugin add ecc@ecc"):
+        assert cmd in rec, cmd
+    assert "Not recommended together with honeyguide" in readme and "Not recommended alongside honeyguide" in rec
 
 
 def test_old_plugin_name_only_in_history_and_ignore():
