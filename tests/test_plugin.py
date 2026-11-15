@@ -20,8 +20,9 @@ ECC_COMMIT = "d2ef2680594f9a17526a6e1a2e18b3d242c5d17b"
 GATEWAYS = {
     "discover-frontend", "discover-backend", "discover-database", "discover-caching", "discover-cloud",
     "discover-devops", "discover-debugging", "discover-collaboration", "discover-testing",
+    "discover-mobile", "discover-security", "discover-distributed",
 }
-N_SKILLS = 32
+N_SKILLS = 35
 # vendored knowledge files: skills/<gateway>/references/<source>/ -> expected upstream commit
 VENDORED = {
     "antfu-skills": "d524ed287eef22757297827ce42e3cad88abd20c",
@@ -508,4 +509,22 @@ def test_readme_lists_ecc_row_and_new_domains():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert ECC_COMMIT in readme and "affaan-m/ECC" in readme
     for domain in ("| Review (step commands) |", "| Learning |", "| Pipeline |"):
+        assert domain in readme, domain
+
+
+def test_mobile_security_distributed_gateways():
+    for g, count in (("discover-mobile", 11), ("discover-security", 12), ("discover-distributed", 22)):
+        src = SKILLS / g / "references" / "rand-cc-polymath"
+        assert [p.name for p in (SKILLS / g / "references").iterdir()] == ["rand-cc-polymath"], g
+        docs = [p for p in src.rglob("*.md") if p.name not in {"SOURCE.md"}]
+        assert len(docs) == count, (g, len(docs))
+        assert not [p for p in src.rglob("*") if p.is_file() and p.suffix not in {".md", ""} and p.name not in {"LICENSE", "manifest.sha256"}], g
+        assert not [p for p in src.rglob("*") if p.is_dir() and p.name in {"scripts", "examples"}], g
+    sec = (SKILLS / "discover-security" / "SKILL.md").read_text(encoding="utf-8")
+    assert "`security-and-hardening`" in sec and "`security-scan`" in sec and "topic knowledge" in sec
+    dist = (SKILLS / "discover-distributed" / "SKILL.md").read_text(encoding="utf-8")
+    assert "system-design interview" in dist
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "rand/cc-polymath (15 categories)" in readme and "all twelve `discover-*` gateways" in readme
+    for domain in ("| Mobile |", "| Security |", "| Distributed systems |"):
         assert domain in readme, domain

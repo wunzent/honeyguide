@@ -48,6 +48,9 @@ Skills: search the runtime's actual skill catalog (its native listing) by task n
 | Debugging tools: devtools, debuggers, profilers, memory, production | `discover-debugging` |
 | GitHub pull requests, issues, Actions, repository settings | `discover-collaboration` |
 | Test strategy and writing tests: unit, integration, end-to-end, TDD | `discover-testing` |
+| Mobile apps: React Native, SwiftUI, Swift concurrency, SwiftData, iOS networking and testing | `discover-mobile` |
+| Security topic knowledge: authentication, authorization, OAuth2, input validation, secrets, security headers (hardening and reviewing a change: `security-and-hardening`, `security-scan`) | `discover-security` |
+| Distributed systems: consensus, CRDTs, clocks, replication, sharding, event sourcing; system-design interview preparation | `discover-distributed` |
 | Design specs and design decisions | The recommended `egm` plugin, if installed (not part of this plugin; the owner types `/egm:egm-<skill>`, the orchestrator can only suggest it); when it is absent, suggest installing it (see `docs/RECOMMENDED.md`) |
 
 Feature pipeline: `plan` -> `tdd` -> implement -> `code-review` -> `security-scan`; `plan-to-steps` turns the approved plan into steps. Skip the stages the risk does not need.

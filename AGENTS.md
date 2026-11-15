@@ -6,7 +6,7 @@ repository root, laid out like obra/superpowers; UNLICENSED and ours). It is pub
 under their `references/` (so does `verify-and-stop`: ECC reviewer checklists) (see README.md, Third-party content). `egm` is only recommended (docs/RECOMMENDED.md), not shipped. See README.md.
 
 ## Layout
-- Root plugin: `.claude-plugin/` (plugin.json, marketplace.json), `.codex-plugin/plugin.json`, `skills/` (32 skills),
+- Root plugin: `.claude-plugin/` (plugin.json, marketplace.json), `.codex-plugin/plugin.json`, `skills/` (35 skills),
   `agents/`, `codex-agents/`; Codex marketplace: `.agents/plugins/marketplace.json`
 - `docs/` specs, plans, audits, history/, RECOMMENDED.md; `tests/test_plugin.py`
 

@@ -13,15 +13,15 @@ from its table or used on their own (`/honeyguide:<skill>`).
     .claude-plugin/       plugin.json, marketplace.json (Claude Code)
     .codex-plugin/        plugin.json
     .agents/plugins/      marketplace.json (Codex)
-    skills/               32 skills of honeyguide (see below)
+    skills/               35 skills of honeyguide (see below)
     agents/               Claude agents hub-readonly, hub-writer
     codex-agents/         Codex agent shells (copy by hand, see below)
     docs/                 specs, plans, audits, history/, RECOMMENDED.md (reference list only)
     tests/test_plugin.py  static checks (standard library only)
 
-## Skills in honeyguide (32)
+## Skills in honeyguide (35)
 
-23 workflow skills that work with any language or framework, plus 9 `discover-*` gateways, one per technology domain.
+23 workflow skills that work with any language or framework, plus 12 `discover-*` gateways, one per technology domain.
 Every task starts at `orchestrate`, which routes to the other skills through its table; the gateway column names the
 skill to start a domain from. A gateway is short: it lists which third-party knowledge file answers which topic, and the
 agent reads only those files (see Third-party content).
@@ -44,7 +44,9 @@ agent reads only those files (see Third-party content).
 | DevOps | CI/CD, Docker and Compose, container security, logging, Prometheus, OpenTelemetry, alerting | 1: discover-devops | discover-devops |
 | Collaboration | GitHub pull requests, issues and projects, repository settings, Actions, Dependabot | 1: discover-collaboration | discover-collaboration |
 | Testing | Unit, integration and end-to-end tests, TDD, coverage strategy, load testing | 1: discover-testing | discover-testing |
-| Security | OWASP, auth, secrets, data storage, supply chain, privacy (PDPA, GDPR) | 1: security-and-hardening | orchestrate |
+| Security | OWASP, auth, secrets, data storage, supply chain, privacy (PDPA, GDPR); topic knowledge: authentication, authorization, OAuth2, input validation, secrets management, security headers, vulnerability assessment | 2: discover-security, security-and-hardening | discover-security |
+| Mobile | React Native (setup, navigation, native modules, performance), SwiftUI architecture and navigation, Swift concurrency, SwiftData, iOS networking and testing | 1: discover-mobile | discover-mobile |
+| Distributed systems | CAP, consensus (Raft, Paxos), CRDTs, logical and vector clocks, leader election, partitioning and sharding, replication, event sourcing, distributed locks, eventual consistency, probabilistic data structures; also for system-design interview preparation | 1: discover-distributed | discover-distributed |
 | Documentation | SWC: solution overview, frontend, backend and mobile components, acceptance and test cases, traceability | 1: software-component | software-component |
 | Reporting | Post-mortem of a fixed bug; reports for leadership shaped for the channel | 2: post-mortem, management-talk | orchestrate |
 | Discovery | Finding and installing a skill that is not here | 1: find-skills | find-skills |
@@ -64,7 +66,7 @@ package or lock files. Upstream `SKILL.md` files are stored as `SKILL.upstream.m
 | antfu/skills (vue, nuxt, pinia, vite, vitest, nitro) | d524ed287eef22757297827ce42e3cad88abd20c | MIT | `discover-frontend`, `discover-backend` |
 | HoangNguyen0403/agent-skills-standard (nestjs) | 24d9034d21d3b2ab5815236d20ba32a4e85c4c04 | MIT | `discover-backend` |
 | omakei/adonisjs-architecture-skill (adonisjs) | 8ee242685af8974ad45179497ae384629144c2b8 | MIT | `discover-backend` |
-| rand/cc-polymath (12 categories) | baa2df114416570f5e0e2961143d20e3716a2fc8 | MIT | all nine `discover-*` gateways |
+| rand/cc-polymath (15 categories) | baa2df114416570f5e0e2961143d20e3716a2fc8 | MIT | all twelve `discover-*` gateways |
 | affaan-m/ECC (19 reviewer checklists: agents/*-reviewer.md, used as checklists, not as agents) | d2ef2680594f9a17526a6e1a2e18b3d242c5d17b | MIT | `verify-and-stop`, `code-review`, `security-scan` |
 
 stay-on-track's handoff section is adapted from Matt Pocock's `handoff` (MIT). The ideas behind `learn`, `plan`, `tdd`, `code-review`, `security-scan` and `plan-to-steps` come from ECC (affaan-m/ECC, MIT); those skills are written here in our own words, hook-free.
@@ -95,7 +97,7 @@ Other optional tools (all MIT, none bundled; details, install commands and what 
 |---|---|---|---|
 | `spec-kit` (github/spec-kit) | Full Spec-Driven Development in one project: constitution, spec, plan, tasks, implement | Claude Code, Codex (and others) | A Python CLI that writes `.specify/` and `/speckit-*` commands into the project |
 | `antislop` (miqdadbadjuber/anti-slop) | Filtering generic AI-looking UI, copy and code | Claude Code, Codex | The Claude plugin starts a `node` MCP server (contrast checker) |
-| `cc-polymath` (rand/cc-polymath) | Technology domains not bundled here (mobile, security, distributed systems, ML, Rust, ...) | Claude Code only | SessionStart/SubagentStart hooks that only print text |
+| `cc-polymath` (rand/cc-polymath) | Technology domains not bundled here (ML, Rust, math, networking, cryptography, ...) | Claude Code only | SessionStart/SubagentStart hooks that only print text |
 | `ecc` (affaan-m/ECC) | Not recommended together with honeyguide: its own orchestration, memory and hooks overlap ours (honeyguide already bundles its reviewer checklists and re-implements a few of its ideas without hooks) | Claude Code, Codex | Many hooks that run code on tool use, prompts, stop and session events |
 
 ## Install

@@ -21,8 +21,10 @@ Other optional tools (checked 2026-11-16 from each upstream README and manifest;
   - Claude Code: `/plugin marketplace add miqdadbadjuber/anti-slop`, then `/plugin install antislop@anti-slop`.
   - Codex: `codex plugin marketplace add miqdadbadjuber/anti-slop`, then `codex plugin add antislop@anti-slop`.
 - `cc-polymath` (rand/cc-polymath; Claude Code only, no Codex manifest): 23 `discover-*` gateways over about 800
-  knowledge files. Twelve of its categories are already bundled here under `skills/discover-*`; install it only for the
-  others (mobile, security, distributed systems, protocols, ML, Rust, math and more), and expect overlapping gateway
+  knowledge files. Fifteen of its categories are already bundled here under `skills/discover-*` (api, caching, cicd, cloud, collaboration,
+  containers, database, debugging, distributed-systems, frontend, infrastructure, mobile, observability, security,
+  testing); install it only for the rest (agentic, cryptography, data, ML, math, networking, protocols, Rust, WASM, Zig,
+  product, research and more), and expect overlapping gateway
   names (`discover-frontend` and so on). Ships SessionStart/SubagentStart hooks that only print text, a `/skills`
   command and four agents. Its `marketplace.json` names the marketplace `cc-polymath-marketplace` while its README shows
   `cc-polymath@cc-polymath`; if one fails, try the other.
