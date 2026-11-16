@@ -1,6 +1,6 @@
 {
   "name": "honeyguide",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Plan and carry out software work with native agents, risk-based independent review and project-local records.",
   "author": { "name": "wunzent" },
   "license": "UNLICENSED",
@@ -12,5 +12,6 @@
     "capabilities": ["Read", "Write"],
     "defaultPrompt": ["Use the orchestrate skill to plan and carry out this change with an independent review if it is high risk."]
   },
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "hooks": "./hooks/codex-hooks.json"
 }

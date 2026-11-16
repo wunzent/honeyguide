@@ -1,6 +1,6 @@
 ---
 name: discover-ui-taste
-description: "Use when designing, building or reviewing a web page, app UI or marketing copy so it does not look generic or AI-generated: layout, colour, copy, accessibility, mobile layout and code comments."
+description: "Use when designing or building a web page, app UI or marketing copy so it does not look generic or AI-generated, or reviewing whether a page, app UI or copy looks generic or AI-generated: layout, colour, copy, accessibility, mobile layout and code comments."
 ---
 # UI taste gateway
 

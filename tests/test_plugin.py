@@ -879,3 +879,64 @@ def test_no_v1_project_card_in_skills():
         low = text.lower()
         assert "project card" not in low, path
         assert "projects/<name>" not in low, path
+
+
+
+def test_flow_fix_orchestrate_trigger_loading_branch_and_review_rules():
+    path = SKILLS / "orchestrate" / "SKILL.md"
+    raw = path.read_text(encoding="utf-8")
+    desc = frontmatter(path)["description"]
+    assert re.search(r'^description: ".*"$', raw, re.M)
+    assert desc == ("Use first, before anything else, for any software task in a project: building, fixing, changing, "
+                    "refactoring, reviewing, testing, planning or documenting code. Plain questions are answered "
+                    "directly."), desc
+    assert desc.startswith("Use first, before anything else, for any software task")
+    text = " ".join(raw.split())
+    for needle in (
+        "Every skill a task or the routing names must be loaded before that work starts",
+        "on Claude Code the orchestrator uses the Skill tool, while a subagent without it (`hub-writer`, `hub-readonly`) and Codex read the full `SKILL.md`, and either way counts as loaded",
+        'Writing "not loaded" for an installed skill is a defect',
+        "a skill that is not installed or cannot load is always reported as a limitation in the final reply, and also in the checkpoint when the task keeps records",
+        "If the chosen branch cannot be created or switched to (for example the Codex sandbox blocks writes to `.git`), stop before any edit, say why, and ask the owner",
+        "never continue on a different branch",
+        "a page or UI change with state logic across several files counts as non-trivial multi-file logic) requires a fresh independent reviewer",
+    ):
+        assert needle in text, needle
+    ui = frontmatter(SKILLS / "discover-ui-taste" / "SKILL.md")["description"]
+    assert ui.startswith("Use when ") and "reviewing whether a page, app UI or copy looks generic or AI-generated" in ui, ui
+
+
+def test_sessionstart_hooks_are_text_only_and_identical():
+    # quoted so PowerShell prints one line (unquoted, its echo prints each word on its own line)
+    hook_text = ('echo "honeyguide plugin. For any software task in a project load the honeyguide orchestrate skill '
+                 'first and follow its rules. Answer plain questions directly."')
+    commands = []
+    for name in ("hooks.json", "codex-hooks.json"):
+        data = load(ROOT / "hooks" / name)
+        assert set(data) == {"hooks"}, name
+        assert set(data["hooks"]) == {"SessionStart"}, name
+        groups = data["hooks"]["SessionStart"]
+        handlers = [h for g in groups for h in g["hooks"]]
+        assert len(groups) == 1 and len(handlers) == 1, name
+        assert groups[0]["matcher"] == ".*", name
+        assert handlers[0]["type"] == "command", name
+        cmd = handlers[0]["command"]
+        assert cmd.startswith('echo "') and cmd.endswith('"'), name
+        inner = cmd[len('echo "'):-1]
+        assert inner and inner.strip() == inner, name
+        bad = [c for c in "'\",;|&()<>`$%^!*?{}[]" + chr(92) + chr(10) + chr(13) if c in inner]
+        assert not bad, (name, bad)
+        commands.append(cmd)
+    assert commands[0] == commands[1] == hook_text, commands
+    assert {p.name for p in (ROOT / "hooks").iterdir()} == {"hooks.json", "codex-hooks.json"}
+    codex = load(ROOT / ".codex-plugin" / "plugin.json")
+    claude = load(ROOT / ".claude-plugin" / "plugin.json")
+    assert codex["hooks"] == "./hooks/codex-hooks.json"
+    assert "hooks" not in claude
+    assert claude["version"] == codex["version"] == "0.2.0"
+    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    assert ("- Hooks: the plugin ships one SessionStart hook on each CLI that only prints a line pointing to `orchestrate`; "
+            "nothing else runs. Codex asks the owner to review and trust it once in `/hooks`, and until it is trusted it "
+            "does not run.") in readme
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "`agents/`, `codex-agents/`, `hooks/`; Codex marketplace" in agents
