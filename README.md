@@ -13,15 +13,17 @@ from its table or used on their own (`/honeyguide:<skill>`).
     .claude-plugin/       plugin.json, marketplace.json (Claude Code)
     .codex-plugin/        plugin.json
     .agents/plugins/      marketplace.json (Codex)
-    skills/               34 skills of honeyguide (see below)
+    skills/               35 skills of honeyguide (see below)
     agents/               Claude agents hub-readonly, hub-writer
     codex-agents/         optional Codex instruction presets (see Permissions)
+    codex-rules/          optional Codex rule that lets Codex create a new branch (see Permissions)
+    hooks/                SessionStart hooks (hooks.json for Claude Code, codex-hooks.json for Codex; see Permissions)
     docs/                 specs, plans, audits, history/, RECOMMENDED.md (reference list only)
     tests/test_plugin.py  static checks (standard library only)
 
-## Skills in honeyguide (34)
+## Skills in honeyguide (35)
 
-22 workflow skills that work with any language or framework, plus 12 `discover-*` gateways, one per technology domain.
+22 workflow skills that work with any language or framework, plus 13 `discover-*` gateways, one per technology domain.
 Every task starts at `orchestrate`, which routes to the other skills through its table; the gateway column names the
 skill to start a domain from. A gateway is short: it lists which third-party knowledge file answers which topic, and the
 agent reads only those files (see Third-party content).
@@ -47,22 +49,15 @@ agent reads only those files (see Third-party content).
 | Security | OWASP, auth, secrets, data storage, supply chain, privacy (PDPA, GDPR); topic knowledge: authentication, authorization, OAuth2, input validation, secrets management, security headers, vulnerability assessment | 2: discover-security, security-and-hardening | discover-security |
 | Mobile | React Native (setup, navigation, native modules, performance), SwiftUI architecture and navigation, Swift concurrency, SwiftData, iOS networking and testing | 1: discover-mobile | discover-mobile |
 | Distributed systems | CAP, consensus (Raft, Paxos), CRDTs, logical and vector clocks, leader election, partitioning and sharding, replication, event sourcing, distributed locks, eventual consistency, probabilistic data structures; also for system-design interview preparation | 1: discover-distributed | discover-distributed |
+| UI taste | Web pages, app UI and marketing copy that do not look generic or AI-generated: layout, colour, copy, accessibility and contrast, mobile layout, code comments | 1: discover-ui-taste | discover-ui-taste |
 | Documentation | SWC: solution overview, frontend, backend and mobile components, acceptance and test cases, traceability | 1: software-component | software-component |
 | Reporting | Post-mortem of a fixed bug; reports for leadership shaped for the channel | 2: post-mortem, management-talk | orchestrate |
 | Discovery | Researching skills or knowledge that are not here yet (the owner decides on installing) | 1: find-skills | find-skills |
-| Design (recommended, not bundled) | Design specs and design decisions | `egm`, installed separately (see Recommended) | `/egm:egm-<skill>` |
+| Design (recommended, not bundled) | Design specs and design decisions | `egm`, installed separately (see `docs/RECOMMENDED.md`) | `/egm:egm-<skill>` |
 
 ### Third-party content
 
-Unchanged upstream copies, all MIT, each with its `LICENSE` and a `SOURCE.md`. The gateway files live in
-`skills/discover-*/references/<source>/` at their original relative paths, with a `manifest.sha256` that the tests
-check; the ECC reviewer checklists live in `skills/verify-and-stop/references/ecc-reviewers/` the same way. Only documentation was copied: no scripts, code examples (except AdonisJS `.ts`/`.yml` examples, read-only text),
-package or lock files. Upstream `SKILL.md` files are stored as `SKILL.upstream.md` so no CLI loads them as skills. The files are reference material; the project's own rules win.
-
-`ub-mode` and `find-skills` are wrapped third-party skills: the `SKILL.md` is ours (honeyguide rules first, then the
-overrides for that skill, for example commit and push only with the owner's OK, never install a skill by itself), and
-it points at the unchanged upstream file in
-`skills/<skill>/references/<source>/` (with `LICENSE`, `SOURCE.md` and `manifest.sha256`, like the gateway sources).
+All MIT. Unchanged upstream copies live in `references/<source>/` of the skill that uses them (`ub-mode`, `find-skills`, the `discover-*` gateways) and in `skills/verify-and-stop/references/ecc-reviewers/`, each with `LICENSE`, `SOURCE.md` and a `manifest.sha256` that the tests check; upstream `SKILL.md` files are stored as `SKILL.upstream.md`. Only documentation was copied (plus read-only AdonisJS `.ts`/`.yml` examples). They are reference material; the project's own rules win. `ub-mode` and `find-skills` are wrapped third-party skills: our `SKILL.md` puts honeyguide rules first.
 
 | Source | Commit | Licence | Where |
 |---|---|---|---|
@@ -71,43 +66,11 @@ it points at the unchanged upstream file in
 | antfu/skills (vue, nuxt, pinia, vite, vitest, nitro) | d524ed287eef22757297827ce42e3cad88abd20c | MIT | `discover-frontend`, `discover-backend` |
 | HoangNguyen0403/agent-skills-standard (nestjs) | 24d9034d21d3b2ab5815236d20ba32a4e85c4c04 | MIT | `discover-backend` |
 | omakei/adonisjs-architecture-skill (adonisjs) | 8ee242685af8974ad45179497ae384629144c2b8 | MIT | `discover-backend` |
-| rand/cc-polymath (15 categories) | baa2df114416570f5e0e2961143d20e3716a2fc8 | MIT | all twelve `discover-*` gateways |
+| rand/cc-polymath (15 categories) | baa2df114416570f5e0e2961143d20e3716a2fc8 | MIT | twelve `discover-*` gateways (all but `discover-ui-taste`) |
+| miqdadbadjuber/anti-slop (6 skills as knowledge files) | 35b54dc660aa7d11428ee62c5788ad36bc18ac3c | MIT | `discover-ui-taste` |
 | affaan-m/ECC (19 reviewer checklists: agents/*-reviewer.md, used as checklists, not as agents) | d2ef2680594f9a17526a6e1a2e18b3d242c5d17b | MIT | `verify-and-stop`, `code-review`, `security-scan` |
 
-`api-and-interface-design` and `security-and-hardening` are adapted from addyosmani/agent-skills
-aeac41d4d005999432bb7312f7ff06383a91d59d (MIT), each with its `LICENSE` and an attribution line; they contain our
-changes and are not byte copies. stay-on-track's context setup section takes ideas from that repository's
-`context-engineering` skill, in our words.
-stay-on-track's handoff section is adapted from Matt Pocock's `handoff` (MIT). The ideas behind `learn`, `plan`, `tdd`, `code-review`, `security-scan` and `tasks` come from ECC (affaan-m/ECC, MIT); `tasks` also borrows the task-list idea from github/spec-kit (MIT); those skills are written here in our own words, hook-free.
-
-## Recommended
-
-`egm` (Elephant-Goldfish Model, google/elephant-goldfish-model, Apache-2.0) is recommended for design specs and design
-decisions. It is not part of this repository or installed by it. Install it from Google's own marketplace (the marketplace
-and plugin are both named `egm`); the owner runs these, they change that CLI's user configuration:
-
-Claude Code (terminal):
-
-    claude plugin marketplace add google/elephant-goldfish-model
-    claude plugin install egm@egm
-
-Codex (terminal):
-
-    codex plugin marketplace add google/elephant-goldfish-model
-    codex plugin add egm@egm
-
-Its skills are manual: type `/egm:egm-<skill>` (for example `/egm:egm-review <path>`); the orchestrator can only suggest
-them.
-
-Other optional tools (all MIT, none bundled; details, install commands and what each runs on its own are in
-`docs/RECOMMENDED.md`):
-
-| Tool | Use it for | CLIs | Runs on its own |
-|---|---|---|---|
-| `spec-kit` (github/spec-kit) | Full Spec-Driven Development in one project: constitution, spec, plan, tasks, implement | Claude Code, Codex (and others) | A Python CLI that writes `.specify/` and `/speckit-*` commands into the project |
-| `antislop` (miqdadbadjuber/anti-slop) | Filtering generic AI-looking UI, copy and code | Claude Code, Codex | The Claude plugin starts a `node` MCP server (contrast checker) |
-| `cc-polymath` (rand/cc-polymath) | Technology domains not bundled here (ML, Rust, math, networking, cryptography, ...) | Claude Code only | SessionStart/SubagentStart hooks that only print text |
-| `ecc` (affaan-m/ECC) | Not recommended together with honeyguide: its own orchestration, memory and hooks overlap ours (honeyguide already bundles its reviewer checklists and re-implements a few of its ideas without hooks) | Claude Code, Codex | Many hooks that run code on tool use, prompts, stop and session events |
+Adapted or idea sources, in our own words: `api-and-interface-design` and `security-and-hardening` are adapted from addyosmani/agent-skills aeac41d4d005999432bb7312f7ff06383a91d59d (each with its `LICENSE` and an attribution line; not byte copies); in `stay-on-track` the context setup section takes ideas from that repository's `context-engineering` and the handoff section is adapted from Matt Pocock's `handoff`; `learn`, `plan`, `tdd`, `code-review`, `security-scan` and `tasks` take ideas from ECC, and `tasks` also from github/spec-kit; the four web-quality references in anti-slop (`discover-ui-taste`) are adapted by antislop from addyosmani/web-quality-skills, licence copied (all MIT).
 
 ## Install
 
@@ -132,6 +95,8 @@ instructions only and enforce no sandbox.
 
 - Claude Code: the `hub-readonly` and `hub-writer` agents ship with the plugin and their tool lists are enforced.
 - Codex: children inherit the session sandbox, so a permission (including read-only) is the brief's rule only, recorded as `instruction`, never as enforced; this may be revisited when Codex offers per-child enforcement. The orchestrator still checks a writer's changed files against its brief's SCOPE. OS-enforced read-only is available through a separate `codex exec -s read-only` run that the owner approves.
+- Hooks: the plugin ships one SessionStart hook on each CLI that only prints a line pointing to `orchestrate`; nothing else runs. Codex asks the owner to review and trust it once in `/hooks`, and until it is trusted it does not run.
+- Codex branch rule (optional): `codex-rules/honeyguide.rules` lets Codex create a new branch outside the sandbox, because `.git` is read-only in workspace-write. The rule matches command prefixes, so any `git switch -c ...`, `git switch --create ...` or `git checkout -b ...` runs outside the sandbox without a prompt, including trailing options such as `--discard-changes` or `-f` that can discard local changes. The `orchestrate` skill tells Codex to use exactly `git switch -c <branch>`, which is an instruction, not enforcement; install the rule only if you accept that. Plugins cannot ship rules, so the owner copies the file once to `~/.codex/rules/` (a global location, so the owner does it) and restarts Codex. Without it Codex stops and asks the owner to create the branch.
 - Subagents never publish, post, send, upload or push, and use no MCP or connector tool unless the brief names one a task really needs, read-only and noted in the agent record, and never for publishing, posting, sending, uploading or creating shared documents or artifacts.
 
 ## Update

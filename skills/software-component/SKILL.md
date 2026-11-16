@@ -9,7 +9,7 @@ A template standard: it holds no project's real specs. Read only the reference s
 
 ## Where documents go
 
-- Project SWC: the folder the project card names (`projects/<name>.md`, "SWC docs"); none named: `docs/swc/FE` and
+- Project SWC: the SWC folder the project's `AGENTS.md`, `CLAUDE.md` or equivalent names; none named: `docs/swc/FE` and
   `docs/swc/BE` in the target repo (one `docs/swc` for a mobile or no-backend app). Ask the owner before creating a new SWC location.
 - solution-overview, shared and traceability go in the app's `SWC/{module}/` (see `references/document-set.md`).
 - Never copy a real project's specs, names or paths (including paths from other machines) into this skill or the hub;
@@ -49,7 +49,7 @@ Long lines: find headings first (`rg -n --max-columns 160 "^#" <file>`), then re
 
 ## Routing
 
-- page / component / composable / UI flow → frontend standard
+- page / component / composable / UI flow → frontend standard; when building or reviewing a page or UI from a page spec, also use `discover-ui-taste` (the SWC spec wins; its Screen Workflow states map to antislop's UI states rule, R-27)
 - endpoint / auth / validation / data / side effect / external service → backend standard
 - full-stack or cross-system → both, linked by the same REQ/AC and API contract
 

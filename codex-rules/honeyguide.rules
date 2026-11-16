@@ -1,0 +1,16 @@
+# honeyguide: create a new branch outside the sandbox (.git is read-only in workspace-write).
+# Only branch creation; the orchestrate skill asks the owner which branch before the first change.
+prefix_rule(
+    pattern = ["git", "switch", ["-c", "--create"]],
+    decision = "allow",
+    justification = "Create the branch the owner chose; .git is read-only inside the sandbox",
+    match = ["git switch -c feat/x", "git switch --create feat/x"],
+    not_match = ["git switch main", "git switch --discard-changes main", "git checkout -- a.js", "git commit -m x"],
+)
+prefix_rule(
+    pattern = ["git", "checkout", "-b"],
+    decision = "allow",
+    justification = "Create the branch the owner chose; .git is read-only inside the sandbox",
+    match = ["git checkout -b feat/x"],
+    not_match = ["git checkout -- a.js", "git checkout main"],
+)

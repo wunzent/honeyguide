@@ -28,6 +28,7 @@ Put the answer first. One idea per sentence.
 - Keep every number and date that matters; never round a risk into reassurance.
 - Do not hide bad news or soften a missed date. State the new date and what drives it.
 - Do not claim more certainty than the evidence gives; mark unverified items.
+- Before sending, check the text against antislop's copywriting patterns in `references/miqdadbadjuber-anti-slop/skills/antislop-copywriting/SKILL.upstream.md` (empty AI vocabulary, significance inflation, weasel attributions, chatbot closers) and apply them in the message's language; resolve the path against the directory of the loaded `discover-ui-taste` skill (the runtime reports it), not the project; load the installed `discover-ui-taste` skill first (the Skill tool, or read its SKILL.md); only if it is not installed or cannot load, report that limitation and skip this check.
 
 ## By channel
 

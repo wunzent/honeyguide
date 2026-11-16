@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"honeyguide plugin. For any software task in a project load the honeyguide orchestrate skill first and follow its rules. Answer plain questions directly.\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -25,12 +25,13 @@ ECC_COMMIT = "d2ef2680594f9a17526a6e1a2e18b3d242c5d17b"
 GATEWAYS = {
     "discover-frontend", "discover-backend", "discover-database", "discover-caching", "discover-cloud",
     "discover-devops", "discover-debugging", "discover-collaboration", "discover-testing",
-    "discover-mobile", "discover-security", "discover-distributed",
+    "discover-mobile", "discover-security", "discover-distributed", "discover-ui-taste",
 }
-N_SKILLS = 34
+N_SKILLS = 35
 # vendored knowledge files: skills/<gateway>/references/<source>/ -> expected upstream commit
 VENDORED = {
     "antfu-skills": "d524ed287eef22757297827ce42e3cad88abd20c",
+    "miqdadbadjuber-anti-slop": "35b54dc660aa7d11428ee62c5788ad36bc18ac3c",
     "hoangnguyen-agent-skills-standard": "24d9034d21d3b2ab5815236d20ba32a4e85c4c04",
     "omakei-adonisjs-architecture-skill": "8ee242685af8974ad45179497ae384629144c2b8",
     "rand-cc-polymath": "baa2df114416570f5e0e2961143d20e3716a2fc8",
@@ -83,6 +84,15 @@ def frontmatter(path, strict=True):
 def skill_files():
     """Our skills' SKILL.md files; vendored third-party files under references/ are not skills."""
     return sorted(p for p in SKILLS.rglob("SKILL.md") if "references" not in p.relative_to(SKILLS).parts[1:-1])
+
+
+LICENCE_NAMES = {"LICENSE", "LICENSE-web-quality-skills"}  # exact names only; the second is antislop's copy of web-quality-skills
+
+
+def vendored_file_allowed(name, allowed=frozenset()):
+    """Allow-list for files under references/: .md, the exact licence names, or an extension SOURCE.md lists."""
+    leaf = Path(name)
+    return leaf.suffix.lower() == ".md" or leaf.name in LICENCE_NAMES or leaf.suffix.lower() in allowed
 
 
 def vendored_sources():
@@ -195,9 +205,7 @@ def test_vendored_sources_have_licence_source_and_matching_manifest():
         allowed.discard("none")
         # allow-list: documentation/text files, plus example extensions that SOURCE.md lists explicitly
         for name in manifest:
-            leaf = Path(name)
-            ok = leaf.suffix.lower() == ".md" or name == "LICENSE" or leaf.suffix.lower() in allowed
-            assert ok, f"file type not allowed under references: {rel}/{name}"
+            assert vendored_file_allowed(name, allowed), f"file type not allowed under references: {rel}/{name}"
         assert not any(Path(n).name in {"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"} for n in manifest), rel
 
 
@@ -210,7 +218,7 @@ def test_no_upstream_skill_md_under_references_and_no_loose_files():
             text = (src / "SOURCE.md").read_text(encoding="utf-8")
             if list(src.rglob("SKILL.upstream.md")):
                 assert "renamed SKILL.upstream.md (content unchanged)" in text, src
-    assert sum(1 for p in SKILLS.glob("discover-*/references/**/SKILL.upstream.md")) == 47
+    assert sum(1 for p in SKILLS.glob("discover-*/references/**/SKILL.upstream.md")) == 53
     for s, src in WRAPPED.items():
         folder = SKILLS / s / "references" / src
         assert len(list(folder.rglob("SKILL.upstream.md"))) == 1, s
@@ -503,20 +511,16 @@ def test_readme_commands_and_count():
             assert line.count("codex plugin") + line.count("claude plugin") + line.count("/plugin ") <= 1, line
 
 
-def test_egm_is_recommended_with_install_commands():
+def test_egm_is_recommended_in_docs_only():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     rec = (ROOT / "docs" / "RECOMMENDED.md").read_text(encoding="utf-8")
-    assert "## Recommended" in readme
+    assert "## Recommended" not in readme
+    assert "docs/RECOMMENDED.md" in readme
     for cmd in EGM_COMMANDS:
-        assert cmd in readme, cmd
         assert cmd in rec, cmd
-    assert "/egm:egm-<skill>" in readme and "/egm:egm-<skill>" in rec
-    for name in ("spec-kit", "antislop", "cc-polymath", "ecc"):
-        assert f"`{name}`" in readme and f"`{name}`" in rec, name
-    for cmd in ("uv tool install specify-cli", "codex plugin add antislop@anti-slop",
-                "/plugin install cc-polymath@cc-polymath-marketplace", "codex plugin add ecc@ecc"):
-        assert cmd in rec, cmd
-    assert "Not recommended together with honeyguide" in readme and "Not recommended alongside honeyguide" in rec
+    assert "/egm:egm-<skill>" in rec
+    for name in ("spec-kit", "antislop", "cc-polymath@", "ecc@ecc"):
+        assert name not in rec, name
 
 
 def test_old_plugin_name_only_in_history_and_ignore():
@@ -769,6 +773,249 @@ def test_mobile_security_distributed_gateways():
     dist = (SKILLS / "discover-distributed" / "SKILL.md").read_text(encoding="utf-8")
     assert "system-design interview" in dist
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "rand/cc-polymath (15 categories)" in readme and "all twelve `discover-*` gateways" in readme
+    assert "rand/cc-polymath (15 categories)" in readme and "twelve `discover-*` gateways (all but `discover-ui-taste`)" in readme
     for domain in ("| Mobile |", "| Security |", "| Distributed systems |"):
         assert domain in readme, domain
+
+
+def test_ui_taste_gateway_overrides_and_no_scripts():
+    text = (SKILLS / "discover-ui-taste" / "SKILL.md").read_text(encoding="utf-8")
+    for needle in ('do not ask the upstream "DURING or AFTER" question', r"%APPDATA%\antislop\settings.json",
+                   "~/.config/antislop/", "Never run `npx antislop-ai`", "`npx skills ...`", "`allowed-tools`",
+                   "contrast checker scripts are not bundled", "numbered findings list by priority",
+                   "the owner picks what to fix", "`DESIGN.md`", "project's language", "`discover-frontend`",
+                   "references/miqdadbadjuber-anti-slop/skills/antislop/SKILL.upstream.md"):
+        assert needle in text, needle
+    refs = SKILLS / "discover-ui-taste" / "references"
+    assert [p.name for p in refs.iterdir()] == ["miqdadbadjuber-anti-slop"]
+    assert not [p for p in refs.rglob("*") if p.is_file() and p.name not in {"SOURCE.md", "manifest.sha256"}
+                and not vendored_file_allowed(p.name)]
+    assert not [p for p in refs.rglob("*") if p.is_file() and p.suffix.lower() in {".py", ".mjs", ".js", ".sh", ".exe"}]
+    src = refs / "miqdadbadjuber-anti-slop"
+    assert len(list(src.rglob("SKILL.upstream.md"))) == 6
+    assert len(list(src.rglob("LICENSE-web-quality-skills"))) == 2
+    source = (src / "SOURCE.md").read_text(encoding="utf-8")
+    assert "addyosmani/web-quality-skills" in source and "contrast-check.py" in source
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "| UI taste |" in readme and "miqdadbadjuber/anti-slop (6 skills as knowledge files)" in readme
+    assert "addyosmani/web-quality-skills" in readme
+
+
+def test_vendored_file_allow_list_takes_exact_licence_names_only():
+    for name in ("LICENSE", "LICENSE-web-quality-skills", "skills/antislop-ui/LICENSE-web-quality-skills", "a/b.md"):
+        assert vendored_file_allowed(name), name
+    for name in ("LICENSE-helper.sh", "LICENSE.exe", "LICENSE-x", "skills/x/LICENSE-x", "run.py", "VERSION"):
+        assert not vendored_file_allowed(name), name
+    assert vendored_file_allowed("app/start.ts", {".ts"}) and not vendored_file_allowed("app/start.ts")
+
+
+def test_skills_wire_in_the_vendored_antislop_files():
+    ui = SKILLS / "discover-ui-taste"
+    base = "references/miqdadbadjuber-anti-slop/skills/"
+    for skill, rel in (("verify-and-stop", "antislop/SKILL.upstream.md"), ("code-review", "antislop-code/SKILL.upstream.md"),
+                       ("management-talk", "antislop-copywriting/SKILL.upstream.md")):
+        text = (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
+        assert f"`{base}{rel}`" in text, skill
+        assert (ui / base / rel).is_file(), rel
+        assert "loaded `discover-ui-taste` skill" in text and "not the project" in text, skill
+        assert ("load the installed `discover-ui-taste` skill first (the Skill tool, or read its SKILL.md); only if it is not "
+                "installed or cannot load, report that limitation and skip this check.") in text, skill
+        assert "if that skill is not loaded" not in text, skill
+    for p in SKILLS.rglob("*.md"):
+        if "references" not in p.relative_to(SKILLS).parts:
+            assert "if that skill is not loaded" not in p.read_text(encoding="utf-8"), p
+    ver = (SKILLS / "verify-and-stop" / "SKILL.md").read_text(encoding="utf-8")
+    mode1 = ver.split("## Mode 1", 1)[1].split("## Mode 2", 1)[0]
+    gate = [l for l in mode1.splitlines() if "Delivery Gate (Mandatory)" in l]
+    assert len(gate) == 1, gate
+    for needle in ("- UI work (a web page or app UI):", "PASS, FAIL, N/A with the reason (the item does not apply to this deliverable)",
+                   "NOT RUN with the reason (evidence unavailable", "never mark PASS without evidence",
+                   "never widen scope to satisfy an item",
+                   "Copy-only work (marketing copy without UI changes) is checked against the copywriting patterns in "
+                   "`references/miqdadbadjuber-anti-slop/skills/antislop-copywriting/SKILL.upstream.md` instead"):
+        assert needle in gate[0], needle
+    assert "marketing copy):" not in gate[0]
+    cr = (SKILLS / "code-review" / "SKILL.md").read_text(encoding="utf-8")
+    step3 = cr.replace("\r\n", "\n").split("\n3. ", 1)[1].split("\n4. ", 1)[0]
+    assert ("When the diff adds or changes code comments in any language, also give the reviewer antislop's comment checklist "
+            "`references/miqdadbadjuber-anti-slop/skills/antislop-code/SKILL.upstream.md`") in step3
+    for needle in ("The reviewer uses it to judge comment quality only (the comments the diff adds or changes)",
+                   "its scope guardrail (\"only comments changed, the code untouched\") and the core Delivery Gate do not apply to judging a code review diff"):
+        assert needle in step3, needle
+    mt = (SKILLS / "management-talk" / "SKILL.md").read_text(encoding="utf-8")
+    rules = mt.replace("\r\n", "\n").split("## Rewrite rules", 1)[1].split("\n## ", 1)[0]
+    rule = [l for l in rules.splitlines() if "antislop-copywriting" in l]
+    assert len(rule) == 1 and rule[0].startswith("- Before sending, check the text against antislop's copywriting patterns"), rule
+    assert "apply them in the message's language" in rule[0]
+    assert "## Delivery Gate (Mandatory)" in (ui / base / "antislop/SKILL.upstream.md").read_text(encoding="utf-8")
+    gw = (ui / "SKILL.md").read_text(encoding="utf-8")
+    for s in ("`verify-and-stop`", "`code-review`", "`management-talk`"):
+        assert s in gw, s
+
+
+def test_ui_taste_defers_to_swc_and_handles_other_languages():
+    gw = " ".join((SKILLS / "discover-ui-taste" / "SKILL.md").read_text(encoding="utf-8").split())
+    for needle in (
+        "The target project's SWC documents (page spec, page wireframe, UI Conditions, Screen Workflow, `ui-design-system`; see `software-component`) count as design direction for antislop's R-37",
+        "(do not ask for a separate `DESIGN.md` when they cover it) and win over upstream rules, as do their acceptance criteria",
+        "Report a conflict between an antislop rule and the SWC to the owner; never resolve it silently",
+        "For copy in another language (for example Thai), apply their principles (no inflated claims, no unsupported attributions, no empty filler), not the English word lists",
+    ):
+        assert needle in gw, needle
+    swc = (SKILLS / "software-component" / "SKILL.md").read_text(encoding="utf-8")
+    routing = swc.split("## Routing", 1)[1].split("\n## ", 1)[0]
+    line = [l for l in routing.splitlines() if l.startswith("- page / component")]
+    assert len(line) == 1 and "when building or reviewing a page or UI from a page spec, also use `discover-ui-taste`" in line[0], line
+    assert "the SWC spec wins" in line[0] and "Screen Workflow states map to antislop's UI states rule, R-27)" in line[0]
+    core = (SKILLS / "discover-ui-taste" / "references" / "miqdadbadjuber-anti-slop" / "skills" / "antislop" / "SKILL.upstream.md").read_text(encoding="utf-8")
+    assert "\n#### R-27 — UI States\n" in core and "\n#### R-37 — Design Direction Required\n" in core
+    r37 = [s for s in gw.split(". ") if "count as design direction" in s]
+    assert len(r37) == 1 and "design direction for antislop's R-37 (" in r37[0], r37
+
+
+def test_no_v1_project_card_in_skills():
+    # v1 "project card" (projects/<name>.md) is gone; projects name their settings in AGENTS.md / CLAUDE.md
+    allowed = "Do not require a Hub project card"
+    for path in sorted(SKILLS.rglob("*")):
+        if not path.is_file() or "SKILL.upstream.md" in path.as_posix():
+            continue
+        if any((folder / "manifest.sha256").is_file() for folder in path.parents if SKILLS in folder.parents):
+            continue  # vendored third-party copy, kept byte-identical to upstream
+        text = path.read_text(encoding="utf-8", errors="ignore").replace(allowed, "")
+        low = text.lower()
+        assert "project card" not in low, path
+        assert "projects/<name>" not in low, path
+
+
+
+def test_flow_fix_orchestrate_trigger_loading_branch_and_review_rules():
+    path = SKILLS / "orchestrate" / "SKILL.md"
+    raw = path.read_text(encoding="utf-8")
+    desc = frontmatter(path)["description"]
+    assert re.search(r'^description: ".*"$', raw, re.M)
+    assert desc == ("Use first, before anything else, for any software task in a project: building, fixing, changing, "
+                    "refactoring, reviewing, testing, planning or documenting code. Plain questions are answered "
+                    "directly."), desc
+    assert desc.startswith("Use first, before anything else, for any software task")
+    text = " ".join(raw.split())
+    for needle in (
+        "Every skill a task or the routing names must be loaded before that work starts",
+        "on Claude Code the orchestrator uses the Skill tool, while a subagent without it (`hub-writer`, `hub-readonly`) and Codex read the full `SKILL.md`, and either way counts as loaded",
+        'Writing "not loaded" for an installed skill is a defect',
+        "a skill that is not installed or cannot load is always reported as a limitation in the final reply, and also in the checkpoint when the task keeps records",
+        "If the chosen branch cannot be created or switched to (for example the Codex sandbox blocks writes to `.git`), stop before any edit, say why, and ask the owner",
+        "never continue on a different branch",
+        "a page or UI change with state logic across several files counts as non-trivial multi-file logic) requires a fresh independent reviewer",
+    ):
+        assert needle in text, needle
+    ui = frontmatter(SKILLS / "discover-ui-taste" / "SKILL.md")["description"]
+    assert ui.startswith("Use when ") and "reviewing whether a page, app UI or copy looks generic or AI-generated" in ui, ui
+
+
+def test_sessionstart_hooks_are_text_only_and_identical():
+    # quoted so PowerShell prints one line (unquoted, its echo prints each word on its own line)
+    hook_text = ('echo "honeyguide plugin. For any software task in a project load the honeyguide orchestrate skill '
+                 'first and follow its rules. Answer plain questions directly."')
+    commands = []
+    for name in ("hooks.json", "codex-hooks.json"):
+        data = load(ROOT / "hooks" / name)
+        assert set(data) == {"hooks"}, name
+        assert set(data["hooks"]) == {"SessionStart"}, name
+        groups = data["hooks"]["SessionStart"]
+        handlers = [h for g in groups for h in g["hooks"]]
+        assert len(groups) == 1 and len(handlers) == 1, name
+        assert groups[0]["matcher"] == ".*", name
+        assert handlers[0]["type"] == "command", name
+        cmd = handlers[0]["command"]
+        assert cmd.startswith('echo "') and cmd.endswith('"'), name
+        inner = cmd[len('echo "'):-1]
+        assert inner and inner.strip() == inner, name
+        bad = [c for c in "'\",;|&()<>`$%^!*?{}[]" + chr(92) + chr(10) + chr(13) if c in inner]
+        assert not bad, (name, bad)
+        commands.append(cmd)
+    assert commands[0] == commands[1] == hook_text, commands
+    assert {p.name for p in (ROOT / "hooks").iterdir()} == {"hooks.json", "codex-hooks.json"}
+    codex = load(ROOT / ".codex-plugin" / "plugin.json")
+    claude = load(ROOT / ".claude-plugin" / "plugin.json")
+    assert codex["hooks"] == "./hooks/codex-hooks.json"
+    assert "hooks" not in claude
+    assert claude["version"] == codex["version"] == "0.2.0"
+    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    assert ("- Hooks: the plugin ships one SessionStart hook on each CLI that only prints a line pointing to `orchestrate`; "
+            "nothing else runs. Codex asks the owner to review and trust it once in `/hooks`, and until it is trusted it "
+            "does not run.") in readme
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "`agents/`, `codex-agents/`, `codex-rules/`, `hooks/`; Codex marketplace" in agents
+
+
+RULES_SHA256 = "2c8ae2236b598d0d36ed293a44f1537114e8d035f5d5453349b1d3a2c944ad84"
+RULES_TEXT = """# honeyguide: create a new branch outside the sandbox (.git is read-only in workspace-write).
+# Only branch creation; the orchestrate skill asks the owner which branch before the first change.
+prefix_rule(
+    pattern = ["git", "switch", ["-c", "--create"]],
+    decision = "allow",
+    justification = "Create the branch the owner chose; .git is read-only inside the sandbox",
+    match = ["git switch -c feat/x", "git switch --create feat/x"],
+    not_match = ["git switch main", "git switch --discard-changes main", "git checkout -- a.js", "git commit -m x"],
+)
+prefix_rule(
+    pattern = ["git", "checkout", "-b"],
+    decision = "allow",
+    justification = "Create the branch the owner chose; .git is read-only inside the sandbox",
+    match = ["git checkout -b feat/x"],
+    not_match = ["git checkout -- a.js", "git checkout main"],
+)
+"""
+
+
+def rules_pinned(text):
+    normal = text.replace("\r\n", "\n")
+    return (hashlib.sha256(normal.encode("utf-8")).hexdigest() == RULES_SHA256
+            and "".join(normal.split()) == "".join(RULES_TEXT.split()))
+
+
+def test_codex_branch_rule_is_pinned_whole_file():
+    text = (ROOT / "codex-rules" / "honeyguide.rules").read_text(encoding="utf-8")
+    assert rules_pinned(text)
+    broad = text + 'prefix_rule (\n pattern=["git"],\n decision="allow",\n)\n'
+    assert not rules_pinned(broad)
+    assert not rules_pinned(text.replace('"checkout", "-b"', '"checkout"'))
+
+
+def test_codex_branch_rule_only_allows_branch_creation():
+    text = (ROOT / "codex-rules" / "honeyguide.rules").read_text(encoding="utf-8")
+    blocks = re.findall(r"prefix_rule\((.*?)\n\)", text, re.S)
+    assert len(blocks) == 2, len(blocks)
+    patterns = []
+    for block in blocks:
+        pattern = re.search(r"pattern = (\[.*\]),\n", block).group(1)
+        patterns.append(pattern)
+        assert re.search(r'decision = "allow",', block), block
+    assert patterns == ['["git", "switch", ["-c", "--create"]]', '["git", "checkout", "-b"]'], patterns
+    assert text.count("prefix_rule(") == 2
+    assert text.count("pattern =") == 2
+    for word in ("commit", "push", "merge", "reset", "branch", "clean", "rebase", "-D", "prompt", "forbidden"):
+        assert word not in "".join(patterns), word
+    assert 'decision = "allow"' in text and text.count("decision =") == 2
+
+
+def test_orchestrate_and_readme_describe_codex_branch_rule():
+    orch = " ".join((SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8").split())
+    assert ("never continue on a different branch. On Codex, create the chosen branch with exactly `git switch -c <branch>` "
+            "(no `-c safe.directory` or other options before `switch`), so that the optional honeyguide Codex rule can run "
+            "it outside the sandbox.") in orch
+    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    assert "codex-rules/" in readme
+    assert "`codex-rules/honeyguide.rules`" in readme
+    assert "`~/.codex/rules/`" in readme
+    assert "the owner copies the file once to `~/.codex/rules/`" in readme
+    assert "Plugins cannot ship rules" in readme
+
+
+def test_readme_states_codex_rule_prefix_limit():
+    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    assert "The rule matches command prefixes" in readme
+    assert "`--discard-changes`" in readme and "`-f`" in readme
+    assert "which is an instruction, not enforcement" in readme
+    assert "install the rule only if you accept that" in readme
+    assert "only with `git switch -c`" not in readme
