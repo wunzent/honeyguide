@@ -817,7 +817,13 @@ def test_skills_wire_in_the_vendored_antislop_files():
         text = (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
         assert f"`{base}{rel}`" in text, skill
         assert (ui / base / rel).is_file(), rel
-        assert "loaded `discover-ui-taste` skill" in text and "not the project" in text and "skip this check" in text, skill
+        assert "loaded `discover-ui-taste` skill" in text and "not the project" in text, skill
+        assert ("load the installed `discover-ui-taste` skill first (the Skill tool, or read its SKILL.md); only if it is not "
+                "installed or cannot load, report that limitation and skip this check.") in text, skill
+        assert "if that skill is not loaded" not in text, skill
+    for p in SKILLS.rglob("*.md"):
+        if "references" not in p.relative_to(SKILLS).parts:
+            assert "if that skill is not loaded" not in p.read_text(encoding="utf-8"), p
     ver = (SKILLS / "verify-and-stop" / "SKILL.md").read_text(encoding="utf-8")
     mode1 = ver.split("## Mode 1", 1)[1].split("## Mode 2", 1)[0]
     gate = [l for l in mode1.splitlines() if "Delivery Gate (Mandatory)" in l]
