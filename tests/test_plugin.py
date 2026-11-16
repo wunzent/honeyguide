@@ -833,6 +833,9 @@ def test_skills_wire_in_the_vendored_antislop_files():
     step3 = cr.replace("\r\n", "\n").split("\n3. ", 1)[1].split("\n4. ", 1)[0]
     assert ("When the diff adds or changes code comments in any language, also give the reviewer antislop's comment checklist "
             "`references/miqdadbadjuber-anti-slop/skills/antislop-code/SKILL.upstream.md`") in step3
+    for needle in ("The reviewer uses it to judge comment quality only (the comments the diff adds or changes)",
+                   "its scope guardrail (\"only comments changed, the code untouched\") and the core Delivery Gate do not apply to judging a code review diff"):
+        assert needle in step3, needle
     mt = (SKILLS / "management-talk" / "SKILL.md").read_text(encoding="utf-8")
     rules = mt.replace("\r\n", "\n").split("## Rewrite rules", 1)[1].split("\n## ", 1)[0]
     rule = [l for l in rules.splitlines() if "antislop-copywriting" in l]
