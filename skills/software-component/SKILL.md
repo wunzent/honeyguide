@@ -45,7 +45,7 @@ worker services, web and mobile SWC and testing, releases) with paths, templates
 | Optional: business FR/UC, UI design system, agent instructions | `references/templates/business-module.md`, `ui-design-system.md`, `agent-instructions.md` |
 | Work log row | `references/templates/worklog.md` |
 
-Long Thai lines: find headings first (`rg -n --max-columns 160 "^#" <file>`), then read only those ranges.
+Long lines: find headings first (`rg -n --max-columns 160 "^#" <file>`), then read only those ranges.
 
 ## Routing
 
@@ -75,4 +75,4 @@ Planning-only work may stop after the solution/spec/diagram stage if assumptions
 - Direction change: new DEC, mark REQs Changed/Dropped, follow traceability to AC/tests/manuals, keep old DEC as Superseded. Never delete history.
 - Evidence conflicts → record the conflict or an Open Question; do not invent behavior.
 - Owner decisions in the current task win over older SWC text; note the difference in the doc.
-- Diagrams and language: `references/document-set.md` (Rules). current Mermaid (11.x) for all diagrams. Thai prose; English headings and terms.
+- Diagrams and language: `references/document-set.md` (Rules). current Mermaid (11.x) for all diagrams. Document language follows the target project: (1) the language of its existing documents; (2) a language rule in its `AGENTS.md`, `CLAUDE.md` or equivalent; (3) otherwise ask the owner once and record the answer in the project's SWC documents so it is not asked again. Headings, column names, statuses, technical terms, identifiers and paths stay in English.

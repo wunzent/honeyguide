@@ -9,14 +9,16 @@ delivered task that needed rework with one short question about what to do diffe
 - Keep the hub minimal and native: no custom engines, dashboards, signing or new frameworks.
 - Retry rule for the plugin skill: never repeat a failing action a third time; after about 3 attempts on one problem, stop and ask the owner.
 - Preserve the owner's own formatting; style is not a defect unless it breaks something or a project rule.
-- Ask which branch (current, new, or a new worktree) before changing a target repo.
+- Ask which branch (current, new, or a new worktree) before changing a target repo, and recommend one: a new branch for a new
+  feature or a new build, the current branch for a small fix.
 - Plans and specs live in the target repo (`docs/plans/`, `docs/specs/` or the repo's own place).
 - In review or migration phases fix only confirmed blockers; no cosmetic refactoring unless asked.
 - Report simulated, unverified and not-run results as exactly that; keep gate statuses explicit.
 - Third-party skills and plugins: clone and read first; the owner decides on installing and on global vs project scope.
 - Reply to the owner in Thai; code, hub records and the hub's own docs stay in English.
-- Project documentation (skill `software-component`) is Thai prose; headings, column names, statuses, technical terms,
-  identifiers and paths stay in English, as in the owner's reference set. Mermaid: current version (11.x) syntax for
+- Project documentation (skill `software-component`): the owner's projects use Thai prose (the owner's answer to the
+  skill's language question, step 3); headings, column names, statuses, technical terms, identifiers and paths stay in
+  English, as in the owner's reference set. Mermaid: current version (11.x) syntax for
   every diagram (flowchart, sequenceDiagram, stateDiagram-v2, erDiagram); the old v8.8.0 limit is dropped.
 - In this hub the project rules win over the older v1 workflow in the owner's global `~/.claude/CLAUDE.md` (roles.json,
   task cards, 3-round/60-minute limits): roles are routed per assignment and there is no round or time budget.

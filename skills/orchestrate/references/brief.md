@@ -17,7 +17,7 @@ CONTRACT: <reply format: STATUS DONE | DONE_WITH_CONCERNS | NEEDS_CONTEXT | BLOC
 REPORT FILE: <path for a writer's full report; read-only workers have none and return the report inline in their reply>
 ```
 
-On Codex a read-only brief also carries `READ-ONLY DUTY: do not create, edit or delete files or change git state`, and the orchestrator runs the git before/after check from `orchestrate`. Keep each brief self-contained and bounded. Include only context the worker cannot read from the project. Do not paste conversation history, credentials, or customer data.
+On Codex a read-only brief also carries `READ-ONLY DUTY: do not create, edit or delete files or change git state`; there the permission is the brief's rule only, recorded as `instruction`, never as enforced (see `orchestrate`). Keep each brief self-contained and bounded. Include only context the worker cannot read from the project. Do not paste conversation history, credentials, or customer data.
 
 Nontrivial work (any spawn other than a cheap delegation of low-risk work, or high risk) must have `.honeyguide/<task>/` records written before the first spawn: checkpoint, this brief as `briefs/<id>.md`, and an agent record per spawn. Keep an agent record with duty, skills, vendor, parent/id, requested and observed model/effort/permission, status, and evidence. A requested permission mode is not proof of enforcement; record what the runtime actually exposes, or `Unverified`.
 

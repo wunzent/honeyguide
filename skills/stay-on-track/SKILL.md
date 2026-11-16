@@ -1,6 +1,6 @@
 ---
 name: stay-on-track
-description: "Use on long, difficult or looping work: detect loops and stalls, stop repeating a failing action, ask the owner after about three attempts, bound deliberation, and, only when the owner asks for it, write a handoff document for another agent."
+description: "Use on long, difficult or looping work, for context setup at the start of a session, on degraded output and when switching tasks: detect loops and stalls, stop repeating a failing action, ask the owner after about three attempts, bound deliberation, and, only when the owner asks for it, write a handoff document for another agent."
 argument-hint: "What will the next session be used for? (handoff document only)"
 ---
 
@@ -40,6 +40,14 @@ Treat any of these as a loop and break it:
 - Before the window is nearly full, write down the goal, what is done, what is left, the files touched, the evidence so far and the next action (the task checkpoint or a handoff note), then continue from that note or hand it over.
 - Never claim finished work you cannot point to evidence for.
 
+## Set up context
+
+- Load in order, and only what the current step needs: the project's rules files (`AGENTS.md`, `CLAUDE.md` or equivalent), then the spec, plan or task, then the source files the step touches (picked one by one, not whole folders), then the exact error output.
+- Budget: when space runs short, first drop stale tool output and exploration that is finished; keep the goal, the decisions, the constraints and the current errors to the end; summarise something before you drop it.
+- Conflicts or gaps: when rules, spec and code disagree, or a requirement is incomplete, do not guess. Name the conflict and ask the owner, or record it as an open question; the project's own rules win.
+- Degraded output or a task switch: re-read the task's checkpoint and continue from it, or start a fresh session from it, rather than carrying stale context forward.
+- Rules files: write or change them only inside the project and only when the task asks for it. A useful rules file names the stack, the commands, the conventions and the boundaries. Never change global configuration.
+
 ## Handoff document
 
 Loop detection and the context watch above run on their own. The handoff document is different: write it only when the owner asks for it (for example to hand the work to another agent or to continue in a fresh session), never on your own initiative. When the context is nearly full and the owner has not asked, update the task checkpoint (a separate project record) and offer the handoff instead of writing it. The handoff compacts the conversation into a document a fresh agent can continue from.
@@ -51,3 +59,5 @@ Loop detection and the context watch above run on their own. The handoff documen
 - If the owner passed arguments, treat them as the focus of the next session and tailor the document to it.
 
 The handoff section is adapted from the `handoff` skill by Matt Pocock (MIT); the licence text is in `LICENSE` in this folder.
+
+The context setup section takes ideas from `context-engineering` in addyosmani/agent-skills (MIT), in our words.

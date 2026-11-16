@@ -5,7 +5,7 @@ description: "Use when work is mechanical, low-risk and self-contained (bulk edi
 
 # Cheap delegation
 
-Use the cheapest native model the active CLI exposes for work that is mechanical and cheap to check. Claude Code: `Agent` with `model: haiku` and the `honeyguide:hub-writer` or `honeyguide:hub-readonly` shell. Codex: `spawn_agent` with the cheapest available model (for example `gpt-6-luna`) and `fork_turns=none`; a read-only delegation on Codex gets the git before/after check from `orchestrate`.
+Use the cheapest native model the active CLI exposes for work that is mechanical and cheap to check. Claude Code: `Agent` with `model: haiku` and the `honeyguide:hub-writer` or `honeyguide:hub-readonly` shell. Codex: `spawn_agent` with the cheapest available model (for example `gpt-6-luna`) and `fork_turns=none`; a read-only delegation on Codex carries the `READ-ONLY DUTY` line, an instruction that is not enforced (see `orchestrate`).
 
 ## What fits
 

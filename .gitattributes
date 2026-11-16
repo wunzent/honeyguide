@@ -1,6 +1,7 @@
-# Third-party files (ub-mode, find-skills) must stay byte-identical to upstream (sha256 checked by tests):
-# no line-ending conversion and no whitespace checks.
-skills/ub-mode/** -text
-skills/find-skills/** -text
+# Third-party files (the references/ of ub-mode, find-skills, the discover-* gateways and the ECC
+# reviewer checklists) must stay byte-identical to upstream (sha256 checked by tests): no line-ending conversion and no
+# whitespace checks. Our wrapper SKILL.md files are normal text.
+skills/ub-mode/references/** -text -whitespace
+skills/find-skills/references/** -text -whitespace
 skills/discover-*/references/** -text -whitespace
 skills/verify-and-stop/references/ecc-reviewers/** -text -whitespace

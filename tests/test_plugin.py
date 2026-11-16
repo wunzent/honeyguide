@@ -8,12 +8,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 HUB_SKILLS = {
-    "orchestrate", "api-and-interface-design", "backend-api-safety", "context-engineering",
+    "orchestrate", "api-and-interface-design", "backend-api-safety",
     "investigate-first", "lean-build", "safe-refactor", "security-and-hardening", "software-component",
     "surgical-patch", "verify-and-stop",
 }
 NEW_SKILLS = {"post-mortem", "management-talk", "stay-on-track", "cheap-delegation"}
-THIRD_PARTY = {"ub-mode", "find-skills"}
+THIRD_PARTY = {"ub-mode", "find-skills"}  # our wrappers around unchanged upstream copies
+# wrapped skill -> its vendored source folder under references/
+WRAPPED = {
+    "ub-mode": "unclebob-ub-mode",
+    "find-skills": "vercel-labs-skills",
+}
 ECC_SKILLS = {"learn", "plan", "tdd", "code-review", "security-scan", "tasks"}  # ideas from affaan-m/ECC, our words
 ECC_DIR = SKILLS / "verify-and-stop" / "references" / "ecc-reviewers"
 ECC_COMMIT = "d2ef2680594f9a17526a6e1a2e18b3d242c5d17b"
@@ -22,23 +27,26 @@ GATEWAYS = {
     "discover-devops", "discover-debugging", "discover-collaboration", "discover-testing",
     "discover-mobile", "discover-security", "discover-distributed",
 }
-N_SKILLS = 35
+N_SKILLS = 34
 # vendored knowledge files: skills/<gateway>/references/<source>/ -> expected upstream commit
 VENDORED = {
     "antfu-skills": "d524ed287eef22757297827ce42e3cad88abd20c",
     "hoangnguyen-agent-skills-standard": "24d9034d21d3b2ab5815236d20ba32a4e85c4c04",
     "omakei-adonisjs-architecture-skill": "8ee242685af8974ad45179497ae384629144c2b8",
     "rand-cc-polymath": "baa2df114416570f5e0e2961143d20e3716a2fc8",
+    "unclebob-ub-mode": "3da62bf3fcfd2034de41f30d920d2739e566171f",
+    "vercel-labs-skills": "b716f9dc2ba36b6aa8f0080615e5a3a6caeac63b",
 }
-ABSORBED_SKILLS = {"debug-mantra", "scrutinize", "handoff"}  # merged into investigate-first, verify-and-stop, stay-on-track
+ABSORBED_SKILLS = {"debug-mantra", "scrutinize", "handoff", "context-engineering"}
+# merged into investigate-first, verify-and-stop, stay-on-track, stay-on-track (context setup)
 DELETED_DOCS = ("QUICKSTART-TH.md", "REBUILD-INVENTORY.md", "WORKLOG.md")
 MOVED_DOCS = ("ACCEPTANCE.md", "DEEP-DIVE-2026-11-12.md", "SKILLS-REUSE.md")
 # upstream blobs (unclebob/ub-mode @3da62bf, vercel-labs/skills @b716f9d)
 UPSTREAM_SHA256 = {
-    "skills/ub-mode/SKILL.md": "4120873db2e3681ea9b7de4d7105fc9d3406657c9ada91ce77b9b3c4962f3202",
-    "skills/ub-mode/LICENSE": "cf496364b10d049ba2b04ac4c04f29ab1a34b54be96209cb32666fac9eba6bf3",
-    "skills/find-skills/SKILL.md": "c00eeea0e13e74fe4a9d84ba0a8542205a1b736d65f13134fe1a6647eb14976f",
-    "skills/find-skills/LICENSE": "661142e53c313d2bb5e1b055f5c0a39001450ff1b5e27b89dc4bc7de9a6352ca",
+    "skills/ub-mode/references/unclebob-ub-mode/SKILL.upstream.md": "4120873db2e3681ea9b7de4d7105fc9d3406657c9ada91ce77b9b3c4962f3202",
+    "skills/ub-mode/references/unclebob-ub-mode/LICENSE": "cf496364b10d049ba2b04ac4c04f29ab1a34b54be96209cb32666fac9eba6bf3",
+    "skills/find-skills/references/vercel-labs-skills/skills/find-skills/SKILL.upstream.md": "c00eeea0e13e74fe4a9d84ba0a8542205a1b736d65f13134fe1a6647eb14976f",
+    "skills/find-skills/references/vercel-labs-skills/LICENSE": "661142e53c313d2bb5e1b055f5c0a39001450ff1b5e27b89dc4bc7de9a6352ca",
 }
 OLD_NAME = "multi-agent-hub"
 EGM_COMMANDS = (
@@ -78,7 +86,9 @@ def skill_files():
 
 
 def vendored_sources():
-    return sorted(p for g in sorted(SKILLS.glob("discover-*")) for p in (g / "references").iterdir() if p.is_dir())
+    """Source folders under the references/ of the discover-* gateways and of the wrapped third-party skills."""
+    owners = sorted(SKILLS.glob("discover-*")) + [SKILLS / s for s in sorted(WRAPPED)]
+    return sorted(p for g in owners for p in (g / "references").iterdir() if p.is_dir())
 
 
 def test_manifests_parse_and_agree():
@@ -115,7 +125,7 @@ def test_skill_set_and_frontmatter():
         assert fm.get("name") and fm.get("description"), path
     for s in everything:
         assert frontmatter(SKILLS / s / "SKILL.md")["name"] == s, s
-    for s in {"orchestrate"} | NEW_SKILLS | ECC_SKILLS | GATEWAYS:
+    for s in {"orchestrate"} | NEW_SKILLS | ECC_SKILLS | GATEWAYS | THIRD_PARTY:
         expected = {"name", "description", "argument-hint"} if s == "stay-on-track" else {"name", "description"}
         assert set(frontmatter(SKILLS / s / "SKILL.md")) == expected, s
     stay_fm = frontmatter(SKILLS / "stay-on-track" / "SKILL.md")
@@ -163,6 +173,7 @@ def test_gateways_are_valid_and_their_reference_paths_exist():
 def test_vendored_sources_have_licence_source_and_matching_manifest():
     sources = vendored_sources()
     assert {s.name for s in sources} == set(VENDORED)
+    assert {s.name for s in sources if s.parent.parent.name in WRAPPED} == set(WRAPPED.values())
     for src in sources:
         rel = src.relative_to(ROOT).as_posix()
         for name in ("LICENSE", "SOURCE.md", "manifest.sha256"):
@@ -191,7 +202,7 @@ def test_vendored_sources_have_licence_source_and_matching_manifest():
 
 
 def test_no_upstream_skill_md_under_references_and_no_loose_files():
-    for g in sorted(GATEWAYS):
+    for g in sorted(GATEWAYS | THIRD_PARTY):
         refs = SKILLS / g / "references"
         assert not list(refs.rglob("SKILL.md")), g
         assert not [p for p in refs.iterdir() if p.is_file()], f"loose file in {g}/references"
@@ -200,6 +211,10 @@ def test_no_upstream_skill_md_under_references_and_no_loose_files():
             if list(src.rglob("SKILL.upstream.md")):
                 assert "renamed SKILL.upstream.md (content unchanged)" in text, src
     assert sum(1 for p in SKILLS.glob("discover-*/references/**/SKILL.upstream.md")) == 47
+    for s, src in WRAPPED.items():
+        folder = SKILLS / s / "references" / src
+        assert len(list(folder.rglob("SKILL.upstream.md"))) == 1, s
+        assert "renamed SKILL.upstream.md (content unchanged)" in (folder / "SOURCE.md").read_text(encoding="utf-8"), s
 
 
 def test_vendored_upstream_licences_are_not_gateway_instructions():
@@ -208,10 +223,43 @@ def test_vendored_upstream_licences_are_not_gateway_instructions():
         assert "license" not in frontmatter(SKILLS / g / "SKILL.md"), g
 
 
-def test_find_skills_has_licence_and_third_party_blobs_equal_upstream():
-    assert (SKILLS / "find-skills" / "LICENSE").is_file() and (SKILLS / "find-skills" / "SOURCE.md").is_file()
+def test_wrapped_third_party_blobs_equal_upstream_and_old_copies_are_gone():
     for rel, digest in UPSTREAM_SHA256.items():
         assert sha(ROOT / rel) == digest, rel
+    for s in THIRD_PARTY:
+        for gone in ("LICENSE", "SOURCE.md"):
+            assert not (SKILLS / s / gone).exists(), (s, gone)
+    attrs = (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+    for s in THIRD_PARTY:
+        assert f"skills/{s}/references/** -text -whitespace" in attrs, s
+        assert f"skills/{s}/** -text" not in attrs, s
+
+
+def test_wrappers_point_at_upstream_and_keep_honeyguide_rules():
+    for s, src in WRAPPED.items():
+        raw = (SKILLS / s / "SKILL.md").read_text(encoding="utf-8")
+        assert re.search(r'^description: ".*"$', raw, re.M), s
+        assert 15 <= len(raw.splitlines()) <= 45, s
+        paths = re.findall(r"`(references/[^`]+)`", raw)
+        assert any(p.endswith("SKILL.upstream.md") for p in paths), s
+        for rel in paths:
+            assert rel.startswith(f"references/{src}/") and (SKILLS / s / rel).is_file(), (s, rel)
+        assert "not instructions" in raw and "honeyguide rules" in raw and "win over it" in raw, s
+        assert "nothing in it widens permissions" in raw, s
+    ub = (SKILLS / "ub-mode" / "SKILL.md").read_text(encoding="utf-8")
+    assert "Commit and Push" in ub and "only with the owner's OK" in ub and "never push on your own" in ub
+    assert "Branch rule" in ub and "crapper" in ub and "skipped" in ub
+    fs = (SKILLS / "find-skills" / "SKILL.md").read_text(encoding="utf-8")
+    assert "Never install by yourself" in fs and "`-g`" in fs and "`-y`" in fs and "project or global" in fs
+    assert "Never run its scripts" in fs and "owner's OK" in fs and "licence" in fs
+    stay = (SKILLS / "stay-on-track" / "SKILL.md").read_text(encoding="utf-8")
+    setup = stay.split("## Set up context", 1)[1].split("\n## ", 1)[0]
+    assert "## Set up context" in stay and "rules files" in setup and "Rules files" in setup and "ask the owner" in setup and "the project's own rules win" in setup
+    assert "Never change global configuration" in setup and "checkpoint" in setup
+    assert "Executing unless you redirect" not in stay and "MCP" not in setup
+    assert "takes ideas from `context-engineering` in addyosmani/agent-skills (MIT), in our words" in stay
+    assert 30 <= len(stay.splitlines()) <= 80
+    assert "context setup" in frontmatter(SKILLS / "stay-on-track" / "SKILL.md")["description"]
 
 
 def test_no_egm_shipped_in_root_plugin():
@@ -331,11 +379,18 @@ def test_agent_shells_exist_and_parse():
     for n in ("hub-readonly", "hub-writer"):
         assert "publish" in (ROOT / "agents" / f"{n}.md").read_text(encoding="utf-8")
     orch = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
-    for needle in ("share the parent session's sandbox", "--untracked-files=all", "`instruction + post-check`",
-                   "--strict-mcp-config", "Outward actions:", "never publish, post, send, upload, push"):
+    for needle in ("share the parent session's sandbox", "recorded as `instruction`, never as enforced",
+                   "per-child enforcement", "--strict-mcp-config", "Outward actions:", "never publish, post, send, upload, push",
+                   "`codex exec -s read-only", "compare the changed files with its brief's SCOPE"):
         assert needle in orch, needle
-    for needle in ("READ-ONLY DUTY", "git diff HEAD --binary", "git rev-parse HEAD", "not proof", "shared documents or artifacts"):
+    for needle in ("READ-ONLY DUTY: do not create, edit or delete files or change git state", "shared documents or artifacts"):
         assert needle in orch, needle
+    live = [ROOT / "README.md", SKILLS / "orchestrate" / "references" / "brief.md"]
+    live += [p for p in SKILLS.rglob("*.md") if "references" not in p.relative_to(SKILLS).parts[1:]]
+    for path in live:
+        text = path.read_text(encoding="utf-8")
+        for gone in ("--untracked-files=all", "git diff HEAD --binary", "git rev-parse HEAD", "post-check", "before/after check"):
+            assert gone not in text, (path.relative_to(ROOT).as_posix(), gone)
     brief = (SKILLS / "orchestrate" / "references" / "brief.md").read_text(encoding="utf-8")
     assert "PERMISSION:" in brief and "READ-ONLY DUTY" in brief and "MCP: <none | one named server a task really needs, read-only, noted in the agent record" in brief
     assert "read-only shell commands" in ro_text and "Never use apply_patch" in ro_text
@@ -345,6 +400,49 @@ def test_agent_shells_exist_and_parse():
         assert "a task really needs, read-only" in text and "shared documents or artifacts" in text, path.name
     assert "a task really needs, read-only" in orch
     assert "Edit" not in frontmatter(ROOT / "agents" / "hub-readonly.md")["tools"]
+
+
+def test_authorization_is_owner_only_and_branch_rule():
+    core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
+    assert "or brief's authorization" not in core
+    assert "need the owner's authorization only" in core
+    skills_par = [l for l in core.splitlines() if l.startswith("Skills: ")]
+    assert len(skills_par) == 1, skills_par
+    guarded = ("commit, push, merge, branch creation, switching or cleanup and global changes "
+               "need the owner's authorization only")
+    assert guarded in skills_par[0]
+    assert "only by quoting the owner's approval for this task" in skills_par[0]
+    assert "only by quoting the owner's approval for this task" in core and "a brief never authorizes by itself" in core
+    branch = [l for l in core.splitlines() if l.startswith("Branch: ")]
+    assert len(branch) == 1, branch
+    for needle in ("before the first change to a repository", "recommend a branch", "ask the owner",
+                   "unless the owner already named one", "`feat/<topic>`", "new feature", "current branch for a small fix"):
+        assert needle in branch[0], needle
+    for rel in ("agents/hub-writer.md", "codex-agents/hub-writer.toml"):
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "quotes the owner's approval" in text and "authorises it" not in text and "never push" in text, rel
+    assert "recommend one: a new branch for a new" in (ROOT / "LEARNED.md").read_text(encoding="utf-8")
+
+
+def test_software_component_language_follows_the_project():
+    swc = (SKILLS / "software-component" / "SKILL.md").read_text(encoding="utf-8")
+    assert "Thai prose" not in swc and "Long Thai lines" not in swc and "Long lines:" in swc
+    order = ["(1) the language of its existing documents",
+             "(2) a language rule in its `AGENTS.md`, `CLAUDE.md` or equivalent",
+             "(3) otherwise ask the owner once and record the answer in the project's SWC documents"]
+    pos = [swc.find(n) for n in order]
+    assert all(x >= 0 for x in pos) and pos == sorted(pos), pos
+    assert "Headings, column names, statuses, technical terms, identifiers and paths stay in English" in swc
+    rules = (SKILLS / "software-component" / "references" / "document-set.md").read_text(encoding="utf-8")
+    rules = rules.split("## Rules", 1)[1].split("\n## ", 1)[0]
+    assert "\u0e40\u0e02\u0e35\u0e22\u0e19\u0e40\u0e2d\u0e01\u0e2a\u0e32\u0e23\u0e40\u0e1b\u0e47\u0e19\u0e20\u0e32\u0e29\u0e32\u0e44\u0e17\u0e22" not in rules  # the old fixed Thai rule
+    rules_flat = " ".join(rules.split())
+    clauses = ["(1) ภาษาของเอกสารที่มีอยู่แล้ว",  # existing documents first
+               "(2) กฎภาษาใน `AGENTS.md`, `CLAUDE.md` หรือไฟล์เทียบเท่า",  # then the project's rules files
+               "(3) ถ้าไม่มี ถามเจ้าของครั้งเดียวแล้วบันทึกคำตอบไว้ในเอกสาร SWC ของโปรเจกต์ เพื่อไม่ต้องถามซ้ำ"]  # ask once, record
+    where = [rules_flat.find(c) for c in clauses]
+    assert all(x >= 0 for x in where) and where == sorted(where), where
+    assert "the owner's projects use Thai prose" in (ROOT / "LEARNED.md").read_text(encoding="utf-8")
 
 
 def test_repo_is_plugin_only():
@@ -392,8 +490,11 @@ def test_readme_commands_and_count():
             assert cells[3] in names or cells[3] == "orchestrate", row
     assert sorted(listed) == sorted(p.name for p in SKILLS.iterdir() if p.is_dir()), listed
     assert "### Third-party content" in section
-    for commit in list(VENDORED.values()) + ["3da62bf3fcfd2034de41f30d920d2739e566171f", "b716f9dc2ba36b6aa8f0080615e5a3a6caeac63b"]:
+    for commit in VENDORED.values():
         assert commit in section, commit
+    assert "`context-engineering` (wrapped)" not in section
+    assert "aeac41d4d005999432bb7312f7ff06383a91d59d" in section and "context setup section takes ideas" in section
+    assert "wrapped third-party skills" in section and "not byte copies" in section
     assert "claude plugin update honeyguide@wunzent-hub" in readme and "codex plugin add honeyguide@wunzent-hub" in readme
     assert "egm@wunzent-hub" not in readme
     for line in readme.splitlines():
@@ -419,7 +520,7 @@ def test_egm_is_recommended_with_install_commands():
 
 
 def test_old_plugin_name_only_in_history_and_ignore():
-    skip = {".git", ".venv", "work", ".pytest_cache", "__pycache__", ".multi-agent-hub", "docs"}
+    skip = {".git", ".venv", "work", ".pytest_cache", "__pycache__", ".multi-agent-hub", ".honeyguide", "docs"}  # .honeyguide/: ignored local task records
     me = Path(__file__).resolve()
     for path in ROOT.rglob("*"):
         rel = path.relative_to(ROOT)

@@ -78,8 +78,9 @@ message contract และรายการ `Deployments/` ของ server อ
 - Mermaid (กฎข้อเดียว): ใช้ syntax ของ Mermaid ปัจจุบัน (11.x) สำหรับทุก diagram: `flowchart TD`/`flowchart LR`,
   `sequenceDiagram`, `stateDiagram-v2`, `erDiagram` (ชื่อมี underscore เช่น TABLE_A, VARCHAR_255 ใช้ได้)
   ASCII ใช้กับ wireframe และ layout หน้าจอเท่านั้น ทุก template ทำตามกฎนี้
-- ภาษา: เขียนเอกสารเป็นภาษาไทย; heading, ชื่อคอลัมน์ในตาราง, ค่า status, ศัพท์เทคนิค, identifier ในโค้ด
-  และชื่อไฟล์/path คงเป็นภาษาอังกฤษตาม reference set
+- ภาษา: ภาษาของเอกสารตามโปรเจกต์เป้าหมาย: (1) ภาษาของเอกสารที่มีอยู่แล้ว; (2) กฎภาษาใน `AGENTS.md`, `CLAUDE.md`
+  หรือไฟล์เทียบเท่า; (3) ถ้าไม่มี ถามเจ้าของครั้งเดียวแล้วบันทึกคำตอบไว้ในเอกสาร SWC ของโปรเจกต์ เพื่อไม่ต้องถามซ้ำ;
+  heading, ชื่อคอลัมน์ในตาราง, ค่า status, ศัพท์เทคนิค, identifier ในโค้ด และชื่อไฟล์/path คงเป็นภาษาอังกฤษตาม reference set
 
 ## Headers (นโยบายเดียว; ไฟล์อื่นชี้มาที่นี่)
 
