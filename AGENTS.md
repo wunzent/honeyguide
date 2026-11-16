@@ -7,7 +7,7 @@ under their `references/` (so does `verify-and-stop`: ECC reviewer checklists) (
 
 ## Layout
 - Root plugin: `.claude-plugin/` (plugin.json, marketplace.json), `.codex-plugin/plugin.json`, `skills/` (35 skills),
-  `agents/`, `codex-agents/`, `hooks/`; Codex marketplace: `.agents/plugins/marketplace.json`
+  `agents/`, `codex-agents/`, `codex-rules/`, `hooks/`; Codex marketplace: `.agents/plugins/marketplace.json`
 - `docs/` specs, plans, audits, history/, RECOMMENDED.md; `tests/test_plugin.py`
 
 ## Checks

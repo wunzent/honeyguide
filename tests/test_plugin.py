@@ -945,4 +945,77 @@ def test_sessionstart_hooks_are_text_only_and_identical():
             "nothing else runs. Codex asks the owner to review and trust it once in `/hooks`, and until it is trusted it "
             "does not run.") in readme
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    assert "`agents/`, `codex-agents/`, `hooks/`; Codex marketplace" in agents
+    assert "`agents/`, `codex-agents/`, `codex-rules/`, `hooks/`; Codex marketplace" in agents
+
+
+RULES_SHA256 = "2c8ae2236b598d0d36ed293a44f1537114e8d035f5d5453349b1d3a2c944ad84"
+RULES_TEXT = """# honeyguide: create a new branch outside the sandbox (.git is read-only in workspace-write).
+# Only branch creation; the orchestrate skill asks the owner which branch before the first change.
+prefix_rule(
+    pattern = ["git", "switch", ["-c", "--create"]],
+    decision = "allow",
+    justification = "Create the branch the owner chose; .git is read-only inside the sandbox",
+    match = ["git switch -c feat/x", "git switch --create feat/x"],
+    not_match = ["git switch main", "git switch --discard-changes main", "git checkout -- a.js", "git commit -m x"],
+)
+prefix_rule(
+    pattern = ["git", "checkout", "-b"],
+    decision = "allow",
+    justification = "Create the branch the owner chose; .git is read-only inside the sandbox",
+    match = ["git checkout -b feat/x"],
+    not_match = ["git checkout -- a.js", "git checkout main"],
+)
+"""
+
+
+def rules_pinned(text):
+    normal = text.replace("\r\n", "\n")
+    return (hashlib.sha256(normal.encode("utf-8")).hexdigest() == RULES_SHA256
+            and "".join(normal.split()) == "".join(RULES_TEXT.split()))
+
+
+def test_codex_branch_rule_is_pinned_whole_file():
+    text = (ROOT / "codex-rules" / "honeyguide.rules").read_text(encoding="utf-8")
+    assert rules_pinned(text)
+    broad = text + 'prefix_rule (\n pattern=["git"],\n decision="allow",\n)\n'
+    assert not rules_pinned(broad)
+    assert not rules_pinned(text.replace('"checkout", "-b"', '"checkout"'))
+
+
+def test_codex_branch_rule_only_allows_branch_creation():
+    text = (ROOT / "codex-rules" / "honeyguide.rules").read_text(encoding="utf-8")
+    blocks = re.findall(r"prefix_rule\((.*?)\n\)", text, re.S)
+    assert len(blocks) == 2, len(blocks)
+    patterns = []
+    for block in blocks:
+        pattern = re.search(r"pattern = (\[.*\]),\n", block).group(1)
+        patterns.append(pattern)
+        assert re.search(r'decision = "allow",', block), block
+    assert patterns == ['["git", "switch", ["-c", "--create"]]', '["git", "checkout", "-b"]'], patterns
+    assert text.count("prefix_rule(") == 2
+    assert text.count("pattern =") == 2
+    for word in ("commit", "push", "merge", "reset", "branch", "clean", "rebase", "-D", "prompt", "forbidden"):
+        assert word not in "".join(patterns), word
+    assert 'decision = "allow"' in text and text.count("decision =") == 2
+
+
+def test_orchestrate_and_readme_describe_codex_branch_rule():
+    orch = " ".join((SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8").split())
+    assert ("never continue on a different branch. On Codex, create the chosen branch with exactly `git switch -c <branch>` "
+            "(no `-c safe.directory` or other options before `switch`), so that the optional honeyguide Codex rule can run "
+            "it outside the sandbox.") in orch
+    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    assert "codex-rules/" in readme
+    assert "`codex-rules/honeyguide.rules`" in readme
+    assert "`~/.codex/rules/`" in readme
+    assert "the owner copies the file once to `~/.codex/rules/`" in readme
+    assert "Plugins cannot ship rules" in readme
+
+
+def test_readme_states_codex_rule_prefix_limit():
+    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    assert "The rule matches command prefixes" in readme
+    assert "`--discard-changes`" in readme and "`-f`" in readme
+    assert "which is an instruction, not enforcement" in readme
+    assert "install the rule only if you accept that" in readme
+    assert "only with `git switch -c`" not in readme

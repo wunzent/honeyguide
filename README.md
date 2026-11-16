@@ -16,6 +16,7 @@ from its table or used on their own (`/honeyguide:<skill>`).
     skills/               35 skills of honeyguide (see below)
     agents/               Claude agents hub-readonly, hub-writer
     codex-agents/         optional Codex instruction presets (see Permissions)
+    codex-rules/          optional Codex rule that lets Codex create a new branch (see Permissions)
     hooks/                SessionStart hooks (hooks.json for Claude Code, codex-hooks.json for Codex; see Permissions)
     docs/                 specs, plans, audits, history/, RECOMMENDED.md (reference list only)
     tests/test_plugin.py  static checks (standard library only)
@@ -95,6 +96,7 @@ instructions only and enforce no sandbox.
 - Claude Code: the `hub-readonly` and `hub-writer` agents ship with the plugin and their tool lists are enforced.
 - Codex: children inherit the session sandbox, so a permission (including read-only) is the brief's rule only, recorded as `instruction`, never as enforced; this may be revisited when Codex offers per-child enforcement. The orchestrator still checks a writer's changed files against its brief's SCOPE. OS-enforced read-only is available through a separate `codex exec -s read-only` run that the owner approves.
 - Hooks: the plugin ships one SessionStart hook on each CLI that only prints a line pointing to `orchestrate`; nothing else runs. Codex asks the owner to review and trust it once in `/hooks`, and until it is trusted it does not run.
+- Codex branch rule (optional): `codex-rules/honeyguide.rules` lets Codex create a new branch outside the sandbox, because `.git` is read-only in workspace-write. The rule matches command prefixes, so any `git switch -c ...`, `git switch --create ...` or `git checkout -b ...` runs outside the sandbox without a prompt, including trailing options such as `--discard-changes` or `-f` that can discard local changes. The `orchestrate` skill tells Codex to use exactly `git switch -c <branch>`, which is an instruction, not enforcement; install the rule only if you accept that. Plugins cannot ship rules, so the owner copies the file once to `~/.codex/rules/` (a global location, so the owner does it) and restarts Codex. Without it Codex stops and asks the owner to create the branch.
 - Subagents never publish, post, send, upload or push, and use no MCP or connector tool unless the brief names one a task really needs, read-only and noted in the agent record, and never for publishing, posting, sending, uploading or creating shared documents or artifacts.
 
 ## Update
