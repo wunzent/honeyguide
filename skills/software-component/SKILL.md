@@ -49,7 +49,7 @@ Long lines: find headings first (`rg -n --max-columns 160 "^#" <file>`), then re
 
 ## Routing
 
-- page / component / composable / UI flow → frontend standard
+- page / component / composable / UI flow → frontend standard; when building or reviewing a page or UI from a page spec, also use `discover-ui-taste` (the SWC spec wins; its Screen Workflow states map to antislop's UI states rule, R-27)
 - endpoint / auth / validation / data / side effect / external service → backend standard
 - full-stack or cross-system → both, linked by the same REQ/AC and API contract
 

@@ -54,6 +54,7 @@ Branch: before the first change to a repository, recommend a branch and ask the 
 | Mobile apps: React Native, SwiftUI, Swift concurrency, SwiftData, iOS networking and testing | `discover-mobile` |
 | Security topic knowledge: authentication, authorization, OAuth2, input validation, secrets, security headers (hardening and reviewing a change: `security-and-hardening`, `security-scan`) | `discover-security` |
 | Distributed systems: consensus, CRDTs, clocks, replication, sharding, event sourcing; system-design interview preparation | `discover-distributed` |
+| Web page, app UI or marketing copy that must not look generic or AI-generated: design, build or review | `discover-ui-taste` |
 | Design specs and design decisions | The recommended `egm` plugin, if installed (not part of this plugin; the owner types `/egm:egm-<skill>`, the orchestrator can only suggest it); when it is absent, suggest installing it (see `docs/RECOMMENDED.md`) |
 
 Feature pipeline: `plan` -> `tasks` -> per task (every Build task that changes code or tests runs `tdd`, with an optional `guide:` such as `lean-build`, `surgical-patch` or `safe-refactor`) -> `code-review` -> `security-scan`. Skip the stages the risk does not need. Work with fewer than 3 steps needs no task list, and trivial work still goes to cheap delegation.

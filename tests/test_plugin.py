@@ -25,12 +25,13 @@ ECC_COMMIT = "d2ef2680594f9a17526a6e1a2e18b3d242c5d17b"
 GATEWAYS = {
     "discover-frontend", "discover-backend", "discover-database", "discover-caching", "discover-cloud",
     "discover-devops", "discover-debugging", "discover-collaboration", "discover-testing",
-    "discover-mobile", "discover-security", "discover-distributed",
+    "discover-mobile", "discover-security", "discover-distributed", "discover-ui-taste",
 }
-N_SKILLS = 34
+N_SKILLS = 35
 # vendored knowledge files: skills/<gateway>/references/<source>/ -> expected upstream commit
 VENDORED = {
     "antfu-skills": "d524ed287eef22757297827ce42e3cad88abd20c",
+    "miqdadbadjuber-anti-slop": "35b54dc660aa7d11428ee62c5788ad36bc18ac3c",
     "hoangnguyen-agent-skills-standard": "24d9034d21d3b2ab5815236d20ba32a4e85c4c04",
     "omakei-adonisjs-architecture-skill": "8ee242685af8974ad45179497ae384629144c2b8",
     "rand-cc-polymath": "baa2df114416570f5e0e2961143d20e3716a2fc8",
@@ -83,6 +84,15 @@ def frontmatter(path, strict=True):
 def skill_files():
     """Our skills' SKILL.md files; vendored third-party files under references/ are not skills."""
     return sorted(p for p in SKILLS.rglob("SKILL.md") if "references" not in p.relative_to(SKILLS).parts[1:-1])
+
+
+LICENCE_NAMES = {"LICENSE", "LICENSE-web-quality-skills"}  # exact names only; the second is antislop's copy of web-quality-skills
+
+
+def vendored_file_allowed(name, allowed=frozenset()):
+    """Allow-list for files under references/: .md, the exact licence names, or an extension SOURCE.md lists."""
+    leaf = Path(name)
+    return leaf.suffix.lower() == ".md" or leaf.name in LICENCE_NAMES or leaf.suffix.lower() in allowed
 
 
 def vendored_sources():
@@ -195,9 +205,7 @@ def test_vendored_sources_have_licence_source_and_matching_manifest():
         allowed.discard("none")
         # allow-list: documentation/text files, plus example extensions that SOURCE.md lists explicitly
         for name in manifest:
-            leaf = Path(name)
-            ok = leaf.suffix.lower() == ".md" or name == "LICENSE" or leaf.suffix.lower() in allowed
-            assert ok, f"file type not allowed under references: {rel}/{name}"
+            assert vendored_file_allowed(name, allowed), f"file type not allowed under references: {rel}/{name}"
         assert not any(Path(n).name in {"package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"} for n in manifest), rel
 
 
@@ -210,7 +218,7 @@ def test_no_upstream_skill_md_under_references_and_no_loose_files():
             text = (src / "SOURCE.md").read_text(encoding="utf-8")
             if list(src.rglob("SKILL.upstream.md")):
                 assert "renamed SKILL.upstream.md (content unchanged)" in text, src
-    assert sum(1 for p in SKILLS.glob("discover-*/references/**/SKILL.upstream.md")) == 47
+    assert sum(1 for p in SKILLS.glob("discover-*/references/**/SKILL.upstream.md")) == 53
     for s, src in WRAPPED.items():
         folder = SKILLS / s / "references" / src
         assert len(list(folder.rglob("SKILL.upstream.md"))) == 1, s
@@ -503,20 +511,16 @@ def test_readme_commands_and_count():
             assert line.count("codex plugin") + line.count("claude plugin") + line.count("/plugin ") <= 1, line
 
 
-def test_egm_is_recommended_with_install_commands():
+def test_egm_is_recommended_in_docs_only():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     rec = (ROOT / "docs" / "RECOMMENDED.md").read_text(encoding="utf-8")
-    assert "## Recommended" in readme
+    assert "## Recommended" not in readme
+    assert "docs/RECOMMENDED.md" in readme
     for cmd in EGM_COMMANDS:
-        assert cmd in readme, cmd
         assert cmd in rec, cmd
-    assert "/egm:egm-<skill>" in readme and "/egm:egm-<skill>" in rec
-    for name in ("spec-kit", "antislop", "cc-polymath", "ecc"):
-        assert f"`{name}`" in readme and f"`{name}`" in rec, name
-    for cmd in ("uv tool install specify-cli", "codex plugin add antislop@anti-slop",
-                "/plugin install cc-polymath@cc-polymath-marketplace", "codex plugin add ecc@ecc"):
-        assert cmd in rec, cmd
-    assert "Not recommended together with honeyguide" in readme and "Not recommended alongside honeyguide" in rec
+    assert "/egm:egm-<skill>" in rec
+    for name in ("spec-kit", "antislop", "cc-polymath@", "ecc@ecc"):
+        assert name not in rec, name
 
 
 def test_old_plugin_name_only_in_history_and_ignore():
@@ -769,6 +773,92 @@ def test_mobile_security_distributed_gateways():
     dist = (SKILLS / "discover-distributed" / "SKILL.md").read_text(encoding="utf-8")
     assert "system-design interview" in dist
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "rand/cc-polymath (15 categories)" in readme and "all twelve `discover-*` gateways" in readme
+    assert "rand/cc-polymath (15 categories)" in readme and "twelve `discover-*` gateways (all but `discover-ui-taste`)" in readme
     for domain in ("| Mobile |", "| Security |", "| Distributed systems |"):
         assert domain in readme, domain
+
+
+def test_ui_taste_gateway_overrides_and_no_scripts():
+    text = (SKILLS / "discover-ui-taste" / "SKILL.md").read_text(encoding="utf-8")
+    for needle in ('do not ask the upstream "DURING or AFTER" question', r"%APPDATA%\antislop\settings.json",
+                   "~/.config/antislop/", "Never run `npx antislop-ai`", "`npx skills ...`", "`allowed-tools`",
+                   "contrast checker scripts are not bundled", "numbered findings list by priority",
+                   "the owner picks what to fix", "`DESIGN.md`", "project's language", "`discover-frontend`",
+                   "references/miqdadbadjuber-anti-slop/skills/antislop/SKILL.upstream.md"):
+        assert needle in text, needle
+    refs = SKILLS / "discover-ui-taste" / "references"
+    assert [p.name for p in refs.iterdir()] == ["miqdadbadjuber-anti-slop"]
+    assert not [p for p in refs.rglob("*") if p.is_file() and p.name not in {"SOURCE.md", "manifest.sha256"}
+                and not vendored_file_allowed(p.name)]
+    assert not [p for p in refs.rglob("*") if p.is_file() and p.suffix.lower() in {".py", ".mjs", ".js", ".sh", ".exe"}]
+    src = refs / "miqdadbadjuber-anti-slop"
+    assert len(list(src.rglob("SKILL.upstream.md"))) == 6
+    assert len(list(src.rglob("LICENSE-web-quality-skills"))) == 2
+    source = (src / "SOURCE.md").read_text(encoding="utf-8")
+    assert "addyosmani/web-quality-skills" in source and "contrast-check.py" in source
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "| UI taste |" in readme and "miqdadbadjuber/anti-slop (6 skills as knowledge files)" in readme
+    assert "addyosmani/web-quality-skills" in readme
+
+
+def test_vendored_file_allow_list_takes_exact_licence_names_only():
+    for name in ("LICENSE", "LICENSE-web-quality-skills", "skills/antislop-ui/LICENSE-web-quality-skills", "a/b.md"):
+        assert vendored_file_allowed(name), name
+    for name in ("LICENSE-helper.sh", "LICENSE.exe", "LICENSE-x", "skills/x/LICENSE-x", "run.py", "VERSION"):
+        assert not vendored_file_allowed(name), name
+    assert vendored_file_allowed("app/start.ts", {".ts"}) and not vendored_file_allowed("app/start.ts")
+
+
+def test_skills_wire_in_the_vendored_antislop_files():
+    ui = SKILLS / "discover-ui-taste"
+    base = "references/miqdadbadjuber-anti-slop/skills/"
+    for skill, rel in (("verify-and-stop", "antislop/SKILL.upstream.md"), ("code-review", "antislop-code/SKILL.upstream.md"),
+                       ("management-talk", "antislop-copywriting/SKILL.upstream.md")):
+        text = (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
+        assert f"`{base}{rel}`" in text, skill
+        assert (ui / base / rel).is_file(), rel
+        assert "loaded `discover-ui-taste` skill" in text and "not the project" in text and "skip this check" in text, skill
+    ver = (SKILLS / "verify-and-stop" / "SKILL.md").read_text(encoding="utf-8")
+    mode1 = ver.split("## Mode 1", 1)[1].split("## Mode 2", 1)[0]
+    gate = [l for l in mode1.splitlines() if "Delivery Gate (Mandatory)" in l]
+    assert len(gate) == 1, gate
+    for needle in ("- UI work (a web page or app UI):", "PASS, FAIL, N/A with the reason (the item does not apply to this deliverable)",
+                   "NOT RUN with the reason (evidence unavailable", "never mark PASS without evidence",
+                   "never widen scope to satisfy an item",
+                   "Copy-only work (marketing copy without UI changes) is checked against the copywriting patterns in "
+                   "`references/miqdadbadjuber-anti-slop/skills/antislop-copywriting/SKILL.upstream.md` instead"):
+        assert needle in gate[0], needle
+    assert "marketing copy):" not in gate[0]
+    cr = (SKILLS / "code-review" / "SKILL.md").read_text(encoding="utf-8")
+    step3 = cr.replace("\r\n", "\n").split("\n3. ", 1)[1].split("\n4. ", 1)[0]
+    assert ("When the diff adds or changes code comments in any language, also give the reviewer antislop's comment checklist "
+            "`references/miqdadbadjuber-anti-slop/skills/antislop-code/SKILL.upstream.md`") in step3
+    mt = (SKILLS / "management-talk" / "SKILL.md").read_text(encoding="utf-8")
+    rules = mt.replace("\r\n", "\n").split("## Rewrite rules", 1)[1].split("\n## ", 1)[0]
+    rule = [l for l in rules.splitlines() if "antislop-copywriting" in l]
+    assert len(rule) == 1 and rule[0].startswith("- Before sending, check the text against antislop's copywriting patterns"), rule
+    assert "apply them in the message's language" in rule[0]
+    assert "## Delivery Gate (Mandatory)" in (ui / base / "antislop/SKILL.upstream.md").read_text(encoding="utf-8")
+    gw = (ui / "SKILL.md").read_text(encoding="utf-8")
+    for s in ("`verify-and-stop`", "`code-review`", "`management-talk`"):
+        assert s in gw, s
+
+
+def test_ui_taste_defers_to_swc_and_handles_other_languages():
+    gw = " ".join((SKILLS / "discover-ui-taste" / "SKILL.md").read_text(encoding="utf-8").split())
+    for needle in (
+        "The target project's SWC documents (page spec, page wireframe, UI Conditions, Screen Workflow, `ui-design-system`; see `software-component`) count as design direction for antislop's R-37",
+        "(do not ask for a separate `DESIGN.md` when they cover it) and win over upstream rules, as do their acceptance criteria",
+        "Report a conflict between an antislop rule and the SWC to the owner; never resolve it silently",
+        "For copy in another language (for example Thai), apply their principles (no inflated claims, no unsupported attributions, no empty filler), not the English word lists",
+    ):
+        assert needle in gw, needle
+    swc = (SKILLS / "software-component" / "SKILL.md").read_text(encoding="utf-8")
+    routing = swc.split("## Routing", 1)[1].split("\n## ", 1)[0]
+    line = [l for l in routing.splitlines() if l.startswith("- page / component")]
+    assert len(line) == 1 and "when building or reviewing a page or UI from a page spec, also use `discover-ui-taste`" in line[0], line
+    assert "the SWC spec wins" in line[0] and "Screen Workflow states map to antislop's UI states rule, R-27)" in line[0]
+    core = (SKILLS / "discover-ui-taste" / "references" / "miqdadbadjuber-anti-slop" / "skills" / "antislop" / "SKILL.upstream.md").read_text(encoding="utf-8")
+    assert "\n#### R-27 — UI States\n" in core and "\n#### R-37 — Design Direction Required\n" in core
+    r37 = [s for s in gw.split(". ") if "count as design direction" in s]
+    assert len(r37) == 1 and "design direction for antislop's R-37 (" in r37[0], r37
