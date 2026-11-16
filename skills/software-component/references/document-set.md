@@ -1,6 +1,6 @@
 # Document Set — เอกสารอะไรมีบ้าง อยู่ที่ไหน และอะไรต้องเปลี่ยนพร้อมกัน
 
-ชุดเอกสารโปรเจกต์ที่ครบถ้วน (path ทั้งหมดอิงจาก docs root ของโปรเจกต์ ซึ่ง project card อาจย้าย root ได้)
+ชุดเอกสารโปรเจกต์ที่ครบถ้วน (path ทั้งหมดอิงจาก docs root ของโปรเจกต์ ซึ่ง `AGENTS.md`/`CLAUDE.md` ของโปรเจกต์อาจย้าย root ได้)
 สร้างเฉพาะเอกสารที่งานนั้นแตะต้อง template อยู่ใน `templates/` และทุก template เป็น placeholder เท่านั้น
 
 ```
@@ -86,7 +86,7 @@ message contract และรายการ `Deployments/` ของ server อ
 
 | Document type | Header |
 |---|---|
-| SWC specs ที่ไม่ใช่ versioned (page / component / endpoint spec, shared, solution-overview, diagram) | **Last Updated** และเพิ่ม **Status**, **Evidence** (Current / Proposed / POC / Verified), **REQ Refs**, **Owner** เมื่อโปรเจกต์ติดตาม REQ/AC (project card ระบุ หรือมีรหัส REQ/AC อยู่แล้ว); รูปแบบอยู่ใน `swc-central.md` section 4 |
+| SWC specs ที่ไม่ใช่ versioned (page / component / endpoint spec, shared, solution-overview, diagram) | **Last Updated** และเพิ่ม **Status**, **Evidence** (Current / Proposed / POC / Verified), **REQ Refs**, **Owner** เมื่อโปรเจกต์ติดตาม REQ/AC (`AGENTS.md`/`CLAUDE.md` ของโปรเจกต์ระบุ หรือมีรหัส REQ/AC อยู่แล้ว); รูปแบบอยู่ใน `swc-central.md` section 4 |
 | Wireframe | **Last Updated**, **Status** (Draft / In Review / Approved / Implemented), **Version**, **Designer**, **Reviewed by**, **Figma** (ใช้ — เมื่อไม่มี) เสมอ เพราะเป็นเอกสารออกแบบ |
 | Plans (รวม feature plan: ใช้ **Feature**, **Status** Draft / Approved / Done, **Last Updated**, **Refs** แทน Version + Date), worker/program specs, data dictionary, ER, releases (ชนิดที่มี version) | **Version** + **Date** (worker/program spec เพิ่ม Status/Evidence/REQ Refs/Owner เมื่อติดตาม REQ/AC) |
 | Workflow, tracker (SWC-Overview, Testing-Overview, API-ENDPOINTS, USER-MATRIX), index, traceability, work log | **Last Updated** อย่างเดียว |

@@ -5,7 +5,7 @@
 | {schema version} | YYYY-MM-DD | {service} | {service}, {service} |
 
 ที่เดียวสำหรับ async interface ระหว่าง service; worker spec ลิงก์มาที่นี่ ไม่เขียนซ้ำ
-Path: `docs/contracts/{topic}.md` (หรือโฟลเดอร์ที่ project card ระบุ)
+Path: `docs/contracts/{topic}.md` (หรือโฟลเดอร์ที่ `AGENTS.md`/`CLAUDE.md` ของโปรเจกต์ระบุ)
 
 ## 1. Purpose
 

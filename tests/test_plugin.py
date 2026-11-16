@@ -865,3 +865,17 @@ def test_ui_taste_defers_to_swc_and_handles_other_languages():
     assert "\n#### R-27 — UI States\n" in core and "\n#### R-37 — Design Direction Required\n" in core
     r37 = [s for s in gw.split(". ") if "count as design direction" in s]
     assert len(r37) == 1 and "design direction for antislop's R-37 (" in r37[0], r37
+
+
+def test_no_v1_project_card_in_skills():
+    # v1 "project card" (projects/<name>.md) is gone; projects name their settings in AGENTS.md / CLAUDE.md
+    allowed = "Do not require a Hub project card"
+    for path in sorted(SKILLS.rglob("*")):
+        if not path.is_file() or "SKILL.upstream.md" in path.as_posix():
+            continue
+        if any((folder / "manifest.sha256").is_file() for folder in path.parents if SKILLS in folder.parents):
+            continue  # vendored third-party copy, kept byte-identical to upstream
+        text = path.read_text(encoding="utf-8", errors="ignore").replace(allowed, "")
+        low = text.lower()
+        assert "project card" not in low, path
+        assert "projects/<name>" not in low, path
