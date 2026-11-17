@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 HUB_SKILLS = {
-    "orchestrate", "api-and-interface-design", "backend-api-safety",
+    "orchestrate", "delegate", "api-and-interface-design", "backend-api-safety",
     "investigate-first", "lean-build", "safe-refactor", "security-and-hardening", "software-component",
     "surgical-patch", "verify-and-stop",
 }
@@ -27,7 +27,7 @@ GATEWAYS = {
     "discover-devops", "discover-debugging", "discover-collaboration", "discover-testing",
     "discover-mobile", "discover-security", "discover-distributed", "discover-ui-taste",
 }
-N_SKILLS = 35
+N_SKILLS = 36
 # vendored knowledge files: skills/<gateway>/references/<source>/ -> expected upstream commit
 VENDORED = {
     "antfu-skills": "d524ed287eef22757297827ce42e3cad88abd20c",
@@ -135,7 +135,7 @@ def test_skill_set_and_frontmatter():
         assert fm.get("name") and fm.get("description"), path
     for s in everything:
         assert frontmatter(SKILLS / s / "SKILL.md")["name"] == s, s
-    for s in {"orchestrate"} | NEW_SKILLS | ECC_SKILLS | GATEWAYS | THIRD_PARTY:
+    for s in {"orchestrate", "delegate"} | NEW_SKILLS | ECC_SKILLS | GATEWAYS | THIRD_PARTY:
         expected = {"name", "description", "argument-hint"} if s == "stay-on-track" else {"name", "description"}
         assert set(frontmatter(SKILLS / s / "SKILL.md")) == expected, s
     stay_fm = frontmatter(SKILLS / "stay-on-track" / "SKILL.md")
@@ -294,12 +294,20 @@ def test_our_skills_carry_no_old_hub_tooling():
 
 def test_rules_live_in_the_right_skills():
     core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
+    routing = (SKILLS / "orchestrate" / "references" / "routing.md").read_text(encoding="utf-8")
+    delegate = (SKILLS / "delegate" / "SKILL.md").read_text(encoding="utf-8")
+    brief = (SKILLS / "delegate" / "references" / "brief.md").read_text(encoding="utf-8")
+    for needle in ("`investigate-first`", "`verify-and-stop`", "`post-mortem`", "`management-talk`"):
+        assert needle in routing, needle
+    for needle in ("Read/Grep/Glob only", "A requested permission mode describes intent"):
+        assert needle in delegate, needle
+    assert "never resume a reviewer" in brief
     for needle in (
-        "`cheap-delegation`", "`investigate-first`", "`verify-and-stop`", "`post-mortem`", "`management-talk`", "`stay-on-track`",
+        "`cheap-delegation`", "`stay-on-track`",
         "Never run the same failing action a third time", "After about 3 attempts on the same problem",
-        "honeyguide:hub-readonly", "honeyguide:hub-writer", "Read/Grep/Glob only", "A requested permission mode describes intent",
+        "honeyguide:hub-readonly", "honeyguide:hub-writer",
         "Third-party skills never widen permissions", "Never edit `~/.codex/config.toml`", "cheapest native model",
-        "fresh independent reviewer", "never resume a reviewer",
+        "fresh independent reviewer",
         "A cheap delegation of low-risk work does not by itself make the task nontrivial",
         "Trivial work (a typo, one obvious edit, a status check) goes to the cheapest native model",
         "do not do it yourself", "verify the result yourself before reporting it",
@@ -317,16 +325,24 @@ def test_rules_live_in_the_right_skills():
     assert "for trivial work after the cheap agent failed it twice" in cheap
     stay = (SKILLS / "stay-on-track" / "SKILL.md").read_text(encoding="utf-8")
     assert "Never run the same failing action a third time" in stay and "After about 3 attempts" in stay
-    for target in re.findall(r"\]\(([^)#]+)\)", core):
-        assert (SKILLS / "orchestrate" / target).is_file(), target
+    for skill, text in (("orchestrate", core), ("delegate", delegate)):
+        for target in re.findall(r"\]\(([^)#]+)\)", text):
+            assert (SKILLS / skill / target).is_file(), target
+    assert not (SKILLS / "orchestrate" / "references" / "brief.md").exists()
 
 
 def test_core_routing_table_names_every_skill():
     core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
-    rows = [l for l in core.splitlines() if l.startswith("| ") and l.count("|") >= 3]
-    assert rows, "no routing table"
+    routing = (SKILLS / "orchestrate" / "references" / "routing.md").read_text(encoding="utf-8")
+    assert not [l for l in core.splitlines() if l.startswith("| ")], "routing table belongs in references/routing.md"
+    rows = [l for l in routing.splitlines() if l.startswith("| ") and l.count("|") >= 3]
+    assert len(rows) == 37, len(rows)  # header + 36 rows
     table = " ".join(rows)
+    assert "the named skill holds the full rules" in routing and "read only the files the task needs" in routing
     for d in sorted(p.name for p in SKILLS.iterdir() if p.is_dir()):
+        if d == "delegate":  # loaded from orchestrate's Load when block, not routed
+            assert "`delegate`" in core.split("## Load when", 1)[1], d
+            continue
         assert f"`{d}`" in table, f"routing table misses skill {d}"
     for g in GATEWAYS:
         assert f"`{g}`" in table, g
@@ -334,7 +350,7 @@ def test_core_routing_table_names_every_skill():
     assert not re.search(r"`egm-[a-z-]+`", table)
     assert "if installed" in table and "only suggest it" in table and "suggest installing it" in table
     for gone in ABSORBED_SKILLS:
-        assert f"`{gone}`" not in core, gone
+        assert f"`{gone}`" not in core and f"`{gone}`" not in routing, gone
 
 
 def test_merged_skills_keep_their_content():
@@ -386,20 +402,20 @@ def test_agent_shells_exist_and_parse():
     assert "apply_patch" in ro_text and "Read, Grep and Glob" not in ro_text
     for n in ("hub-readonly", "hub-writer"):
         assert "publish" in (ROOT / "agents" / f"{n}.md").read_text(encoding="utf-8")
-    orch = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
+    orch = (SKILLS / "delegate" / "SKILL.md").read_text(encoding="utf-8")
     for needle in ("share the parent session's sandbox", "recorded as `instruction`, never as enforced",
                    "per-child enforcement", "--strict-mcp-config", "Outward actions:", "never publish, post, send, upload, push",
                    "`codex exec -s read-only", "compare the changed files with its brief's SCOPE"):
         assert needle in orch, needle
     for needle in ("READ-ONLY DUTY: do not create, edit or delete files or change git state", "shared documents or artifacts"):
         assert needle in orch, needle
-    live = [ROOT / "README.md", SKILLS / "orchestrate" / "references" / "brief.md"]
+    live = [ROOT / "README.md", SKILLS / "delegate" / "references" / "brief.md"]
     live += [p for p in SKILLS.rglob("*.md") if "references" not in p.relative_to(SKILLS).parts[1:]]
     for path in live:
         text = path.read_text(encoding="utf-8")
         for gone in ("--untracked-files=all", "git diff HEAD --binary", "git rev-parse HEAD", "post-check", "before/after check"):
             assert gone not in text, (path.relative_to(ROOT).as_posix(), gone)
-    brief = (SKILLS / "orchestrate" / "references" / "brief.md").read_text(encoding="utf-8")
+    brief = (SKILLS / "delegate" / "references" / "brief.md").read_text(encoding="utf-8")
     assert "PERMISSION:" in brief and "READ-ONLY DUTY" in brief and "MCP: <none | one named server a task really needs, read-only, noted in the agent record" in brief
     assert "read-only shell commands" in ro_text and "Never use apply_patch" in ro_text
     mcp_files = [ROOT / "codex-agents" / "hub-readonly.toml", ROOT / "codex-agents" / "hub-writer.toml", ROOT / "README.md"]
@@ -572,10 +588,13 @@ def test_reviewer_checklist_table_paths_exist_and_are_wired_in():
         assert needle in ver, needle
     for rel in ("vue", "typescript", "react", "python", "go", "database", "security", "code"):
         assert f"references/ecc-reviewers/agents/{rel}-reviewer.md" in ver, rel
-    core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
-    assert "checklists that match the changed files" in core and "never widens its permissions" in core
-    assert "absolute paths" in core and "not the project" in core
     cr = (SKILLS / "code-review" / "SKILL.md").read_text(encoding="utf-8")
+    assert "Pick the checklists for the changed files from the table in `verify-and-stop` (section 5" in cr
+    assert "never widens its permissions" in cr and "the reviewer stays a fresh native agent" in cr
+    assert "absolute paths" in cr and "not the project" in cr
+    for needle in ("one that neither implemented nor reviewed the change", "mark it BLOCKED and do not claim completion",
+                   '"not independently reviewed" and why', "before EVERY high-risk spawn (each re-review too)"):
+        assert needle in cr, needle
     for needle in ("git ls-files --others --exclude-standard", "untracked", "Exclude generated records", "absolute paths"):
         assert needle in cr, needle
     for name in ("code-review", "security-scan"):
@@ -603,7 +622,8 @@ def test_learn_states_paths_numbers_and_limits():
     ):
         assert needle in text, needle
     core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
-    assert "apply `learn` without asking" in core and "what was learned or evolved" in core and "Never commit them" in core
+    assert "apply `learn` without asking" in core
+    assert "what was learned or evolved" in text and "Never commit them" in text
     assert "plan` -> `tasks` -> per task (every Build task that changes code or tests runs `tdd`, with an optional `guide:` such as `lean-build`, `surgical-patch` or `safe-refactor`) -> `code-review` -> `security-scan`" in core
 
 
@@ -735,9 +755,11 @@ def test_tasks_skill_replaces_plan_to_steps_and_names_only_existing_skills():
     block = re.search(r"```tasks.md\n(.*?)```", text, re.S).group(1)
     assert check_task_list(block, existing) == []
     orch = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
+    assert "`plan` -> `tasks` -> per task (every Build task that changes code or tests runs `tdd`" in orch
     for needle in ("`tasks.md` drives dispatch", "only after you verified its result", "continue from the first unticked task",
-                   "`plan` -> `tasks` -> per task (every Build task that changes code or tests runs `tdd`"):
-        assert needle in orch, needle
+                   "two writers never touch the same files", "`BLOCKED` tasks go to the owner",
+                   "is not committed unless the project keeps its plans in the repo"):
+        assert needle in text, needle
     assert "tasks.md" in (SKILLS / "stay-on-track" / "SKILL.md").read_text(encoding="utf-8")
     for p in [ROOT / "README.md", ROOT / "AGENTS.md"] + sorted(SKILLS.glob("*/SKILL.md")):
         assert "plan-to-steps" not in p.read_text(encoding="utf-8"), p
@@ -1019,3 +1041,40 @@ def test_readme_states_codex_rule_prefix_limit():
     assert "which is an instruction, not enforcement" in readme
     assert "install the rule only if you accept that" in readme
     assert "only with `git switch -c`" not in readme
+
+
+def test_orchestrate_load_block_names_each_moved_part_and_its_trigger():
+    core = (SKILLS / "orchestrate" / "SKILL.md").read_text(encoding="utf-8")
+    delegate = (SKILLS / "delegate" / "SKILL.md").read_text(encoding="utf-8")
+    assert core.count("## Load when") == 1
+    block = core.split("## Load when", 1)[1].split("\n## ", 1)[0]
+    items = [l for l in block.splitlines() if l.startswith("- ")]
+    assert len(items) == 5, items
+    for trigger, home in (
+        ("Choosing skills for any task beyond a direct answer", "references/routing.md"),
+        ("Before any spawn other than a cheap delegation", "`delegate`"),
+        ("Every high-risk change", "`code-review`"),
+        ("Work with 3 or more steps", "`tasks`"),
+        ("for every nontrivial task, before the final report", "`learn`"),
+    ):
+        assert [i for i in items if trigger in i and home in i], (trigger, home)
+    assert "`skills/<name>/SKILL.md`" in block
+    for needle in ("subagents never publish, post, send, upload, push, or create shared documents or artifacts, and get no MCP or connector tools by default",
+                   "they write content to local files in the task folder; you verify it and perform the outward action yourself",
+                   "If a Claude Code shell is missing, say so and report the limitation; the permission stays `Unverified` unless observed"):
+        assert needle in block, needle
+    assert "Never claim a model, effort, permission mode or shell unless observable." in core
+    assert "never claim a model, effort, permission mode or shell unless observable" in delegate
+    assert "skipping them is a defect, not a shortcut; write them before the first spawn. Their rules are in `delegate`." in core
+    cr = (SKILLS / "code-review" / "SKILL.md").read_text(encoding="utf-8")
+    assert "do not fix any finding yourself" in cr and "Minor findings are listed and passed on to the implementer, not looped" in cr
+    assert "(see `delegate`)" in (SKILLS / "cheap-delegation" / "SKILL.md").read_text(encoding="utf-8")
+    assert (SKILLS / "orchestrate" / "references" / "routing.md").is_file()
+    desc = frontmatter(SKILLS / "delegate" / "SKILL.md")["description"]
+    assert desc.startswith("Use before spawning any native agent other than a cheap delegation: "), desc
+    for needle in ("Records are required for nontrivial work", "Before EVERY high-risk native spawn (each re-review too)",
+                   "never retroactively", "Choose model and effort per assignment", "never claim a model, effort",
+                   "no cross-vendor delegation helper", "Read [references/brief.md](references/brief.md)",
+                   "Never fall back to legacy v1 roles", "The final report names the record folder"):
+        assert needle in delegate, needle
+    assert "Records are required for nontrivial work" in core and "Their rules are in `delegate`" in core

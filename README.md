@@ -13,7 +13,7 @@ from its table or used on their own (`/honeyguide:<skill>`).
     .claude-plugin/       plugin.json, marketplace.json (Claude Code)
     .codex-plugin/        plugin.json
     .agents/plugins/      marketplace.json (Codex)
-    skills/               35 skills of honeyguide (see below)
+    skills/               36 skills of honeyguide (see below)
     agents/               Claude agents hub-readonly, hub-writer
     codex-agents/         optional Codex instruction presets (see Permissions)
     codex-rules/          optional Codex rule that lets Codex create a new branch (see Permissions)
@@ -21,16 +21,16 @@ from its table or used on their own (`/honeyguide:<skill>`).
     docs/                 specs, plans, audits, history/, RECOMMENDED.md (reference list only)
     tests/test_plugin.py  static checks (standard library only)
 
-## Skills in honeyguide (35)
+## Skills in honeyguide (36)
 
-22 workflow skills that work with any language or framework, plus 13 `discover-*` gateways, one per technology domain.
+23 workflow skills that work with any language or framework, plus 13 `discover-*` gateways, one per technology domain.
 Every task starts at `orchestrate`, which routes to the other skills through its table; the gateway column names the
 skill to start a domain from. A gateway is short: it lists which third-party knowledge file answers which topic, and the
 agent reads only those files (see Third-party content).
 
 | Domain | Covers | Skills | Gateway |
 |---|---|---|---|
-| Workflow | Planning, native agents, independent review, checkpoints, long or looping work, context setup | 3: orchestrate, cheap-delegation, stay-on-track | orchestrate |
+| Workflow | Planning, native agents, independent review, checkpoints, long or looping work, context setup | 4: orchestrate, delegate, cheap-delegation, stay-on-track | orchestrate |
 | Build | New features, small bug fixes, behaviour-preserving restructuring | 3: lean-build, surgical-patch, safe-refactor | orchestrate |
 | Debug | Proving a cause (reproduce, trace, falsify, cross-check); browser devtools, pdb, GDB/LLDB, profiling, memory, production debugging | 2: investigate-first, discover-debugging | discover-debugging |
 | Review and verify | Acceptance proof without scope growth; outsider review of a plan, PR or change; language and framework reviewer checklists (ECC, vendored) | 1: verify-and-stop | orchestrate |

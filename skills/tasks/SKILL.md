@@ -5,7 +5,7 @@ description: "Use for work with 3 or more steps: turn the plan into a trackable 
 
 # Tasks
 
-Read a plan and write one trackable task list, so each task can be handed to the right skill or agent and ticked off when verified. The task-list idea comes from github/spec-kit (MIT) and the skill-per-step routing from ECC's `plan-orchestrate` (affaan-m/ECC, MIT); the text here is our own. It writes the list; it does not run it.
+Read a plan and write one trackable task list, so each task can be handed to the right skill or agent and ticked off when verified. The task-list idea comes from github/spec-kit (MIT) and the skill-per-step routing from ECC's `plan-orchestrate` (affaan-m/ECC, MIT); the text here is our own. Its Steps write the list; they do not run it (the orchestrator runs it, see Dispatch).
 
 Use it only for work with 3 or more steps. Smaller work needs no task list, and trivial work goes straight to cheap delegation (see `orchestrate`).
 
@@ -40,6 +40,12 @@ Use it only for work with 3 or more steps. Smaller work needs no task list, and 
 7. `BLOCKED` is only for a task whose scope cannot be carried: unclear files, no check, or an owner decision pending. Write it as `- [ ] T00x BLOCKED: <reason>`, do not dispatch it and do not invent scope. A task that merely waits for prerequisites is not blocked; it keeps its full line. End with the BLOCKED tasks and the question that would unblock each, and wait for the owner's go-ahead before running any task.
 
 A task is ticked `[x]` only after the orchestrator verified its result. Running the tasks follows `orchestrate`: records, fresh reviewers for high-risk work, owner approval for commit and push.
+
+## Dispatch
+
+The orchestrator runs the list:
+
+`tasks.md` drives dispatch: a task is ready when every task in its `after:` is ticked; ready `[P]` tasks of one phase with disjoint files may go to parallel agents, but two writers never touch the same files; re-check readiness after each verified tick; tick a task `[x]` only after you verified its result; on a new session or handoff, continue from the first unticked task; `BLOCKED` tasks go to the owner. It lives with the task records in `.honeyguide/<task>/` and is not committed unless the project keeps its plans in the repo.
 
 ## Example
 
