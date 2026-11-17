@@ -12,7 +12,7 @@ the plugin itself is `UNLICENSED`. Claude Code and Codex only. No Python helper,
   `.agents/plugins/marketplace.json`; same name (`multi-agent-hub`) and version.
 - `skills/` holds only skills we ship:
   - `multi-agent-hub` (core: native agents, risk-based independent review, project-local records) with
-    `references/brief.md`.
+    `references/brief.md` (now `skills/delegate/references/brief.md`).
   - 11 engineering skills: api-and-interface-design, backend-api-safety, context-engineering, handoff, investigate-first,
     lean-build, safe-refactor, security-and-hardening, software-component, surgical-patch, verify-and-stop.
   - 6 skills written for this plugin: debug-mantra, scrutinize, post-mortem, management-talk, stay-on-track,

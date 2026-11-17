@@ -10,6 +10,7 @@ Keep what this project taught you, in the project, as small scored lessons ("ins
 ## When
 
 - Automatically at delivery of every nontrivial task (see `orchestrate`), before the final report, without asking the owner. Trivial work learns nothing.
+- At delivery: write or update the project's instincts in `.honeyguide/instincts/`, evolve them into a project skill when the Evolve rule below says so, and name in the final report what was learned or evolved (file paths) and any of those paths that git does not ignore. Never commit them.
 - On request: `status` (show instincts), `forget <id>`, `evolve now`.
 
 ## Instincts
