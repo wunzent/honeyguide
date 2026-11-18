@@ -56,6 +56,11 @@ When the project keeps Software Component documents, load `software-component` a
 `references/backend-standard.md`; this table says which code each part describes. SWC files go where
 `software-component` says (default `docs/swc/BE`, inside this layout's `docs/`).
 
+Each endpoint spec names its own code paths in the matching section, not only the solution overview: the
+middleware it uses (section 3), its validator file and its `api-docs/paths/` file (section 4), its service and
+repositories (sections 6-7), and the test folder of every `UT-` / `IT-` row (`tests/unit/` or `tests/functional/`).
+Paths not decided yet are written as Proposed.
+
 | SWC part | Code it describes |
 |---|---|
 | 3. Access Control | `auth_middleware` (JWT, `AuthenticatedContext`) and the roles `rbac_middleware` checks |
