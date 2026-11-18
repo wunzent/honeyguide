@@ -12,6 +12,7 @@ Route by work type with the table below; the named skill holds the full rules. T
 | Writing or changing code, or the owner asks for the "reduced principles" or `/ub-mode` (make it work, make it right, follow practice) | `ub-mode` |
 | Designing an API, module boundary or public interface | `api-and-interface-design` |
 | Adding or changing backend endpoints or data writes | `backend-api-safety` |
+| Planning, scaffolding or restructuring a backend's folder layout (AdonisJS controllers, services, repositories, migrations, OpenAPI docs, tests) | `backend-org-structure` |
 | Untrusted input, auth, secrets, data storage, dependencies, privacy | `security-and-hardening` |
 | Solution planning, SWC, component documentation | `software-component` |
 | Proving acceptance conditions, completion checks; outsider review of a plan, PR or change | `verify-and-stop` |

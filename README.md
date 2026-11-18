@@ -13,7 +13,7 @@ from its table or used on their own (`/honeyguide:<skill>`).
     .claude-plugin/       plugin.json, marketplace.json (Claude Code)
     .codex-plugin/        plugin.json
     .agents/plugins/      marketplace.json (Codex)
-    skills/               36 skills of honeyguide (see below)
+    skills/               37 skills of honeyguide (see below)
     agents/               Claude agents hub-readonly, hub-writer
     codex-agents/         optional Codex instruction presets (see Permissions)
     codex-rules/          optional Codex rule that lets Codex create a new branch (see Permissions)
@@ -21,9 +21,9 @@ from its table or used on their own (`/honeyguide:<skill>`).
     docs/                 specs, plans, audits, history/, RECOMMENDED.md (reference list only)
     tests/test_plugin.py  static checks (standard library only)
 
-## Skills in honeyguide (36)
+## Skills in honeyguide (37)
 
-23 workflow skills that work with any language or framework, plus 13 `discover-*` gateways, one per technology domain.
+24 workflow skills that work with any language or framework, plus 13 `discover-*` gateways, one per technology domain.
 Every task starts at `orchestrate`, which routes to the other skills through its table; the gateway column names the
 skill to start a domain from. A gateway is short: it lists which third-party knowledge file answers which topic, and the
 agent reads only those files (see Third-party content).
@@ -39,7 +39,7 @@ agent reads only those files (see Third-party content).
 | Pipeline | Plan before code and wait for go-ahead; test-first build; plan to a task list. Features: plan, tdd, implement, code-review, security-scan | 3: plan, tdd, tasks | plan |
 | Coding discipline | Make it work, make it right, follow practice | 1: ub-mode | ub-mode |
 | Frontend | Vue 3, Nuxt 5 prerelease (5.0.0-0; check your project's version), Pinia, Vite, Vitest, React, Next.js, accessibility, frontend performance | 1: discover-frontend | discover-frontend |
-| Backend | AdonisJS v6, NestJS, Nitro v3 beta (3.0.260903; check your project's version; Nuxt server), REST, GraphQL, authentication, errors, versioning, rate limiting; endpoint safety and type contracts (any framework) | 3: discover-backend, api-and-interface-design, backend-api-safety | discover-backend |
+| Backend | AdonisJS v6, NestJS, Nitro v3 beta (3.0.260903; check your project's version; Nuxt server), REST, GraphQL, authentication, errors, versioning, rate limiting; endpoint safety and type contracts (any framework); the owner's target AdonisJS folder layout and layer rules | 4: discover-backend, api-and-interface-design, backend-api-safety, backend-org-structure | discover-backend |
 | Database | PostgreSQL schema, migrations and queries, ORMs, connection pooling, Redis, MongoDB, Elasticsearch, DuckDB | 1: discover-database | discover-database |
 | Caching | HTTP caching, CDN and edge, Redis patterns, invalidation, service workers | 1: discover-caching | discover-caching |
 | Cloud | AWS, GCP, Cloudflare Workers, Terraform, Kubernetes, cloud cost | 1: discover-cloud | discover-cloud |

@@ -12,7 +12,7 @@ HUB_SKILLS = {
     "investigate-first", "lean-build", "safe-refactor", "security-and-hardening", "software-component",
     "surgical-patch", "verify-and-stop",
 }
-NEW_SKILLS = {"post-mortem", "management-talk", "stay-on-track", "cheap-delegation"}
+NEW_SKILLS = {"post-mortem", "management-talk", "stay-on-track", "cheap-delegation", "backend-org-structure"}
 THIRD_PARTY = {"ub-mode", "find-skills"}  # our wrappers around unchanged upstream copies
 # wrapped skill -> its vendored source folder under references/
 WRAPPED = {
@@ -27,7 +27,7 @@ GATEWAYS = {
     "discover-devops", "discover-debugging", "discover-collaboration", "discover-testing",
     "discover-mobile", "discover-security", "discover-distributed", "discover-ui-taste",
 }
-N_SKILLS = 36
+N_SKILLS = 37
 # vendored knowledge files: skills/<gateway>/references/<source>/ -> expected upstream commit
 VENDORED = {
     "antfu-skills": "d524ed287eef22757297827ce42e3cad88abd20c",
@@ -336,7 +336,7 @@ def test_core_routing_table_names_every_skill():
     routing = (SKILLS / "orchestrate" / "references" / "routing.md").read_text(encoding="utf-8")
     assert not [l for l in core.splitlines() if l.startswith("| ")], "routing table belongs in references/routing.md"
     rows = [l for l in routing.splitlines() if l.startswith("| ") and l.count("|") >= 3]
-    assert len(rows) == 37, len(rows)  # header + 36 rows
+    assert len(rows) == 38, len(rows)  # header + 37 rows
     table = " ".join(rows)
     assert "the named skill holds the full rules" in routing and "read only the files the task needs" in routing
     for d in sorted(p.name for p in SKILLS.iterdir() if p.is_dir()):

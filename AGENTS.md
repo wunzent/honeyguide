@@ -6,7 +6,7 @@ our wrapper skills around unchanged third-party copies in their `references/<sou
 under their `references/` (so does `verify-and-stop`: ECC reviewer checklists) (see README.md, Third-party content). `egm` is only recommended (docs/RECOMMENDED.md), not shipped. See README.md.
 
 ## Layout
-- Root plugin: `.claude-plugin/` (plugin.json, marketplace.json), `.codex-plugin/plugin.json`, `skills/` (36 skills),
+- Root plugin: `.claude-plugin/` (plugin.json, marketplace.json), `.codex-plugin/plugin.json`, `skills/` (37 skills),
   `agents/`, `codex-agents/`, `codex-rules/`, `hooks/`; Codex marketplace: `.agents/plugins/marketplace.json`
 - `docs/` specs, plans, audits, history/, RECOMMENDED.md; `tests/test_plugin.py`
 
