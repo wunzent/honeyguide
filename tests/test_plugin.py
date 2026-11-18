@@ -961,7 +961,7 @@ def test_sessionstart_hooks_are_text_only_and_identical():
     claude = load(ROOT / ".claude-plugin" / "plugin.json")
     assert codex["hooks"] == "./hooks/codex-hooks.json"
     assert "hooks" not in claude
-    assert claude["version"] == codex["version"] == "0.2.0"
+    assert claude["version"] == codex["version"] == "0.3.0"
     readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
     assert ("- Hooks: the plugin ships one SessionStart hook on each CLI that only prints a line pointing to `orchestrate`; "
             "nothing else runs. Codex asks the owner to review and trust it once in `/hooks`, and until it is trusted it "
